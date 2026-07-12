@@ -2415,6 +2415,17 @@ async function doPrint() {
     newOrder(); return;
   }
   // Fallback: render receipt to Canvas PNG — bypasses Chrome dark mode on print
+  // Android app shell: window.open() has nowhere to put a "new tab" in this
+  // single-Activity app — left unhandled it can drag the whole WebView away
+  // from the logged-in cashier page onto a bare image with no app JS at all
+  // (no CASHIER, no doLogout()), which is what made the back button look
+  // like a random logout. Skip straight to completing the order instead;
+  // real Android printing lands in a future update.
+  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
+    if (typeof showToast === 'function') showToast('Printing on this device isn’t set up yet — order saved.', true);
+    newOrder();
+    return;
+  }
   const _png = await _receiptToPng(txt);
   const _html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
     + '<style>@page{size:58mm auto;margin:0}body{margin:0;padding:0}img{width:100%;display:block}</style>'

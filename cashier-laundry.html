@@ -2322,6 +2322,17 @@ async function doPrint() {
     window.posApp.printReceipt();
     newOrder(); return;
   }
+  // Android app shell: window.open() has nowhere to put a "new tab" in this
+  // single-Activity app — left unhandled it can drag the whole WebView away
+  // from the logged-in cashier page onto a bare page with no app JS at all
+  // (no CASHIER, no doLogout()), which is what made the back button look
+  // like a random logout. Skip straight to completing the order instead;
+  // real Android printing lands in a future update.
+  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
+    if (typeof showToast === 'function') showToast('Printing on this device isn’t set up yet — order saved.', true);
+    newOrder();
+    return;
+  }
   // Fallback: browser print
   const _lhtml = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
       + '<meta name="color-scheme" content="light only">'
