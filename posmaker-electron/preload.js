@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld('electronSetup', {
 
 // For cashier pages — same window.posApp API the Flutter exe used
 contextBridge.exposeInMainWorld('posApp', {
+  // Raw ESC/POS print, straight to the printer — preferred when available,
+  // since it bypasses the Windows print driver entirely (more reliable with
+  // cheap thermal printers, and the only path that can print the logo).
+  printRaw: (receiptData) => ipcRenderer.invoke('print-raw-receipt', receiptData),
+  // Lets the main process refuse to close the app window while a cashier is
+  // logged in, so the drawer's Cash on Hand always gets counted at shift end.
+  notifyLoggedIn:  () => ipcRenderer.send('cashier-logged-in'),
+  notifyLoggedOut: () => ipcRenderer.send('cashier-logged-out'),
+  onForceLogoutPrompt: (cb) => ipcRenderer.on('force-logout-prompt', cb),
   printReceipt: () => {
     const el  = document.getElementById('receiptPrintArea');
     const txt = el ? (el.textContent || '') : '';

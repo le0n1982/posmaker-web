@@ -9,7 +9,7 @@
   },
   "build": {
     "appId": "com.posmaker.pos",
-    "productName": "POSMaker POS",
+    "productName": "POSMaker",
     "files": ["main.js", "preload.js", "setup.html"],
     "win": {
       "target": "nsis"

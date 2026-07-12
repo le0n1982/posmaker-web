@@ -84,6 +84,26 @@ function buildEscPos(r) {
   var date   = new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
   chunks.push(Buffer.from([0x1B, 0x40]));
+
+  // Store logo, printed as an ESC/POS raster image (GS v 0) at the top of the
+  // receipt. The browser pre-converts the logo to a packed 1bpp bitmap
+  // (see _buildLogoRaster() in the cashier page) since decoding PNG/dithering
+  // here with zero dependencies would be far more error-prone than doing it
+  // with the Canvas API the browser already has.
+  if (r.logo_raster_b64 && r.logo_w_bytes && r.logo_h_px) {
+    try {
+      var logoBuf   = Buffer.from(r.logo_raster_b64, 'base64');
+      var wBytes    = r.logo_w_bytes | 0;
+      var hPx       = r.logo_h_px | 0;
+      if (logoBuf.length === wBytes * hPx) {
+        chunks.push(Buffer.from([0x1B, 0x61, 0x01]));
+        chunks.push(Buffer.from([0x1D, 0x76, 0x30, 0x00, wBytes & 0xFF, (wBytes >> 8) & 0xFF, hPx & 0xFF, (hPx >> 8) & 0xFF]));
+        chunks.push(logoBuf);
+        chunks.push(Buffer.from([0x0A]));
+      }
+    } catch (_) { /* bad/corrupt logo data — skip it, still print the rest of the receipt */ }
+  }
+
   chunks.push(Buffer.from([0x1B, 0x61, 0x01]));
   chunks.push(Buffer.from([0x1B, 0x21, 0x10]));
   chunks.push(line(store));

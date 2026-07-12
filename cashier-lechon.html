@@ -1044,6 +1044,15 @@ function applyPosTheme(s) {
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 document.getElementById('lp').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+// The desktop app refuses to close its window while a cashier is logged in
+// (see main.js) — when that happens, open the same logout/Cash-on-Hand
+// popup a manual Logout click would, instead of leaving the cashier stuck.
+if (window.posApp && window.posApp.onForceLogoutPrompt) {
+  window.posApp.onForceLogoutPrompt(() => {
+    if (typeof showToast === 'function') showToast('Please log out (enter Cash on Hand) before closing the POS.', true);
+    doLogout();
+  });
+}
 function togglePw(){ const f=document.getElementById('lp'); f.type=f.type==='password'?'text':'password'; }
 document.getElementById('mQtyVal').addEventListener('keydown', e => { if (e.key === 'Enter') confirmQty(); });
 
@@ -1148,6 +1157,7 @@ function startPing() {
 
 function showPOS(name) {
   CASHIER_NAME = name;
+  if (window.posApp && window.posApp.notifyLoggedIn) window.posApp.notifyLoggedIn();
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('hdrCashier').textContent = '\u{1F464} ' + name;
   // Auto-reload products every 10 min — only register once
@@ -1346,6 +1356,7 @@ function cancelRemitLogout() {
 }
 
 function _actualLogout() {
+  if (window.posApp && window.posApp.notifyLoggedOut) window.posApp.notifyLoggedOut();
   clearTimeout(_openScanTimer); _openScanTimer = null;
   if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
   if (_syncRetryInterval) { clearInterval(_syncRetryInterval); _syncRetryInterval = null; }
@@ -2457,16 +2468,52 @@ async function _receiptToPng(txt) {
   return cv.toDataURL('image/png');
 }
 
+// Converts the store logo into a packed 1-bit-per-pixel bitmap the local
+// ESC/POS print server can send straight to the printer via the GS v 0
+// raster command — the print server has zero npm dependencies, so decoding
+// PNG/dithering is done here with Canvas instead of in that script.
+async function _buildLogoRaster() {
+  if (!STORE?.logo_b64) return null;
+  try {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + STORE.logo_b64;
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    const maxW = 300, maxH = 150;
+    const ratio = Math.min(maxW / (img.naturalWidth || 1), maxH / (img.naturalHeight || 1), 1);
+    let w = Math.max(8, Math.round((img.naturalWidth || 1) * ratio));
+    const h = Math.max(1, Math.round((img.naturalHeight || 1) * ratio));
+    w += (8 - (w % 8)) % 8; // printer raster rows must be a whole number of bytes
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, w, h);
+    cx.drawImage(img, 0, 0, w, h);
+    const { data } = cx.getImageData(0, 0, w, h);
+    const wBytes = w / 8;
+    const bytes = new Uint8Array(wBytes * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const alpha = data[i + 3];
+        const lum = alpha < 64 ? 255 : (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        if (lum < 160) bytes[y * wBytes + (x >> 3)] |= (1 << (7 - (x & 7)));
+      }
+    }
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return { logo_raster_b64: btoa(bin), logo_w_bytes: wBytes, logo_h_px: h };
+  } catch (_) { return null; }
+}
+
 async function doPrint() {
   const txt = document.getElementById('receiptTxt').textContent;
   // Try local ESC/POS print server first (works in browser and Electron exe)
   const d = window._lastReceiptData;
   if (d) {
     try {
-      const resp = await fetch('http://localhost:7788/print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const logoRaster = await _buildLogoRaster();
+      const _rawPayload = {
           store:     STORE?.name,
           address:   STORE?.address,
           phone:     STORE?.phone,
@@ -2482,8 +2529,21 @@ async function doPrint() {
           total:     d.total,
           method:    d.method,
           tender:    d.tender,
-          change:    d.change
-        })
+          change:    d.change,
+          logo_raster_b64: logoRaster?.logo_raster_b64 || '',
+          logo_w_bytes:    logoRaster?.logo_w_bytes || 0,
+          logo_h_px:       logoRaster?.logo_h_px || 0
+        };
+      if (window.posApp && window.posApp.printRaw) {
+        try {
+          const _r = await window.posApp.printRaw(_rawPayload);
+          if (_r && _r.ok) { newOrder(); return; }
+        } catch (_) {}
+      }
+      const resp = await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(_rawPayload)
       });
       if (resp.ok) { newOrder(); return; }
     } catch (_) { /* server not running — try Electron or browser print */ }
