@@ -248,6 +248,13 @@ CREATE INDEX IF NOT EXISTS idx_stores_store_code ON stores(store_code);
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS pos_name_color   TEXT DEFAULT '';
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS pos_price_color  TEXT DEFAULT '';
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS pos_totals_color TEXT DEFAULT '';
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS pos_muted_color  TEXT DEFAULT '';
+
+-- Store return/warranty policy, printed on receipts
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS policy_warranty       TEXT    DEFAULT '';
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS policy_return_days    INTEGER;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS policy_damage_accepted BOOLEAN DEFAULT true;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS policy_damage_note    TEXT    DEFAULT '';
 
 -- Restaurant POS columns on orders
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type   TEXT    DEFAULT 'Dine In';
