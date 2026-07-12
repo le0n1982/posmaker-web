@@ -2328,8 +2328,8 @@ async function doPrint() {
   // (no CASHIER, no doLogout()), which is what made the back button look
   // like a random logout. Skip straight to completing the order instead;
   // real Android printing lands in a future update.
-  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
-    if (typeof showToast === 'function') showToast('Printing on this device isn’t set up yet — order saved.', true);
+  if (window.posApp && !window.posApp.printReceipt) {
+    if (typeof showToast === 'function') showToast('Could not reach the printer — order saved.', true);
     newOrder();
     return;
   }

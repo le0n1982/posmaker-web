@@ -2493,10 +2493,13 @@ async function doPrint() {
   // single-Activity app — left unhandled it can drag the whole WebView away
   // from the logged-in cashier page onto a bare image with no app JS at all
   // (no CASHIER, no doLogout()), which is what made the back button look
-  // like a random logout. Skip straight to completing the order instead;
-  // real Android printing lands in a future update.
-  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
-    if (typeof showToast === 'function') showToast('Printing on this device isn’t set up yet — order saved.', true);
+  // like a random logout. Reaching this line means printRaw either doesn't
+  // exist or was already tried and failed (success returns early above) —
+  // either way, on Android (no printReceipt) stop here instead of risking
+  // window.open(); only a plain browser tab (no window.posApp at all) should
+  // fall through to the image/print-dialog fallback below.
+  if (window.posApp && !window.posApp.printReceipt) {
+    if (typeof showToast === 'function') showToast('Could not reach the printer — order saved.', true);
     newOrder();
     return;
   }
