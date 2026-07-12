@@ -2625,23 +2625,34 @@ function setVrType(type) {
   document.getElementById('vrSubmitBtn').style.display = '';
 }
 
-function handleVrPhoto(input) {
-  const file = input.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const img = new Image();
-    img.onload = () => {
-      const MAX = 1000, cv = document.createElement('canvas');
-      const sc = Math.min(1, MAX / Math.max(img.width, img.height));
-      cv.width = img.width * sc; cv.height = img.height * sc;
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      document.getElementById('vrPhotoImg').src = cv.toDataURL('image/jpeg', 0.6);
-      document.getElementById('vrPreview').style.display = '';
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-  input.value = '';
+// Cashiers aren't allowed to carry phones on the floor, so the proof photo
+// is captured by the MANAGER's phone instead — same QR remote-upload
+// pattern used for Cash Advance disbursement proof in manager.html.
+let _vrQRPoll = null, _vrQRToken = null;
+async function openVrQR() {
+  _OPS_STORE_ID = STORE_ID;
+  if (!_opsData) await loadOpsData();
+  _vrQRToken = await createImgUploadToken('void_refund_proof', 1);
+  const url = 'https://posmaker.ggff.net/image-upload.html?sid=' + STORE_ID + '&token=' + _vrQRToken + '&max=1';
+  document.getElementById('vrQRCode').src = 'https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=' + encodeURIComponent(url);
+  document.getElementById('vrQRStatus').textContent = 'Waiting for photo…';
+  document.getElementById('mVrQR').classList.add('show');
+  if (_vrQRPoll) clearInterval(_vrQRPoll);
+  _vrQRPoll = setInterval(async () => {
+    await refreshOpsData();
+    const sess = (_opsData && _opsData.imgUploadSessions && _opsData.imgUploadSessions[_vrQRToken]) || null;
+    if (!sess || !sess.images || sess.images.length === 0) return;
+    document.getElementById('vrPhotoImg').src = 'data:image/jpeg;base64,' + sess.images[0];
+    document.getElementById('vrPreview').style.display = '';
+    document.getElementById('vrQRStatus').textContent = '✅ Photo received!';
+    await clearImgUploadSession(_vrQRToken); _vrQRToken = null;
+    setTimeout(() => closeVrQR(), 1000);
+  }, 2500);
+}
+function closeVrQR() {
+  if (_vrQRPoll) { clearInterval(_vrQRPoll); _vrQRPoll = null; }
+  if (_vrQRToken) { clearImgUploadSession(_vrQRToken); _vrQRToken = null; }
+  document.getElementById('mVrQR').classList.remove('show');
 }
 
 async function submitVoidRefundRequest() {
