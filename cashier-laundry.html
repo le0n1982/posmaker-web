@@ -539,7 +539,13 @@ const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 const params   = new URLSearchParams(location.search);
 let   STORE_ID = params.get('store') || localStorage.getItem('pm_store_id') || null;
 let   TERMINAL_ID = params.get('terminal') || localStorage.getItem('pm_terminal_id') || null;
-const IS_DEMO  = params.get('demo') === '1';
+const IS_FAKE_DEMO = params.get('demo') === '1';
+// Customize POS page embeds this file in an iframe with ?preview=1 so its
+// "Live Preview" is the real cashier screen (real products/categories),
+// not a hand-maintained mockup that drifts out of sync. Treated like demo
+// mode everywhere else (no device lock, no orders/drafts persisted).
+const IS_PREVIEW = params.get('preview') === '1';
+const IS_DEMO  = IS_FAKE_DEMO || IS_PREVIEW;
 
 // Hide login immediately if demo — must run synchronously before any async code
 if (IS_DEMO) document.getElementById('loginWrap').style.display = 'none';
@@ -657,6 +663,21 @@ let _openScanTimer = null;
   } else {
     const wb = document.getElementById('btnWebPrinter');
     if (wb) wb.style.display = '';
+  }
+  if (IS_PREVIEW) {
+    if (!STORE_ID) return;
+    const { data: store } = await _sb.from('stores').select('*').eq('id', STORE_ID).single();
+    if (!store) return;
+    STORE = store; CUR = store.currency || '₱'; TAX = parseFloat(store.tax_rate) || 0;
+    setStoreUI();
+    await loadProds();
+    CASHIER = { full_name: 'Preview', role: 'cashier' };
+    showPOS('Preview');
+    // Live-update theme as the Customize page's controls change, without a reload
+    window.addEventListener('message', e => {
+      if (e.data && e.data.type === 'pm_preview_theme') applyPosTheme(e.data.theme);
+    });
+    return;
   }
   if (IS_DEMO) {
     document.getElementById('demoBanner').style.display = '';

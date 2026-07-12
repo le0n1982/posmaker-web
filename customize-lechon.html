@@ -512,57 +512,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
       <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">Changes update in real-time</span>
     </div>
     <div class="cz-preview-canvas">
-      <div class="pos-mock" id="posMock" data-bs="default">
-        <div class="pm-bgimg" id="pmBgImg"></div>
-        <!-- Header -->
-        <div class="pm-hdr">
-          <div class="pm-logo" id="pmLogo">P</div>
-          <span class="pm-storename" id="pmStoreName">My Store</span>
-          <span class="pm-cashier">&#128100; Cashier</span>
-        </div>
-        <!-- Order type tabs -->
-        <div class="pm-ot-bar">
-          <div class="pm-ot-btn active">&#127869; Dine In</div>
-          <div class="pm-ot-btn">Take Away</div>
-          <div class="pm-ot-btn">Delivery</div>
-        </div>
-        <!-- Body -->
-        <div class="pm-body">
-          <div class="pm-left">
-            <!-- Category tabs -->
-            <div class="pm-cats">
-              <div class="pm-cat active">All</div>
-              <div class="pm-cat">Food</div>
-              <div class="pm-cat">Drinks</div>
-              <div class="pm-cat">Snacks</div>
-            </div>
-            <!-- Product grid (large image cards) -->
-            <div class="pm-grid" id="pmGrid"></div>
-          </div>
-          <!-- Cart -->
-          <div class="pm-cart">
-            <!-- Action row -->
-            <div class="pm-cart-acts">
-              <div class="pm-act-btn">Drafts</div>
-              <div class="pm-act-btn">Table: &#8212;</div>
-              <div class="pm-act-btn">KOT</div>
-            </div>
-            <!-- Items -->
-            <div class="pm-cart-body">
-              <div class="pm-cart-item"><span>Chicken Rice</span><span>&#8369;88</span></div>
-              <div class="pm-cart-item"><span>Coke x2</span><span>&#8369;60</span></div>
-              <div class="pm-cart-item"><span>Fries</span><span>&#8369;65</span></div>
-            </div>
-            <!-- Totals -->
-            <div class="pm-totals">
-              <div class="pm-total-row"><span class="pm-total-label">Subtotal</span><span class="pm-total-val">&#8369;190.18</span></div>
-              <div class="pm-total-row"><span class="pm-total-label">VAT (12%)</span><span class="pm-total-val">&#8369;22.82</span></div>
-              <div class="pm-total-row big"><span class="pm-total-label">TOTAL</span><span class="pm-total-val">&#8369;213.00</span></div>
-            </div>
-            <button class="pm-btn">&#10004; Confirm Order</button>
-          </div>
-        </div>
-      </div>
+      <!-- The real cashier screen, loaded in preview mode (?preview=1): real
+           products/categories, no login, no device lock, nothing saved.
+           Guarantees this always matches the actual POS — no separate mockup
+           to keep in sync. -->
+      <iframe id="posPreviewFrame" style="width:900px;min-height:550px;max-width:100%;height:550px;border:0;border-radius:14px;box-shadow:0 28px 72px rgba(0,0,0,.8);flex-shrink:0;background:#09090f"></iframe>
     </div>
   </div>
 
@@ -622,140 +576,6 @@ const SCALES = [
   {id:'fitbg',   name:'Fit to BG'},
 ];
 
-// ── Mock products ─────────────────────────────────────────────────────────────
-const MOCKS = [
-  {n:'Chicken',p:88},{n:'Rice',p:35},{n:'Coke',p:30},{n:'Water',p:20},
-  {n:'Fries',p:65},{n:'Burger',p:120},{n:'Juice',p:45},{n:'Coffee',p:55},
-];
-const MOCK_ICONS = ['&#127829;','&#127859;','&#127866;','&#128167;','&#127839;','&#127828;','&#127818;','&#9749;'];
-document.getElementById('pmGrid').innerHTML = MOCKS.map((m, i) =>
-  `<div class="pm-card">
-    <div class="pm-card-img">${MOCK_ICONS[i % MOCK_ICONS.length]}</div>
-    <div class="pm-card-info">
-      <div class="pm-card-name">${m.n}</div>
-      <div class="pm-card-price">&#8369;${m.p}</div>
-    </div>
-  </div>`
-).join('');
-
-// ── Retail preview adapter ────────────────────────────────────────────────────
-const RESTAURANT_TYPES_CZ = new Set(['Fast Food','Carinderya','Coffee Shop','Bakery','Lechon',
-  'Pizza / Pasta','Seafood','Milk Tea / Drinks','Karinderya / Buffet','Snack Bar']);
-
-const RETAIL_MOCKS = [
-  {n:'Biogesic 500mg Tab',p:12},{n:'Alaxan FR',p:25},{n:'Bioflu Tablet',p:28},
-  {n:'Betadine Solution 15ml',p:48},{n:'Strepsils Menthol 24s',p:55},{n:'Kremil-S',p:18},
-  {n:'Neozep Forte',p:22},{n:'Diatabs 4s',p:15},
-];
-
-function adaptPreviewToStore(store) {
-  const isBarbershop = store.business_type === 'Salon / Barbershop';
-  const isRetail = store.business_type && !RESTAURANT_TYPES_CZ.has(store.business_type);
-
-  if (isBarbershop) {
-    // Use generic name in preview — not the real store name
-    document.getElementById('pmStoreName').textContent = 'Salon/Barber Shop';
-    document.getElementById('pmLogo').textContent = 'S';
-
-    // Hide order type tabs
-    document.querySelector('.pm-ot-bar').style.display = 'none';
-
-    // Insert chairs strip above pm-body
-    const pmMock = document.getElementById('posMock');
-    const pmBody = document.querySelector('.pm-body');
-    const strip = document.createElement('div');
-    strip.className = 'pm-chairs-strip';
-    strip.innerHTML = `
-      <div class="pm-chairs-head">&#128142; CHAIRS</div>
-      <div class="pm-chairs-grid">
-        <div class="pm-chair-card ins">
-          <div class="pm-chair-ico">&#128142;</div>
-          <div class="pm-chair-lbl">C1</div>
-          <div class="pm-chair-sub">Barber 1</div>
-          <div class="pm-chair-badge ins">IN SERVICE</div>
-        </div>
-        <div class="pm-chair-card ins active-chair">
-          <div class="pm-chair-ico">&#128142;</div>
-          <div class="pm-chair-lbl">C2</div>
-          <div class="pm-chair-sub">Barber 2</div>
-          <div class="pm-chair-badge ins">IN SERVICE</div>
-        </div>
-        <div class="pm-chair-card">
-          <div class="pm-chair-ico">&#128142;</div>
-          <div class="pm-chair-lbl">C3</div>
-          <div class="pm-chair-sub">Available</div>
-          <div class="pm-chair-badge av">AVAILABLE</div>
-        </div>
-      </div>`;
-    pmMock.insertBefore(strip, pmBody);
-
-    // Chair status banner inside cart
-    const pmCart = document.querySelector('.pm-cart');
-    const banner = document.createElement('div');
-    banner.className = 'pm-chair-status-bar';
-    banner.innerHTML = `&#128142; Chair C2 &mdash; <span>IN SERVICE</span>`;
-    pmCart.insertBefore(banner, pmCart.firstChild);
-
-    // Barbershop services list
-    const pmGrid = document.getElementById('pmGrid');
-    pmGrid.className = 'pm-list';
-    pmGrid.innerHTML = [
-      {n:'&#9986;&#65039; Hair Cut',p:100},
-      {n:'&#129304; Beard Trim',p:60},
-      {n:'&#9986;&#65039; Hair + Beard Combo',p:140},
-      {n:'&#128581; Head Massage',p:80},
-    ].map(m => `<div class="pm-list-row"><div class="pm-list-name">${m.n}</div><div class="pm-list-price">&#8369;${m.p}</div></div>`).join('');
-
-    // Categories
-    document.querySelector('.pm-cats').innerHTML =
-      '<div class="pm-cat active">All</div><div class="pm-cat">Haircut</div><div class="pm-cat">Beard</div>';
-
-    // Cart acts: Drafts + active chair tab
-    document.querySelector('.pm-cart-acts').innerHTML =
-      '<div class="pm-act-btn" style="flex:none;padding:4px 12px">&#128196; Drafts</div>' +
-      '<div class="pm-act-btn" style="flex:none;padding:4px 12px;background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.35)">&#8593; C2</div>';
-
-    // Cart items
-    document.querySelector('.pm-cart-body').innerHTML =
-      '<div class="pm-cart-item"><span>Hair Cut</span><span>&#8369;100</span></div>';
-    return;
-  }
-
-  if (!isRetail) return;
-
-  // Hide restaurant-specific order type tabs
-  document.querySelector('.pm-ot-bar').style.display = 'none';
-
-  // Insert search bar (with scan button) above category tabs
-  const pmLeft = document.querySelector('.pm-left');
-  const pmCats = document.querySelector('.pm-cats');
-  const searchBar = document.createElement('div');
-  searchBar.className = 'pm-search-bar';
-  searchBar.innerHTML = '<input class="pm-search-inp" type="text" placeholder="&#128269; Search product or SKU..." disabled><button class="pm-scan-btn">&#128247;</button>';
-  pmLeft.insertBefore(searchBar, pmCats);
-
-  // Swap category tabs to retail categories
-  pmCats.innerHTML = '<div class="pm-cat active">All</div><div class="pm-cat">Medicine</div><div class="pm-cat">Personal Care</div><div class="pm-cat">Vitamins</div>';
-
-  // Replace photo grid with compact list
-  const pmGrid = document.getElementById('pmGrid');
-  pmGrid.className = 'pm-list';
-  pmGrid.innerHTML = RETAIL_MOCKS.map(m =>
-    `<div class="pm-list-row"><div class="pm-list-name">${m.n}</div><div class="pm-list-price">&#8369;${m.p}</div></div>`
-  ).join('');
-
-  // Cart: remove Table and KOT, keep only Drafts
-  document.querySelector('.pm-cart-acts').innerHTML =
-    '<div class="pm-act-btn" style="flex:none;padding:4px 12px">&#128196; Drafts</div>';
-
-  // Swap sample cart items to retail products
-  document.querySelector('.pm-cart-body').innerHTML = `
-    <div class="pm-cart-item"><span>Biogesic 500mg x2</span><span>&#8369;24</span></div>
-    <div class="pm-cart-item"><span>Bioflu Tablet</span><span>&#8369;28</span></div>
-    <div class="pm-cart-item"><span>Betadine 15ml</span><span>&#8369;48</span></div>
-  `;
-}
-
 // ── Build Template Cards ──────────────────────────────────────────────────────
 const tplGrid = document.getElementById('tplGrid');
 TEMPLATES.forEach(t => {
@@ -805,7 +625,7 @@ function setBtnStyle(id) {
   bsGrid.querySelectorAll('.bs-card').forEach((el, i) => {
     el.classList.toggle('active', BTN_STYLES[i].id === id);
   });
-  document.getElementById('posMock').setAttribute('data-bs', id);
+  applyPreview();
 }
 
 // ── Build Scale Buttons ───────────────────────────────────────────────────────
@@ -843,16 +663,15 @@ function setScale(id) {
   STORE = store;
 
   document.getElementById('czStoreName').textContent = store.name;
-  document.getElementById('pmStoreName').textContent = store.name;
   if (store.logo_b64) {
     logoImgData = store.logo_b64.startsWith('data:') ? store.logo_b64 : 'data:image/png;base64,' + store.logo_b64;
     showLogoThumb();
   }
-  updateLogoPreview();
   const _czUrl = cashierUrlFor(store);
   document.getElementById('openPosBtn').href = _czUrl;
   document.getElementById('czLinkBox').textContent = _czUrl;
   document.getElementById('czFooter').value  = store.receipt_footer || '';
+  document.getElementById('posPreviewFrame').src = _czUrl + '&preview=1';
 
   if (store.pos_font)   document.getElementById('czFont').value   = store.pos_font;
   if (store.pos_accent) document.getElementById('czAccent').value = store.pos_accent;
@@ -871,7 +690,6 @@ function setScale(id) {
   if (store.pos_bg_img) { bgImgData = 'data:image/jpeg;base64,' + store.pos_bg_img; showThumb(); }
 
   applyPreview();
-  adaptPreviewToStore(store);
 })();
 
 // ── Apply Preview ─────────────────────────────────────────────────────────────
@@ -902,43 +720,18 @@ function applyPreview() {
   // Font preview
   document.getElementById('fontPreview').style.fontFamily = `'${font}', sans-serif`;
 
-  // Derived colors — muted respects an explicit pick, same as the real cashier page
-  const muted  = mutedColor || blend(text, bg, .40);
-  const border = blend(text, bg, .17);
-  const s2     = blend(card, bg, .50);
-
-  // Apply CSS vars to mock
-  const m = document.getElementById('posMock');
-  [['--pm-font',   `'${font}'`],
-   ['--pm-accent', accent],
-   ['--pm-bg',     bg],
-   ['--pm-s1',     card],
-   ['--pm-s2',     s2],
-   ['--pm-text',   text],
-   ['--pm-muted',  muted],
-   ['--pm-border', border],
-   ['--pm-radius', radius + 'px'],
-   ['--pm-name',   nameColor],
-   ['--pm-price',  priceColor],
-   ['--pm-totals', totalsColor],
-  ].forEach(([k, v]) => m.style.setProperty(k, v));
-  m.style.fontFamily = `'${font}', sans-serif`;
-  m.style.setProperty('--font-scale', fontScale / 100);
-
   checkContrast(text, bg);
 
-  // BG image
-  const bi = document.getElementById('pmBgImg');
-  if (!bgImgData) { bi.style.display = 'none'; return; }
-  bi.style.display = 'block';
-  bi.style.backgroundImage = `url(${bgImgData})`;
-  bi.style.opacity = opacity / 100;
-  switch (bgScale) {
-    case 'cover':   bi.style.backgroundSize = 'cover';     bi.style.backgroundRepeat = 'no-repeat'; bi.style.backgroundPosition = 'center';     break;
-    case 'contain': bi.style.backgroundSize = 'contain';   bi.style.backgroundRepeat = 'no-repeat'; bi.style.backgroundPosition = 'center';     break;
-    case 'tile':    bi.style.backgroundSize = 'auto';      bi.style.backgroundRepeat = 'repeat';    bi.style.backgroundPosition = '0 0';         break;
-    case 'stretch': bi.style.backgroundSize = '100% 100%'; bi.style.backgroundRepeat = 'no-repeat'; bi.style.backgroundPosition = '0 0';         break;
-    case 'fitbg':   bi.style.backgroundSize = '100% auto'; bi.style.backgroundRepeat = 'no-repeat'; bi.style.backgroundPosition = 'center top';  break;
+  // Live-update the real cashier screen in the preview iframe
+  const frame = document.getElementById('posPreviewFrame');
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.postMessage({ type: 'pm_preview_theme', theme: {
+      pos_font: font, pos_accent: accent, pos_bg: bg, pos_card: card, pos_text: text,
+      pos_radius: radius, pos_font_scale: fontScale, pos_name_color: nameColor,
+      pos_price_color: priceColor, pos_totals_color: totalsColor, pos_muted_color: mutedColor,
+      pos_bg_img: bgImgData || '', pos_bg_opacity: opacity, pos_bg_scale: bgScale,
+      pos_btn_style: btnStyle
+    } }, '*');
   }
 }
 
@@ -988,16 +781,8 @@ function removeLogoImg() {
   updateLogoPreview();
 }
 function updateLogoPreview() {
-  const el = document.getElementById('pmLogo');
-  if (logoImgData) {
-    el.textContent = '';
-    el.style.backgroundImage = `url(${logoImgData})`;
-    el.style.backgroundSize = 'cover';
-    el.style.backgroundPosition = 'center';
-  } else {
-    el.style.backgroundImage = '';
-    el.textContent = (document.getElementById('pmStoreName').textContent || 'P')[0].toUpperCase();
-  }
+  // The logo shows in the iframe (real cashier screen) once saved; this is a
+  // no-op left in place because handleLogoImg()/removeLogoImg() still call it.
 }
 
 // ── BG Image ──────────────────────────────────────────────────────────────────
