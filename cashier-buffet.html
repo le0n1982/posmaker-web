@@ -292,6 +292,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnSync" onclick="syncProds()" title="Refresh products" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Refresh products">&#128260;</button>
   <button id="btnPrinterSettings" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Printer settings">&#128424;</button>
   <button id="btnWebPrinter" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Install thermal printer">&#128424;</button>
+  <button onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Request void or refund">&#8630;</button>
   <button onclick="openCashierInbox()" title="Messages" style="position:relative;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Messages">
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
   </button>
@@ -380,6 +381,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     </div>
 
     <button class="btn-checkout" id="btnCO" disabled onclick="confirmOrder()">&#10004; Confirm Order</button>
+    <button type="button" onclick="openVoidRefundModal()" style="width:100%;margin-top:auto;padding-top:14px;padding-bottom:8px;padding-left:0;padding-right:0;background:transparent;border:none;border-top:1px solid var(--border);color:#ef4444;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">&#8630; Request Void / Refund</button>
   </div>
 </div>
 
@@ -563,6 +565,56 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <button class="btn-cancel"  onclick="closeM('mDraft')">Close</button>
       <button class="btn-confirm" onclick="saveDraft()">&#128190; Save Cart as Draft</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="mVoidRefund">
+  <div class="mbox">
+    <div class="mtitle">&#8630; Request Void / Refund</div>
+    <div style="margin-bottom:10px">
+      <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Order Number</label>
+      <div style="display:flex;gap:6px">
+        <input type="number" id="vrOrderNum" placeholder="e.g. 423" class="disc-inp" style="padding:9px 10px;font-size:14px">
+        <button type="button" class="btn-cancel" style="flex:0 0 auto;padding:9px 14px" onclick="lookupVoidRefundOrder()">Look Up</button>
+      </div>
+      <div id="vrLookupMsg" style="font-size:11px;color:#f59e0b;margin-top:4px"></div>
+    </div>
+    <div id="vrOrderSummary" style="display:none;background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--text)"></div>
+    <div id="vrDetailsWrap" style="display:none">
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Type</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn-cancel" id="vrTypeVoidBtn" style="flex:1" onclick="setVrType('void')">Void (cancel order)</button>
+          <button type="button" class="btn-cancel" id="vrTypeRefundBtn" style="flex:1" onclick="setVrType('refund')">Refund</button>
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Reason</label>
+        <textarea id="vrReason" rows="2" placeholder="e.g. Customer changed mind, wrong item, defective" class="disc-inp" style="width:100%;padding:9px 10px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Photo Proof <span style="color:var(--muted)">(manager scans this with their phone — cashiers shouldn't need one)</span></label>
+        <button type="button" class="btn-cancel" style="width:100%" onclick="openVrQR()">&#128241; Scan QR (Manager's Phone)</button>
+        <div id="vrPreview" style="display:none;margin-top:8px;text-align:center">
+          <img id="vrPhotoImg" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:#10b981;margin-top:4px">&#10003; Photo received</div>
+        </div>
+      </div>
+    </div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeM('mVoidRefund')">Close</button>
+      <button class="btn-confirm" id="vrSubmitBtn" style="display:none" onclick="submitVoidRefundRequest()">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mVrQR">
+  <div class="mbox" style="text-align:center;max-width:300px">
+    <div class="mtitle" style="margin-bottom:8px">&#128247; Manager: Scan to Upload</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Manager scans this with their phone — take the proof photo and it appears here automatically.</p>
+    <img id="vrQRCode" style="width:190px;height:190px;border-radius:8px;background:#fff;padding:6px;margin:8px auto;display:block">
+    <div id="vrQRStatus" style="font-size:12px;color:var(--muted);margin-bottom:14px">Waiting for photo&#8230;</div>
+    <button class="btn-cancel" onclick="closeVrQR()">Close</button>
   </div>
 </div>
 
@@ -2658,6 +2710,112 @@ async function loadDraft(id) {
 async function deleteDraft(id) {
   await _sb.from('draft_orders').delete().eq('id', id);
   await loadDraftList();
+}
+
+// ── Void / Refund requests (cashier submits with proof, manager approves) ─
+let _vrOrder = null, _vrType = null;
+function openVoidRefundModal() {
+  _vrOrder = null; _vrType = null;
+  document.getElementById('vrOrderNum').value = '';
+  document.getElementById('vrLookupMsg').textContent = '';
+  document.getElementById('vrOrderSummary').style.display = 'none';
+  document.getElementById('vrDetailsWrap').style.display = 'none';
+  document.getElementById('vrSubmitBtn').style.display = 'none';
+  document.getElementById('vrReason').value = '';
+  document.getElementById('vrPreview').style.display = 'none';
+  document.getElementById('vrPhotoImg').src = '';
+  document.getElementById('mVoidRefund').classList.add('show');
+}
+
+async function lookupVoidRefundOrder() {
+  const numInt = parseInt(document.getElementById('vrOrderNum').value, 10);
+  const msgEl = document.getElementById('vrLookupMsg');
+  const sumEl = document.getElementById('vrOrderSummary');
+  const detailsEl = document.getElementById('vrDetailsWrap');
+  msgEl.textContent = '';
+  sumEl.style.display = 'none';
+  detailsEl.style.display = 'none';
+  document.getElementById('vrSubmitBtn').style.display = 'none';
+  _vrOrder = null;
+  if (!numInt) { msgEl.textContent = 'Enter an order number.'; return; }
+
+  const { data: ord, error } = await _sb.from('orders').select('id,total,cashier_name,timestamp,payment_method').eq('id', numInt).eq('store_id', STORE_ID).maybeSingle();
+  if (error || !ord) { msgEl.textContent = 'Order not found in this store.'; return; }
+
+  const { data: existing } = await _sb.from('void_refund_requests').select('id').eq('order_id', ord.id).eq('status', 'pending').maybeSingle();
+  if (existing) { msgEl.textContent = 'This order already has a pending void/refund request.'; return; }
+
+  _vrOrder = ord;
+  sumEl.innerHTML = `Order #${ord.id} &middot; ${new Date(ord.timestamp).toLocaleString()}<br>Cashier: ${ord.cashier_name} &middot; ${ord.payment_method}<br><strong style="color:var(--accent)">${CUR}${parseFloat(ord.total).toFixed(2)}</strong>`;
+  sumEl.style.display = '';
+  detailsEl.style.display = '';
+}
+
+function setVrType(type) {
+  _vrType = type;
+  document.getElementById('vrTypeVoidBtn').style.background = type === 'void' ? 'var(--accent)' : '#252540';
+  document.getElementById('vrTypeVoidBtn').style.color = type === 'void' ? '#fff' : '#ccc';
+  document.getElementById('vrTypeRefundBtn').style.background = type === 'refund' ? 'var(--accent)' : '#252540';
+  document.getElementById('vrTypeRefundBtn').style.color = type === 'refund' ? '#fff' : '#ccc';
+  document.getElementById('vrSubmitBtn').style.display = '';
+}
+
+// Cashiers aren't allowed to carry phones on the floor, so the proof photo
+// is captured by the MANAGER's phone instead — same QR remote-upload
+// pattern used for Cash Advance disbursement proof in manager.html.
+let _vrQRPoll = null, _vrQRToken = null;
+async function openVrQR() {
+  _OPS_STORE_ID = STORE_ID;
+  if (!_opsData) await loadOpsData();
+  _vrQRToken = await createImgUploadToken('void_refund_proof', 1);
+  const url = 'https://posmaker.ggff.net/image-upload.html?sid=' + STORE_ID + '&token=' + _vrQRToken + '&max=1';
+  document.getElementById('vrQRCode').src = 'https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=' + encodeURIComponent(url);
+  document.getElementById('vrQRStatus').textContent = 'Waiting for photo…';
+  document.getElementById('mVrQR').classList.add('show');
+  if (_vrQRPoll) clearInterval(_vrQRPoll);
+  _vrQRPoll = setInterval(async () => {
+    await refreshOpsData();
+    const sess = (_opsData && _opsData.imgUploadSessions && _opsData.imgUploadSessions[_vrQRToken]) || null;
+    if (!sess || !sess.images || sess.images.length === 0) return;
+    document.getElementById('vrPhotoImg').src = 'data:image/jpeg;base64,' + sess.images[0];
+    document.getElementById('vrPreview').style.display = '';
+    document.getElementById('vrQRStatus').textContent = '✅ Photo received!';
+    await clearImgUploadSession(_vrQRToken); _vrQRToken = null;
+    setTimeout(() => closeVrQR(), 1000);
+  }, 2500);
+}
+function closeVrQR() {
+  if (_vrQRPoll) { clearInterval(_vrQRPoll); _vrQRPoll = null; }
+  if (_vrQRToken) { clearImgUploadSession(_vrQRToken); _vrQRToken = null; }
+  document.getElementById('mVrQR').classList.remove('show');
+}
+
+async function submitVoidRefundRequest() {
+  if (!_vrOrder) { alert('Look up an order first.'); return; }
+  if (!_vrType) { alert('Select Void or Refund.'); return; }
+  const reason = document.getElementById('vrReason').value.trim();
+  if (!reason) { alert('Enter a reason.'); return; }
+  const photoImg = document.getElementById('vrPhotoImg');
+  const proof = photoImg.src && photoImg.src.startsWith('data:') ? photoImg.src : null;
+  if (!proof) { alert('Attach a photo as proof.'); return; }
+
+  const btn = document.getElementById('vrSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+  const { error } = await _sb.from('void_refund_requests').insert({
+    store_id: STORE_ID, order_id: _vrOrder.id, order_total: _vrOrder.total,
+    type: _vrType, reason, proof_b64: proof, requested_by_name: CASHIER_NAME, status: 'pending'
+  });
+  btn.disabled = false; btn.textContent = 'Submit Request';
+  if (error) {
+    if (error.message && (error.message.includes('does not exist') || error.message.includes('relation'))) {
+      alert('Void/Refund requests need a schema update.\nPlease ask your admin to run the latest schema SQL in Supabase.');
+    } else {
+      alert(error.message);
+    }
+    return;
+  }
+  closeM('mVoidRefund');
+  showToast('Void/Refund request sent to manager for approval.');
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────
