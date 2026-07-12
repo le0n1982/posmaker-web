@@ -786,6 +786,7 @@ let _openScanTimer = null;
     await loadProds();
     CASHIER = { full_name: 'Preview', role: 'cashier' };
     showPOS('Preview');
+    document.getElementById('btnCO').style.display = 'none'; // preview is look-and-feel only, no real checkout
     // Live-update theme as the Customize page's controls change, without a reload
     window.addEventListener('message', e => {
       if (e.data && e.data.type === 'pm_preview_theme') applyPosTheme(e.data.theme);

@@ -676,9 +676,23 @@ let _openScanTimer = null;
     if (!store) return;
     STORE = store; CUR = store.currency || '₱'; TAX = parseFloat(store.tax_rate) || 0;
     setStoreUI();
-    await loadProds();
+    // Curated sample items — a Customize preview must always look good, even
+    // for a brand-new store with no real products added yet.
+    prods = [
+      { id: 'd1', name: 'Caffe Latte', category: 'Coffee', price: 120, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd2', name: 'Cappuccino', category: 'Coffee', price: 110, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd3', name: 'Caramel Macchiato', category: 'Frappe', price: 135, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd4', name: 'Iced Americano', category: 'Coffee', price: 95, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd5', name: 'Mango Frappe', category: 'Frappe', price: 145, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd6', name: 'Croissant', category: 'Pastries', price: 65, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd7', name: 'Blueberry Muffin', category: 'Pastries', price: 70, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd8', name: 'Bottled Water', category: 'Coffee', price: 28, image_b64: '', available: true, stock: 99, unit: 'pc' },
+    ];
+    buildCats();
+    renderProds('All');
     CASHIER = { full_name: 'Preview', role: 'cashier' };
     showPOS('Preview');
+    document.getElementById('btnCO').style.display = 'none'; // preview is look-and-feel only, no real checkout
     // Live-update theme as the Customize page's controls change, without a reload
     window.addEventListener('message', e => {
       if (e.data && e.data.type === 'pm_preview_theme') applyPosTheme(e.data.theme);

@@ -673,9 +673,21 @@ let _openScanTimer = null;
     if (!store) return;
     STORE = store; CUR = store.currency || '₱'; TAX = parseFloat(store.tax_rate) || 0;
     setStoreUI();
-    await loadProds();
+    // Curated sample items — a Customize preview must always look good, even
+    // for a brand-new store with no real products added yet.
+    prods = [
+      { id: 'd1', name: 'Notebook', category: 'Notebooks', price: 25, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd2', name: 'Ballpen (set of 5)', category: 'Writing', price: 45, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd3', name: 'Bond Paper (ream)', category: 'Writing', price: 220, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd4', name: 'Crayons (24pc)', category: 'Writing', price: 85, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd5', name: 'Backpack', category: 'Bags', price: 650, image_b64: '', available: true, stock: 99, unit: 'pc' },
+      { id: 'd6', name: 'Scissors', category: 'Writing', price: 35, image_b64: '', available: true, stock: 99, unit: 'pc' },
+    ];
+    buildCats();
+    renderProds('All');
     CASHIER = { full_name: 'Preview', role: 'cashier' };
     showPOS('Preview');
+    document.getElementById('btnCO').style.display = 'none'; // preview is look-and-feel only, no real checkout
     // Live-update theme as the Customize page's controls change, without a reload
     window.addEventListener('message', e => {
       if (e.data && e.data.type === 'pm_preview_theme') applyPosTheme(e.data.theme);
