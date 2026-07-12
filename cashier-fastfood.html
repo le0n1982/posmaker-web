@@ -515,6 +515,33 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
+<div class="modal" id="mAndroidPrinter">
+  <div class="mbox">
+    <div class="mtitle">&#128424; Printer Setup</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">How does this device connect to your receipt printer?</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button type="button" class="btn-cancel" id="apTypeBt"  onclick="setApType('bluetooth')" style="flex:1">Bluetooth</button>
+      <button type="button" class="btn-cancel" id="apTypeNet" onclick="setApType('network')" style="flex:1">Network</button>
+      <button type="button" class="btn-cancel" id="apTypeUsb" onclick="setApType('usb')" style="flex:1">USB</button>
+    </div>
+    <div id="apBluetoothSection" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Pick from devices already paired in Android Bluetooth settings.</div>
+      <select id="apBtDeviceSelect" class="inp" style="margin-bottom:14px"></select>
+    </div>
+    <div id="apNetworkSection" style="display:none">
+      <input class="inp" id="apNetIp" placeholder="Printer IP address" style="margin-bottom:8px">
+      <input class="inp" id="apNetPort" placeholder="Port (default 9100)" style="margin-bottom:14px">
+    </div>
+    <div id="apUsbSection" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">The connected USB printer will be detected automatically when printing.</div>
+    </div>
+    <div class="m-actions">
+      <button class="btn-cancel"  onclick="closeM('mAndroidPrinter')">Cancel</button>
+      <button class="btn-confirm" onclick="saveAndroidPrinterSetting()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── TABLE MODAL ── -->
 <div class="modal" id="mTable">
   <div class="mbox">
@@ -734,7 +761,11 @@ let _syncRetryInterval = null;
 let _openScanTimer = null;
 
 (async () => {
-  if (window.posApp && window.posApp.printReceipt) {
+  // window.posApp itself is injected asynchronously (after onPageFinished),
+  // so this early check uses window.AndroidBridge directly — that raw native
+  // object is registered before the page even starts loading and is always
+  // present immediately, unlike the window.posApp wrapper built on top of it.
+  if ((window.posApp && window.posApp.printReceipt) || window.AndroidBridge) {
     const btn = document.getElementById('btnPrinterSettings');
     if (btn) btn.style.display = '';
   } else {
@@ -2986,6 +3017,7 @@ async function doPrint() {
 
 // ── Printer Settings (Electron desktop app only) ────────────────────────────
 async function openPrinterSettings() {
+  if (window.AndroidBridge) { openAndroidPrinterSettings(); return; }
   if (!window.posApp || !window.posApp.getPrinters) return;
   const sel = document.getElementById('printerSelect');
   sel.innerHTML = '<option value="">Loading printers…</option>';
@@ -2996,6 +3028,49 @@ async function openPrinterSettings() {
   (printers || []).forEach(p => sel.appendChild(new Option(p.displayName || p.name, p.name)));
   sel.value = current || '';
 }
+// ── Printer Settings (Android app only) ──────────────────────────────────
+let _apType = 'bluetooth';
+function setApType(type) {
+  _apType = type;
+  document.getElementById('apBluetoothSection').style.display = type === 'bluetooth' ? '' : 'none';
+  document.getElementById('apNetworkSection').style.display   = type === 'network'   ? '' : 'none';
+  document.getElementById('apUsbSection').style.display       = type === 'usb'       ? '' : 'none';
+  ['apTypeBt','apTypeNet','apTypeUsb'].forEach(id => document.getElementById(id).classList.remove('btn-confirm'));
+  document.getElementById(type === 'bluetooth' ? 'apTypeBt' : type === 'network' ? 'apTypeNet' : 'apTypeUsb').classList.add('btn-confirm');
+}
+async function openAndroidPrinterSettings() {
+  document.getElementById('mAndroidPrinter').classList.add('show');
+  let saved = {};
+  try { saved = JSON.parse(window.AndroidBridge.getPrinterConfig() || '{}'); } catch (_) {}
+  setApType(saved.type || 'bluetooth');
+  const sel = document.getElementById('apBtDeviceSelect');
+  sel.innerHTML = '';
+  try {
+    const devices = JSON.parse(window.AndroidBridge.listBluetoothDevices() || '[]');
+    if (!devices.length) sel.appendChild(new Option('No paired Bluetooth devices found', ''));
+    devices.forEach(d => sel.appendChild(new Option(d.name || d.address, d.address)));
+    if (saved.type === 'bluetooth' && saved.value) sel.value = saved.value;
+  } catch (_) { sel.appendChild(new Option('Could not list paired devices', '')); }
+  if (saved.type === 'network' && saved.value) {
+    const [ip, port] = saved.value.split(':');
+    document.getElementById('apNetIp').value = ip || '';
+    document.getElementById('apNetPort').value = port || '';
+  }
+}
+function saveAndroidPrinterSetting() {
+  let value = '';
+  if (_apType === 'bluetooth') {
+    value = document.getElementById('apBtDeviceSelect').value;
+  } else if (_apType === 'network') {
+    const ip = document.getElementById('apNetIp').value.trim();
+    const port = document.getElementById('apNetPort').value.trim() || '9100';
+    value = ip ? (ip + ':' + port) : '';
+  }
+  if (window.AndroidBridge && window.AndroidBridge.savePrinterConfig) window.AndroidBridge.savePrinterConfig(_apType, value);
+  closeM('mAndroidPrinter');
+  showToast('Printer setting saved.');
+}
+
 async function openWebPrinterSetup() {
   const statusEl = document.getElementById('webPrinterStatus');
   const dlEl     = document.getElementById('webPrinterDownload');
