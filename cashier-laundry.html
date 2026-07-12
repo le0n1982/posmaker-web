@@ -953,6 +953,16 @@ if (window.posApp && window.posApp.onForceLogoutPrompt) {
     doLogout();
   });
 }
+// Android's back button (e.g. from a modal like the print/receipt popup)
+// otherwise exits the app entirely while still logged in — see the
+// history.pushState() call in showPOS(). Swallow it here instead so an
+// accidental back-press can't skip the Cash on Hand step.
+window.addEventListener('popstate', () => {
+  if (CASHIER) {
+    history.pushState({ posActive: true }, '', location.href);
+    if (typeof showToast === 'function') showToast('Use the Logout button to exit.', true);
+  }
+});
 function togglePw(){ const f=document.getElementById('lp'); f.type=f.type==='password'?'text':'password'; }
 document.getElementById('mQtyVal').addEventListener('keydown', e => { if (e.key === 'Enter') confirmQty(); });
 
@@ -1057,6 +1067,12 @@ function startPing() {
 function showPOS(name) {
   CASHIER_NAME = name;
   if (window.posApp && window.posApp.notifyLoggedIn) window.posApp.notifyLoggedIn();
+  // Android's back button otherwise falls through to closing the app (no
+  // other history to go back to) — since there's no "stay logged in" across
+  // a full app restart, that reopens straight to the login screen, looking
+  // exactly like an accidental logout. Push a dummy state so back is instead
+  // caught by the popstate listener below while a cashier is logged in.
+  history.pushState({ posActive: true }, '', location.href);
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('hdrCashier').textContent = '\u{1F464} ' + name;
   // Auto-reload products every 10 min — only register once
