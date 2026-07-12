@@ -435,6 +435,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
           <span class="cval" id="valTotals">#8888aa</span>
         </div>
       </div>
+      <div class="cz-field">
+        <label>Muted / Label Text <span style="color:var(--dim,#666);font-weight:400">(category labels, hints, secondary text)</span></label>
+        <div class="color-row">
+          <label class="cswatch"><div class="cswatch-bg" id="bgMuted"></div><input type="color" id="czMuted" value="#8888aa" oninput="applyPreview()"></label>
+          <span class="cval" id="valMuted">#8888aa</span>
+        </div>
+      </div>
       <div class="contrast-warn" id="contrastWarn" style="display:none">&#9888;&#65039; Text and background colors look too similar &#8212; text may be hard to read on the cashier screen.</div>
     </div>
 
@@ -914,6 +921,7 @@ function setScale(id) {
   if (store.pos_name_color)  document.getElementById('czName').value  = store.pos_name_color;
   if (store.pos_price_color) document.getElementById('czPrice').value = store.pos_price_color;
   if (store.pos_totals_color) document.getElementById('czTotals').value = store.pos_totals_color;
+  if (store.pos_muted_color)  document.getElementById('czMuted').value  = store.pos_muted_color;
   if (store.pos_radius != null) document.getElementById('czRadius').value = store.pos_radius;
   if (store.pos_font_scale != null) document.getElementById('czFontScale').value = store.pos_font_scale;
   if (store.pos_btn_style)      setBtnStyle(store.pos_btn_style);
@@ -945,12 +953,13 @@ function applyPreview() {
   const nameColor = document.getElementById('czName').value;
   const priceColor= document.getElementById('czPrice').value;
   const totalsColor = document.getElementById('czTotals').value;
+  const mutedColor  = document.getElementById('czMuted').value;
   const radius  = document.getElementById('czRadius').value;
   const opacity = document.getElementById('czBgOpacity').value;
   const fontScale = document.getElementById('czFontScale').value;
 
   // Update labels & swatches
-  [['czAccent','valAccent','bgAccent'],['czBg','valBg','bgBg'],['czCard','valCard','bgCard'],['czText','valText','bgText'],['czName','valName','bgName'],['czPrice','valPrice','bgPrice'],['czTotals','valTotals','bgTotals']].forEach(([id,vid,bid]) => {
+  [['czAccent','valAccent','bgAccent'],['czBg','valBg','bgBg'],['czCard','valCard','bgCard'],['czText','valText','bgText'],['czName','valName','bgName'],['czPrice','valPrice','bgPrice'],['czTotals','valTotals','bgTotals'],['czMuted','valMuted','bgMuted']].forEach(([id,vid,bid]) => {
     const v = document.getElementById(id).value;
     document.getElementById(vid).textContent = v;
     document.getElementById(bid).style.background = v;
@@ -962,8 +971,8 @@ function applyPreview() {
   // Font preview
   document.getElementById('fontPreview').style.fontFamily = `'${font}', sans-serif`;
 
-  // Derived colors
-  const muted  = blend(text, bg, .40);
+  // Derived colors — muted respects an explicit pick, same as the real cashier page
+  const muted  = mutedColor || blend(text, bg, .40);
   const border = blend(text, bg, .17);
   const s2     = blend(card, bg, .50);
 
@@ -1064,6 +1073,7 @@ async function saveTheme() {
   const nameColor  = document.getElementById('czName').value;
   const priceColor = document.getElementById('czPrice').value;
   const totalsColor = document.getElementById('czTotals').value;
+  const mutedColor  = document.getElementById('czMuted').value;
   const radius  = parseInt(document.getElementById('czRadius').value);
   const footer  = document.getElementById('czFooter').value;
   const imgVal  = bgImgData || '';
@@ -1077,7 +1087,7 @@ async function saveTheme() {
   // (handles databases where new columns haven't been added yet)
   const tries = [
     { pos_font:font, pos_accent:accent, pos_bg:bg, pos_card:card, pos_text:text, pos_radius:radius,
-      pos_name_color:nameColor, pos_price_color:priceColor, pos_totals_color:totalsColor, pos_font_scale:fontScale,
+      pos_name_color:nameColor, pos_price_color:priceColor, pos_totals_color:totalsColor, pos_muted_color:mutedColor, pos_font_scale:fontScale,
       pos_btn_style:btnStyle, pos_bg_scale:bgScale, pos_bg_opacity:opacity, pos_bg_img:imgVal, receipt_footer:footer,
       screensaver_enabled:screensaverEnabled, screensaver_images:screensaverImagesVal },
     { pos_font:font, pos_accent:accent, pos_bg:bg, pos_card:card, pos_text:text, pos_radius:radius,

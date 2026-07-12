@@ -58,7 +58,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 
 /* ── ORDER TYPE TABS ────────────────────────────────────── */
 .ot-bar{background:var(--s1);display:flex;border-bottom:2px solid var(--border);flex-shrink:0}
-.ot-btn{flex:1;padding:9px 6px;border:none;background:transparent;color:#666;font-size:calc(12px * var(--font-scale,1));font-weight:700;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;letter-spacing:.4px;text-transform:uppercase}
+.ot-btn{flex:1;padding:9px 6px;border:none;background:transparent;color:var(--muted);font-size:calc(12px * var(--font-scale,1));font-weight:700;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;letter-spacing:.4px;text-transform:uppercase}
 .ot-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(0,180,216,.07)}
 
 /* ── CATEGORIES ─────────────────────────────────────────── */
@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .search-bar{display:none}
 .search-inp{width:100%;padding:8px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;outline:none;font-family:inherit}
 .search-inp:focus{border-color:var(--accent)}
-.search-inp::placeholder{color:#44445a}
+.search-inp::placeholder{color:var(--muted)}
 /* ── RETAIL LEFT PANEL ─────────────────────────────────── */
 .retail-left{width:200px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:none;flex-direction:column;align-items:stretch;padding:8px 8px 0;gap:6px;overflow:hidden}
 /* Embedded camera box */
@@ -104,7 +104,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .r-card:active{border-color:var(--accent);background:rgba(0,180,216,.07)}
 .r-card.out-of-stock{opacity:.38;cursor:not-allowed}
 .r-card-name{font-size:calc(11px * var(--font-scale,1));font-weight:600;color:var(--name-color,#ccc);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.r-card-sku{font-size:calc(9px * var(--font-scale,1));color:#444;font-family:monospace}
+.r-card-sku{font-size:calc(9px * var(--font-scale,1));color:var(--muted);font-family:monospace}
 .r-card-row{display:flex;align-items:center;justify-content:space-between;gap:4px}
 .r-card-price{font-size:calc(12px * var(--font-scale,1));font-weight:800;color:var(--price-color,var(--accent))}
 .r-card-stock{font-size:calc(9px * var(--font-scale,1));font-weight:700;padding:1px 5px;border-radius:3px}
@@ -148,7 +148,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 
 /* Cart items */
 .cart-list{flex:1;overflow-y:auto;padding:4px 7px}
-.cart-empty{color:#444;text-align:center;padding:20px 8px;font-size:12px}
+.cart-empty{color:var(--muted);text-align:center;padding:20px 8px;font-size:12px}
 .ci{display:flex;align-items:center;gap:4px;padding:5px 0;border-bottom:1px solid var(--border)}
 .ci-name{flex:1;color:var(--name-color,var(--text));font-size:calc(11px * var(--font-scale,1));line-height:1.25;user-select:none}
 .ci-qty{display:flex;align-items:center;gap:3px}
@@ -160,11 +160,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 /* Discount section */
 .disc-section{padding:5px 8px;border-top:1px solid var(--border);display:none}
 .disc-section.show{display:block}
-.disc-label{font-size:calc(9px * var(--font-scale,1));color:#555;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;font-weight:700}
+.disc-label{font-size:calc(9px * var(--font-scale,1));color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;font-weight:700}
 .disc-inputs{display:flex;gap:5px}
 .disc-inp{flex:1;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:calc(12px * var(--font-scale,1));outline:none;font-family:inherit;min-width:0}
 .disc-inp:focus{border-color:var(--accent)}
-.disc-trigger{width:100%;padding:6px 8px;border:1px solid var(--border);background:var(--s2);color:#999;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;text-align:center;font-family:inherit}
+.disc-trigger{width:100%;padding:6px 8px;border:1px solid var(--border);background:var(--s2);color:var(--muted);border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;text-align:center;font-family:inherit}
 .disc-trigger.active{border-color:var(--accent);color:var(--accent)}
 #poList{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 #poList::-webkit-scrollbar{width:6px}
@@ -179,12 +179,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 
 /* Payment */
 .pay-section{padding:5px 8px 0;border-top:1px solid var(--border);flex-shrink:0}
-.pay-label{font-size:calc(9px * var(--font-scale,1));color:#555;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;font-weight:700}
+.pay-label{font-size:calc(9px * var(--font-scale,1));color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;font-weight:700}
 .methods{display:flex;gap:4px;margin-bottom:5px}
-.m-btn{flex:1;padding:6px 2px;border:2px solid var(--border);background:transparent;color:#777;border-radius:5px;cursor:pointer;font-size:calc(11px * var(--font-scale,1));min-width:0;font-weight:600}
+.m-btn{flex:1;padding:6px 2px;border:2px solid var(--border);background:transparent;color:var(--muted);border-radius:5px;cursor:pointer;font-size:calc(11px * var(--font-scale,1));min-width:0;font-weight:600}
 .m-btn.active{border-color:var(--accent);color:#fff;background:rgba(0,180,216,.12)}
 .quick-row{display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap}
-.q-cash{flex:1;min-width:50px;padding:6px 3px;background:var(--s2);border:1px solid var(--border);color:#ccc;border-radius:5px;cursor:pointer;font-size:calc(11px * var(--font-scale,1))}
+.q-cash{flex:1;min-width:50px;padding:6px 3px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:5px;cursor:pointer;font-size:calc(11px * var(--font-scale,1))}
 .q-cash:active{background:var(--accent)}
 .chg{text-align:center;font-size:12px;min-height:18px;margin-bottom:3px;font-weight:600}
 .btn-checkout{margin:6px 7px 7px;background:var(--accent);color:#fff;border:none;padding:11px;border-radius:var(--radius);font-size:calc(14px * var(--font-scale,1));font-weight:700;cursor:pointer;width:calc(100% - 14px)}
@@ -203,15 +203,15 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 
 /* Table grid */
 .tbl-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0}
-.tbl-btn{padding:11px 4px;border:2px solid var(--border);background:var(--s2);color:#aaa;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;text-align:center}
+.tbl-btn{padding:11px 4px;border:2px solid var(--border);background:var(--s2);color:var(--muted);border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;text-align:center}
 .tbl-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,180,216,.1)}
-.tbl-btn.none-btn{border-style:dashed;color:#444;font-size:11px}
+.tbl-btn.none-btn{border-style:dashed;color:var(--muted);font-size:11px}
 
 /* Draft list */
 .draft-item{padding:9px 10px;border:1px solid var(--border);border-radius:7px;cursor:pointer;margin-bottom:5px;transition:border-color .15s;position:relative}
 .draft-item:active{border-color:var(--accent)}
-.draft-top{font-size:12px;font-weight:600;color:#ddd;margin-bottom:2px;padding-right:24px}
-.draft-sub{font-size:10px;color:#555}
+.draft-top{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px;padding-right:24px}
+.draft-sub{font-size:10px;color:var(--muted)}
 .draft-del{position:absolute;top:8px;right:8px;background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:2px 4px;line-height:1}
 
 /* DEMO BANNER */
@@ -224,7 +224,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 /* ── STORE ACTIVATION ───────────────────────────────────── */
 #activateWrap{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:1000;flex-direction:column}
 #activateWrap.show{display:flex}
-.act-note{font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.7}
+.act-note{font-size:11px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.7}
 .act-note a{color:var(--accent);text-decoration:none}
 
 /* ── CAMERA SCANNER ─────────────────────────────────────── */
@@ -453,7 +453,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <button type="button" class="btn btn-ghost btn-sm" id="mQtyBtnPc" onclick="setQtyMode('pc')" style="flex:1">Per Pc</button>
       <button type="button" class="btn btn-ghost btn-sm" id="mQtyBtnPack" onclick="setQtyMode('pack')" style="flex:1">Per Pack</button>
     </div>
-    <div style="font-size:12px;color:#888;margin-bottom:10px" id="mQtyUnit"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="mQtyUnit"></div>
     <input class="inp" id="mQtyVal" type="number" min="0.001" step="any" placeholder="e.g. 2.5" style="font-size:20px;text-align:center;padding:12px">
     <div class="m-actions" style="margin-top:10px">
       <button class="btn-cancel" onclick="closeM('mQty')">Cancel</button>
@@ -531,19 +531,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <!-- STEP 1: Enter Cash -->
     <div id="remitStep1">
       <div class="mtitle">&#128181; Cash Remittance</div>
-      <div style="font-size:12px;color:#888;margin-bottom:16px">Count the cash in the drawer before logging out.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Count the cash in the drawer before logging out.</div>
       <div style="background:var(--s2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="color:#888">Cashier</span>
+          <span style="color:var(--muted)">Cashier</span>
           <strong id="remitLogCashier">—</strong>
         </div>
         <div style="display:flex;justify-content:space-between">
-          <span style="color:#888">Date</span>
+          <span style="color:var(--muted)">Date</span>
           <span id="remitLogDate">—</span>
         </div>
         <span id="remitLogPOS" style="display:none">—</span>
       </div>
-      <label style="font-size:12px;font-weight:600;color:#aaa;display:block;margin-bottom:6px">Cash on Hand (how much is in the drawer?)</label>
+      <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (how much is in the drawer?)</label>
       <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcRemitLogDiff()" style="font-size:22px;text-align:center;padding:12px;font-weight:700">
       <span id="remitLogDiff" style="display:none">—</span>
       <div class="m-actions" style="margin-top:14px">
@@ -555,13 +555,13 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <!-- STEP 2: Confirm (Double Check) -->
     <div id="remitStep2" style="display:none">
       <div class="mtitle" style="color:#f59e0b">&#9888; Confirm</div>
-      <div style="font-size:13px;color:#888;margin-bottom:14px">Is the amount correct? Confirm before logging out.</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Is the amount correct? Confirm before logging out.</div>
       <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:14px;font-size:14px;display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;justify-content:space-between"><span style="color:#888">Cashier</span><strong id="remitCk1">—</strong></div>
-        <div style="display:flex;justify-content:space-between"><span style="color:#888">Date</span><span id="remitCk2">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Cashier</span><strong id="remitCk1">—</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Date</span><span id="remitCk2">—</span></div>
         <span id="remitCk3" style="display:none">—</span>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
-          <span style="color:#888">Cash on Hand</span>
+          <span style="color:var(--muted)">Cash on Hand</span>
           <strong id="remitCk4" style="font-size:20px;color:var(--accent)">—</strong>
         </div>
         <span id="remitCk5" style="display:none">—</span>
@@ -593,7 +593,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <div class="mbox">
     <div class="mtitle">&#128203; Draft Orders</div>
     <div id="draftList" style="max-height:320px;overflow-y:auto;margin-bottom:8px">
-      <div style="color:#555;text-align:center;padding:20px;font-size:12px">No drafts saved.</div>
+      <div style="color:var(--muted);text-align:center;padding:20px;font-size:12px">No drafts saved.</div>
     </div>
     <div class="m-actions">
       <button class="btn-cancel"  onclick="closeM('mDraft')">Close</button>
@@ -929,16 +929,24 @@ function applyPosTheme(s) {
   if (s.pos_accent) r.style.setProperty('--accent', s.pos_accent);
   if (s.pos_bg)     r.style.setProperty('--bg', s.pos_bg);
   if (s.pos_card)   { r.style.setProperty('--s1', s.pos_card); r.style.setProperty('--s2', s.pos_card + 'cc'); }
-  if (s.pos_text)        { r.style.setProperty('--text', s.pos_text); document.body.style.color = s.pos_text; }
+
+  // Resolve the effective text color FIRST (explicit pos_text, or an
+  // auto-contrast pick against pos_bg) so every derived label/muted color
+  // below blends from the color that's actually on screen, not a stale
+  // dark-theme default — otherwise labels can end up unreadable on a
+  // custom light background even though the main text color adapted fine.
+  let resolvedText = s.pos_text || '#f0f0f8';
+  if (s.pos_text) { r.style.setProperty('--text', s.pos_text); document.body.style.color = s.pos_text; }
   else if (s.pos_bg) {
     const auto = _autoTextColor(s.pos_bg);
-    if (auto) { r.style.setProperty('--text', auto); document.body.style.color = auto; }
+    if (auto) { resolvedText = auto; r.style.setProperty('--text', auto); document.body.style.color = auto; }
   }
   if (s.pos_radius)      r.style.setProperty('--radius', s.pos_radius + 'px');
   if (s.pos_font_scale)  r.style.setProperty('--font-scale', s.pos_font_scale / 100);
   if (s.pos_name_color)  r.style.setProperty('--name-color', s.pos_name_color);
   if (s.pos_price_color) r.style.setProperty('--price-color', s.pos_price_color);
-  r.style.setProperty('--totals-color', s.pos_totals_color || _blendHex(s.pos_text || '#f0f0f8', s.pos_bg || '#09090f', .40));
+  r.style.setProperty('--totals-color', s.pos_totals_color || _blendHex(resolvedText, s.pos_bg || '#09090f', .40));
+  r.style.setProperty('--muted', s.pos_muted_color || _blendHex(resolvedText, s.pos_bg || '#09090f', .60));
 
   if (s.pos_font) {
     if (s.pos_font !== 'Inter' && s.pos_font !== 'Segoe UI') {
@@ -1118,12 +1126,12 @@ async function doLogout() {
 // ── Cashier Inbox ────────────────────────────────────────────────────────────
 async function openCashierInbox() {
   const list = document.getElementById('cashierInboxList');
-  list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Loading...</div>';
+  list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Loading...</div>';
   document.getElementById('mCashierInbox').classList.add('show');
   try {
     const un = CASHIER?.username || '';
-    if (!un || !STORE_ID) { list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Not logged in.</div>'; return; }
-    if (!navigator.onLine) { list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Messages need an internet connection.</div>'; return; }
+    if (!un || !STORE_ID) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Not logged in.</div>'; return; }
+    if (!navigator.onLine) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Messages need an internet connection.</div>'; return; }
     const { data, error } = await _sb.from('store_messages')
       .select('*').eq('store_id', STORE_ID).eq('to_username', un)
       .order('created_at', { ascending: false }).limit(50);
@@ -1132,7 +1140,7 @@ async function openCashierInbox() {
       .eq('store_id', STORE_ID).eq('to_username', un).eq('read', false).then(() => {});
     document.getElementById('cashierInboxBadge').style.display = 'none';
     if (!data?.length) {
-      list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">No messages.</div>';
+      list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">No messages.</div>';
       return;
     }
     list.innerHTML = data.map(m => {
@@ -1597,7 +1605,7 @@ function renderPhotoGrid(list) {
             <div class="p-price">${CUR}${parseFloat(p.price).toFixed(2)}</div>
           </div>
         </div>`; }).join('')
-    : `<div style="color:#444;padding:20px;font-size:13px">No products.</div>`;
+    : `<div style="color:var(--muted);padding:20px;font-size:13px">No products.</div>`;
 }
 function _firstImg(b64) {
   if (!b64) return '';
@@ -1622,7 +1630,7 @@ function renderRetailList(list) {
             <span class="r-card-stock ${sc}">${sLabel}</span>
           </div>
         </div>`; }).join('')
-    : `<div style="color:#555;padding:12px 4px;font-size:11px">No products found.</div>`;
+    : `<div style="color:var(--muted);padding:12px 4px;font-size:11px">No products found.</div>`;
 }
 
 // ── Retail: tap product → add 1 to cart with flash ────────────────────────
@@ -2888,11 +2896,11 @@ async function showDrafts() {
 async function loadDraftList() {
   const el = document.getElementById('draftList');
   if (IS_DEMO || !STORE_ID) {
-    el.innerHTML = '<div style="color:#555;text-align:center;padding:20px;font-size:12px">Drafts not available in demo mode.</div>';
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:12px">Drafts not available in demo mode.</div>';
     return;
   }
-  if (!navigator.onLine) { el.innerHTML = '<div style="color:#555;text-align:center;padding:20px;font-size:12px">Drafts need an internet connection to load.</div>'; return; }
-  el.innerHTML = '<div style="color:#555;text-align:center;padding:12px;font-size:12px"><span class="spinner"></span> Loading...</div>';
+  if (!navigator.onLine) { el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:12px">Drafts need an internet connection to load.</div>'; return; }
+  el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:12px;font-size:12px"><span class="spinner"></span> Loading...</div>';
 
   const { data, error } = await _sb.from('draft_orders')
     .select('id,cashier_name,order_type,table_no,items_json,created_at')
@@ -2901,7 +2909,7 @@ async function loadDraftList() {
     .limit(30);
 
   if (error || !data?.length) {
-    el.innerHTML = '<div style="color:#555;text-align:center;padding:20px;font-size:12px">No drafts saved.</div>';
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:12px">No drafts saved.</div>';
     return;
   }
 
