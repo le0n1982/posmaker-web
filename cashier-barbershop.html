@@ -3112,7 +3112,8 @@ async function doPrint() {
         try {
           const _r = await window.posApp.printRaw(_rawPayload);
           if (_r && _r.ok) { newOrder(); return; }
-        } catch (_) {}
+          window._lastPrintErr = _r?.error || 'Unknown error';
+        } catch (e) { window._lastPrintErr = String(e); }
       }
       const resp = await fetch('http://localhost:7788/print', {
         method: 'POST',
@@ -3143,7 +3144,7 @@ async function doPrint() {
   // like a random logout. Skip straight to completing the order instead;
   // real Android printing lands in a future update.
   if (window.posApp && !window.posApp.printReceipt) {
-    if (typeof showToast === 'function') showToast('Could not reach the printer — order saved.', true);
+    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
     newOrder();
     return;
   }
