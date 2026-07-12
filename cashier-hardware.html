@@ -553,6 +553,9 @@ const IS_DEMO  = IS_FAKE_DEMO || IS_PREVIEW;
 
 // Hide login immediately if demo — must run synchronously before any async code
 if (IS_DEMO) document.getElementById('loginWrap').style.display = 'none';
+// Preview mode: also disable the fields so the browser's saved-password
+// autofill can't populate them and trigger a real (device-locked) login.
+if (IS_PREVIEW) { document.getElementById('lu').disabled = true; document.getElementById('lp').disabled = true; }
 
 // Maps each business type to its dedicated cashier/dashboard page slug (cashier-<slug>.html / dashboard-<slug>.html)
 const BIZ_FILE_MAP = {
@@ -955,6 +958,7 @@ function getDeviceLabel() {
   return type + ' \u00b7 ' + os + ' \u00b7 ' + browser;
 }
 async function doLogin() {
+  if (IS_PREVIEW) return; // never attempt a real login inside the Customize POS preview iframe
   const username = document.getElementById('lu').value.trim().toLowerCase();
   const pw       = document.getElementById('lp').value;
   const errEl    = document.getElementById('loginErr');
