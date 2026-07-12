@@ -286,6 +286,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <span class="hdr-title" id="hdrTitle">POSMaker</span>
   <span id="netStatus" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(0,0,0,.3);margin-left:8px;letter-spacing:.3px"></span>
   <span class="hdr-cashier" id="hdrCashier"></span>
+  <div id="hdrActions" style="display:contents">
   <button id="btnCam" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Camera scanner">&#128247;</button>
   <button id="btnSync" onclick="syncProds()" title="Refresh products" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Refresh products">&#128260;</button>
   <button id="btnPrinterSettings" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Printer settings">&#128424;</button>
@@ -294,6 +295,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
   </button>
   <button class="btn-logout" onclick="doLogout()">Logout</button>
+  </div>
 </div>
 <div id="syncBar" style="display:none;background:#1a3a1a;color:#4ade80;font-size:12px;font-weight:600;padding:5px 16px;text-align:center;border-bottom:1px solid #2a5a2a"></div>
 <div id="lowStockBar" style="display:none;background:#1a0e00;border-bottom:1px solid #f59e0b55;padding:7px 14px;align-items:center;gap:8px;flex-wrap:wrap">
@@ -691,6 +693,7 @@ let _openScanTimer = null;
     CASHIER = { full_name: 'Preview', role: 'cashier' };
     showPOS('Preview');
     document.getElementById('btnCO').style.display = 'none'; // preview is look-and-feel only, no real checkout
+    document.getElementById('hdrActions').style.display = 'none'; // header icons (sync, printer, messages, logout, etc.) are all live functions, not for preview
     // Live-update theme as the Customize page's controls change, without a reload
     window.addEventListener('message', e => {
       if (e.data && e.data.type === 'pm_preview_theme') applyPosTheme(e.data.theme);
