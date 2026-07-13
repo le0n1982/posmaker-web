@@ -3902,7 +3902,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   else                                  { from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0,0,0,0); }
   const fromISO = from.toISOString();
   const actionWhitelist = isCashier
-    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
+    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'EPAY_PROOF']
     : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
 
   const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }] = await Promise.all([
@@ -4194,7 +4194,7 @@ async function loadActivityLog() {
   }
   renderActivityLog();
 }
-const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given' };
+const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given', EPAY_PROOF: '📱 E-Pay Proof' };
 const ACTION_COLOR = {
   ADD_STOCK:   'background:#0d2e1f;color:#10b981',
   EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
@@ -4212,6 +4212,7 @@ const ACTION_COLOR = {
   ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
   CASH_ADVANCE_APPROVED: 'background:#0d2e2a;color:#2dd4bf',
   CASH_ADVANCE_GIVEN:    'background:#0d2e2a;color:#2dd4bf',
+  EPAY_PROOF:            'background:#0d1a2e;color:#60a5fa',
 };
 const _receiptCache = {};
 let _mgrRemitConfirm = {};

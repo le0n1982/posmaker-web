@@ -446,7 +446,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 <!-- ── E-PAY WIDGET ── -->
 <div class="modal" id="mEpay">
   <div class="mbox" style="text-align:center">
-    <!-- Picker view: shown only when more than one method is configured -->
+    <!-- Picker view: always shown first, even with only one method configured -->
     <div id="epayPickerView" style="display:none">
       <div class="mtitle">&#128241; Choose Payment Method</div>
       <div id="epayPickerList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px"></div>
@@ -466,7 +466,37 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <div id="epayNote" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
       <div class="m-actions">
         <button class="btn-cancel" onclick="closeEpayModal()">Cancel</button>
-        <button class="btn-confirm" onclick="_epayContinue()">&#10004; Payment Received</button>
+        <button class="btn-confirm" onclick="_epayShowProofChoice()">&#128247; Upload Payment Proof</button>
+      </div>
+    </div>
+    <!-- Proof choice view -->
+    <div id="epayProofChoiceView" style="display:none">
+      <div class="mtitle">&#128247; Proof of Payment</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Take a photo of the customer's payment confirmation screen.</div>
+      <div class="m-actions" style="flex-direction:column">
+        <button class="btn-confirm" style="flex:none" onclick="_epayTakePhoto()">&#128247; Take a Photo</button>
+        <button class="btn-confirm" style="flex:none" onclick="_epayScanQrUpload()">&#128241; Scan QR to Take a Photo</button>
+        <button class="btn-cancel" style="flex:none" onclick="_epayBackToQr()">&#8592; Back</button>
+      </div>
+    </div>
+    <!-- Direct camera capture view -->
+    <div id="epayCameraView" style="display:none">
+      <div class="mtitle">&#128247; Take a Photo</div>
+      <video id="epayCamVideo" autoplay muted playsinline style="width:100%;max-width:300px;border-radius:10px;background:#000"></video>
+      <div id="epayCamErr" style="display:none;font-size:12px;color:#ef4444;margin-top:8px"></div>
+      <div class="m-actions">
+        <button class="btn-cancel" onclick="_epayBackToProofChoice()">&#8592; Back</button>
+        <button class="btn-confirm" onclick="_epayCapturePhoto()">&#10003; Capture</button>
+      </div>
+    </div>
+    <!-- Phone-relay QR upload view -->
+    <div id="epayQrUploadView" style="display:none">
+      <div class="mtitle">&#128241; Scan with Phone</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Scan this with your phone, take the photo there — it appears here automatically.</div>
+      <img id="epayUploadQrImg" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:6px;margin:0 auto 10px;display:block">
+      <div id="epayUploadQrStatus" style="font-size:12px;color:var(--muted);margin-bottom:8px">Waiting for photo&#8230;</div>
+      <div class="m-actions">
+        <button class="btn-cancel" onclick="_epayBackToProofChoice()">&#8592; Back</button>
       </div>
     </div>
   </div>
@@ -2322,7 +2352,7 @@ function _buildDynamicPayQr(staticPayload, amount) {
     return out + _crc16(out);
   } catch (_) { return null; }
 }
-let _epayPendingAmount = 0, _epaySplitCashAmt = null, _epayChosenLabel = null;
+let _epayPendingAmount = 0, _epaySplitCashAmt = null, _epayChosenLabel = null, _epayProofB64 = null;
 function openEpayModal(amount, splitCashAmt) {
   if (!PAYMENT_METHODS.length) {
     alert('No e-payment method set up yet. Ask the owner to add one in Settings.');
@@ -2330,14 +2360,16 @@ function openEpayModal(amount, splitCashAmt) {
   }
   _epayPendingAmount = amount;
   _epaySplitCashAmt = splitCashAmt;
-  if (PAYMENT_METHODS.length === 1) {
-    _showEpayQr(PAYMENT_METHODS[0]);
-  } else {
-    document.getElementById('epayPickerView').style.display = '';
-    document.getElementById('epayQrView').style.display = 'none';
-    document.getElementById('epayPickerList').innerHTML = PAYMENT_METHODS.map(m =>
-      `<button class="btn btn-accent" onclick="_epayPick('${m.id}')">${m.label}</button>`).join('');
-  }
+  _epayProofB64 = null;
+  // Always ask which method first, even if only one is configured — makes
+  // it obvious to the cashier/customer which QR they're about to see.
+  document.getElementById('epayQrView').style.display = 'none';
+  document.getElementById('epayProofChoiceView').style.display = 'none';
+  document.getElementById('epayCameraView').style.display = 'none';
+  document.getElementById('epayQrUploadView').style.display = 'none';
+  document.getElementById('epayPickerView').style.display = '';
+  document.getElementById('epayPickerList').innerHTML = PAYMENT_METHODS.map(m =>
+    `<button class="btn btn-accent" onclick="_epayPick('${m.id}')">${m.label}</button>`).join('');
   document.getElementById('mEpay').classList.add('show');
 }
 function _epayPick(id) {
@@ -2364,6 +2396,83 @@ function _showEpayQr(method) {
 }
 function closeEpayModal() {
   document.getElementById('mEpay').classList.remove('show');
+  _epayStopCamera();
+  _epayCloseQrUpload();
+}
+
+// ── Proof of payment — direct camera or phone-relay QR ──────────────────
+function _epaySwitchView(id) {
+  ['epayPickerView','epayQrView','epayProofChoiceView','epayCameraView','epayQrUploadView']
+    .forEach(v => document.getElementById(v).style.display = v === id ? '' : 'none');
+}
+function _epayShowProofChoice() {
+  _epayStopCamera();
+  _epayCloseQrUpload();
+  _epaySwitchView('epayProofChoiceView');
+}
+function _epayBackToQr() {
+  _epaySwitchView('epayQrView');
+}
+function _epayBackToProofChoice() {
+  _epayStopCamera();
+  _epayCloseQrUpload();
+  _epaySwitchView('epayProofChoiceView');
+}
+
+let _epayCamStream = null;
+async function _epayTakePhoto() {
+  _epaySwitchView('epayCameraView');
+  const errEl = document.getElementById('epayCamErr');
+  errEl.style.display = 'none';
+  try {
+    _epayCamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } } });
+    const video = document.getElementById('epayCamVideo');
+    video.srcObject = _epayCamStream;
+    await video.play();
+  } catch (e) {
+    errEl.textContent = '⚠️ Camera blocked or unavailable. Try "Scan QR to Take a Photo" instead.';
+    errEl.style.display = '';
+  }
+}
+function _epayStopCamera() {
+  if (_epayCamStream) { _epayCamStream.getTracks().forEach(t => t.stop()); _epayCamStream = null; }
+}
+function _epayCapturePhoto() {
+  const video = document.getElementById('epayCamVideo');
+  if (!video.srcObject) { return; }
+  const cv = document.createElement('canvas');
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  cv.width = vw; cv.height = vh;
+  cv.getContext('2d').drawImage(video, 0, 0, vw, vh);
+  _epayProofB64 = cv.toDataURL('image/jpeg', 0.8).split(',')[1];
+  _epayStopCamera();
+  _epayContinue();
+}
+
+let _epayQrPoll = null, _epayQrToken = null;
+async function _epayScanQrUpload() {
+  _epaySwitchView('epayQrUploadView');
+  _OPS_STORE_ID = STORE_ID;
+  if (!_opsData) await loadOpsData();
+  _epayQrToken = await createImgUploadToken('epay_proof', 1);
+  const url = 'https://posmaker.ggff.net/image-upload.html?sid=' + STORE_ID + '&token=' + _epayQrToken + '&max=1';
+  document.getElementById('epayUploadQrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(url);
+  document.getElementById('epayUploadQrStatus').textContent = 'Waiting for photo…';
+  if (_epayQrPoll) clearInterval(_epayQrPoll);
+  _epayQrPoll = setInterval(async () => {
+    await refreshOpsData();
+    const sess = (_opsData && _opsData.imgUploadSessions && _opsData.imgUploadSessions[_epayQrToken]) || null;
+    if (!sess || !sess.images || sess.images.length === 0) return;
+    _epayProofB64 = sess.images[0];
+    document.getElementById('epayUploadQrStatus').textContent = '✅ Photo received!';
+    await clearImgUploadSession(_epayQrToken); _epayQrToken = null;
+    _epayCloseQrUpload();
+    setTimeout(() => _epayContinue(), 400);
+  }, 2500);
+}
+function _epayCloseQrUpload() {
+  if (_epayQrPoll) { clearInterval(_epayQrPoll); _epayQrPoll = null; }
+  if (_epayQrToken) { clearImgUploadSession(_epayQrToken); _epayQrToken = null; }
 }
 
 function setMethod(m, btn) {
@@ -2552,6 +2661,7 @@ async function confirmOrder() {
   await _doConfirmOrder();
 }
 async function _epayContinue() {
+  if (!_epayProofB64) { alert('Attach a photo of the payment confirmation first.'); return; }
   closeEpayModal();
   if (_epaySplitCashAmt != null) { payMeth = 'Split'; _splitCashAmt = _epaySplitCashAmt; }
   else { payMeth = _epayChosenLabel; }
@@ -2619,6 +2729,18 @@ async function _doConfirmOrder() {
   }
 
   if (oErr) { alert(oErr.message); return; }
+
+  // Proof-of-payment photo (E-Pay/Split only) — logged the same way other
+  // receipt/proof photos are (activity_logs.details.receipt_b64), so it
+  // shows up automatically in the Staff Logs "View" button.
+  if (_epayProofB64) {
+    _sb.from('activity_logs').insert({
+      store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
+      action: 'EPAY_PROOF', target_name: `Order #${ord.id}`,
+      details: JSON.stringify({ method: _epayChosenLabel, amount: total, receipt_b64: 'data:image/jpeg;base64,' + _epayProofB64 })
+    }).then(() => {});
+    _epayProofB64 = null;
+  }
 
   // Run order_items insert and the products inv_links lookup in parallel —
   // neither depends on the other's result.
@@ -2975,7 +3097,7 @@ function newOrder() {
   document.getElementById('splitSection').style.display = 'none';
   document.getElementById('splitCashAmt').value = '';
   document.getElementById('splitRemainderDisp').textContent = '';
-  _splitCashAmt = null; _epaySplitCashAmt = null; _epayChosenLabel = null;
+  _splitCashAmt = null; _epaySplitCashAmt = null; _epayChosenLabel = null; _epayProofB64 = null;
   isKOT = false;
   document.getElementById('btnKOT').classList.remove('on');
   document.getElementById('btnKOT').textContent = '\u{1F468}‍\u{1F373} KOT';
