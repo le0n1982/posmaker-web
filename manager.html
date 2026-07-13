@@ -1141,6 +1141,21 @@ async function loadLog(){
   }).join('');
 }
 
+// E-Pay proofs have no separate accounting row — the "confirmed" flag just
+// lives in the same activity_logs.details blob, updated in place. Mirrors
+// the owner dashboard's confirmEpayProof().
+async function confirmEpayProof(logId, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Confirming…'; }
+  const { data: log } = await _sb.from('activity_logs').select('id,details').eq('id', logId).maybeSingle();
+  if (!log) { showToast('Could not find this entry.', true); return; }
+  let d = {}; try { d = JSON.parse(log.details || '{}'); } catch(_) {}
+  d.confirmed = true;
+  const { error } = await _sb.from('activity_logs').update({ details: JSON.stringify(d) }).eq('id', logId);
+  if (error) { showToast('Error: ' + error.message, true); if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Confirm'; } return; }
+  showToast('Payment confirmed as received.');
+  if (_mgrStaffLogsCur) renderMgrStaffLogsBody(_mgrStaffLogsCur.staffId, _mgrStaffLogsCur.displayName, _mgrStaffLogsCur.role);
+}
+
 async function logAction(action, targetName, details){
   const { error } = await _sb.from('activity_logs').insert({
     store_id: MGR.store_id,
@@ -1320,7 +1335,7 @@ async function forceLogoutMgrStaff(id, name) {
   await loadMgrStaff();
   showToast(`"${name}" logged out.`);
 }
-let _mgrStaffLogsPoll = null;
+let _mgrStaffLogsPoll = null, _mgrStaffLogsCur = null;
 function closeMgrStaffLogsModal() {
   closeModal('mgrStaffLogsModal');
   clearInterval(_mgrStaffLogsPoll); _mgrStaffLogsPoll = null;
@@ -1329,6 +1344,7 @@ async function viewMgrStaffLogs(staffId, displayName, role) {
   document.getElementById('mgrStaffLogsTitle').textContent = displayName + ' — Login History';
   document.getElementById('mgrStaffLogsBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
   document.getElementById('mgrStaffLogsModal').classList.add('show');
+  _mgrStaffLogsCur = { staffId, displayName, role };
   await renderMgrStaffLogsBody(staffId, displayName, role);
   clearInterval(_mgrStaffLogsPoll);
   if (role !== 'manager') _mgrStaffLogsPoll = setInterval(() => renderMgrStaffLogsBody(staffId, displayName, role), 20000);
@@ -1342,7 +1358,7 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
     return;
   }
   const isCashier = role !== 'manager';
-  let logoutTimes = [], remits = [];
+  let logoutTimes = [], remits = [], epayProofs = [];
   const { data: logoutData } = await _sb.from('activity_logs')
     .select('created_at').eq('store_id', MGR.store_id).eq('actor_name', displayName).eq('action', 'LOGOUT')
     .order('created_at', { ascending: true }).limit(100);
@@ -1352,6 +1368,10 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
       .select('created_at,cash_on_hand').eq('store_id', MGR.store_id).eq('cashier_name', displayName)
       .order('created_at', { ascending: true }).limit(200);
     remits = remitData || [];
+    const { data: epayData } = await _sb.from('activity_logs')
+      .select('id,details,created_at').eq('store_id', MGR.store_id).eq('actor_name', displayName).eq('action', 'EPAY_PROOF')
+      .order('created_at', { ascending: true }).limit(200);
+    epayProofs = epayData || [];
   }
   const loginTimes = logins.map(l => l.login_at);
   // Group logins into shifts: a NEW shift only starts after an ACTUAL
@@ -1391,7 +1411,7 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
 
   body.innerHTML = `
     <table style="width:100%">
-      <thead><tr><th>#</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}</tr></thead>
+      <thead><tr><th>#</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th><th>E-Pay</th>':''}</tr></thead>
       <tbody>${shifts.map((s,i) => {
         const loginStr = new Date(s.loginAt).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'});
         const logoutStr = s.logoutAt
@@ -1407,11 +1427,26 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
             cashCell = s._total != null ? `<span style="color:#22c55e;font-weight:600">₱${s._total.toFixed(2)}</span> <span style="color:var(--muted);font-size:11px">live</span>` : '—';
           }
         }
+        let epayCell = '—';
+        if (isCashier) {
+          const shiftEnd = s.logoutAt ? new Date(s.logoutAt).getTime() + 5000 : Infinity;
+          const shiftEpay = epayProofs.filter(p => {
+            const t = new Date(p.created_at).getTime();
+            return t >= new Date(s.loginAt).getTime() && t <= shiftEnd;
+          });
+          epayCell = shiftEpay.length ? shiftEpay.map(p => {
+            let d = {}; try { d = JSON.parse(p.details || '{}'); } catch(_) {}
+            const amt = d.amount != null ? '₱' + parseFloat(d.amount).toFixed(2) : '';
+            return `<div style="margin-bottom:2px">${d.method||''} ${amt} ${d.confirmed
+              ? '<span class="badge" style="background:#0d2e1f;color:#10b981">&#10003;</span>'
+              : `<button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${p.id}',this)">Confirm</button>`}</div>`;
+          }).join('') : '—';
+        }
         return `<tr>
         <td style="color:var(--dim);font-size:12px">${i+1}</td>
         <td>${loginStr}</td>
         <td>${logoutStr}</td>
-        ${isCashier?`<td>${cashCell}</td>`:''}
+        ${isCashier?`<td>${cashCell}</td><td>${epayCell}</td>`:''}
       </tr>`;
       }).join('')}</tbody>
     </table>`;

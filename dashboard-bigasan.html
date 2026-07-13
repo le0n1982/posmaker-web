@@ -233,6 +233,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="caPendingAlert" style="display:none;background:#0a1a2a;border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:#ccc"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
       </div>
+      <!-- Unconfirmed E-Pay proofs -->
+      <div id="epayPendingAlert" style="display:none;background:#0d1a2e;border:1px solid #60a5fa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+        <strong style="color:#60a5fa">&#128241; Unconfirmed E-Pay Payments</strong> &#8212; <span id="epayPendingCount" style="color:#ccc"></span> <span style="color:#60a5fa;text-decoration:underline">View Staff &#8594;</span>
+      </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="sc-label">Today's Orders</div><div class="sc-val" id="tdOrders">&#8212;</div><div class="sc-sub">orders today</div></div>
         <div class="stat-card"><div class="sc-label">Today's Revenue</div><div class="sc-val" id="tdRev">&#8212;</div><div class="sc-sub">gross sales</div></div>
@@ -2228,6 +2232,29 @@ async function checkPendingCashAdvance() {
     alertEl.style.display = 'none';
   }
 }
+// E-Pay payments settle straight to the owner's own GCash/bank, never
+// touching a physical drawer — so there's no cash-on-hand step to confirm.
+// What the owner (and manager) still need to actively check is the proof
+// PHOTO the cashier attached, to make sure a real payment actually came in
+// before it's forgotten in the log. `details` is plain TEXT (not JSONB), so
+// "unconfirmed" can't be filtered server-side — pull recent EPAY_PROOF rows
+// and check each one's parsed confirmed flag client-side.
+async function checkPendingEpayProofs() {
+  const alertEl = document.getElementById('epayPendingAlert');
+  if (!alertEl || !STORE?.id) return;
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await _sb.from('activity_logs')
+    .select('id,details').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF').gte('created_at', since);
+  const pending = (data || []).filter(l => {
+    try { return !JSON.parse(l.details || '{}').confirmed; } catch(_) { return true; }
+  });
+  if (pending.length) {
+    document.getElementById('epayPendingCount').textContent = pending.length + ' payment' + (pending.length > 1 ? 's' : '') + ' need review';
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
+}
 
 // ── Cash Advance (staff-requested, owner-approved) ────────────────────────
 let _caAdvancesCache = [];
@@ -2488,6 +2515,7 @@ async function loadDashboard() {
     checkUnremittedCash();
     checkLateRemittances();
     checkPendingCashAdvance();
+    checkPendingEpayProofs();
 
     // Auto-send Telegram low stock alert once per day
     if (lowItems.length && STORE.telegram_bot_token && STORE.telegram_chat_id) {
@@ -3995,7 +4023,16 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     }
 
     const actionsHtml = dayActions.length
-      ? dayActions.map(l => `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span></div>`).join('')
+      ? dayActions.map(l => {
+          let confirmBtn = '';
+          if (l.action === 'EPAY_PROOF') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            confirmBtn = d.confirmed
+              ? ' <span class="badge" style="background:#0d2e1f;color:#10b981">&#10003;</span>'
+              : ` <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
+          }
+          return `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}</div>`;
+        }).join('')
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
@@ -4151,6 +4188,30 @@ async function confirmMgrDeposit(crId, btnEl) {
   showToast('Deposit confirmed as received.');
   renderActivityLog();
 }
+// E-Pay proofs have no separate accounting row (unlike MGR_REMIT's
+// cash_remittances) — the "confirmed" flag just lives in the same
+// activity_logs.details blob, updated in place.
+async function confirmEpayProof(logId, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Confirming…'; }
+  // May be clicked from the main Activity Log (row already cached in
+  // _activityLogs) or from a specific staff member's Logs modal (its own
+  // separately-fetched rows) — fall back to a direct fetch either way.
+  let log = _activityLogs.find(l => l.id === logId);
+  if (!log) {
+    const { data } = await _sb.from('activity_logs').select('id,details').eq('id', logId).maybeSingle();
+    log = data;
+  }
+  if (!log) { showToast('Could not find this entry.', true); return; }
+  let d = {}; try { d = JSON.parse(log.details || '{}'); } catch(_) {}
+  d.confirmed = true;
+  const { error } = await _sb.from('activity_logs').update({ details: JSON.stringify(d) }).eq('id', logId);
+  if (error) { showToast('Error: ' + error.message, true); if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Confirm Received'; } return; }
+  log.details = JSON.stringify(d);
+  showToast('Payment confirmed as received.');
+  renderActivityLog();
+  checkPendingEpayProofs();
+  if (_staffLogsCur) renderStaffLogsBody(_staffLogsCur.staffId, _staffLogsCur.displayName, _staffLogsCur.role);
+}
 async function loadActivityLog() {
   const tbody = document.getElementById('activityTbody');
   if (!tbody) return;
@@ -4261,6 +4322,12 @@ function renderActivityLog() {
           // Full cash/non-cash breakdown lives in the generated receipt (View
           // button) — keep this cell to just the outcome so the table stays scannable.
           details = filtered.filter(([k]) => ['result','note'].includes(k)).map(([k,v]) => k+': '+v).join(', ');
+        } else if (l.action === 'EPAY_PROOF') {
+          const _amt = d.amount != null ? CUR + parseFloat(d.amount).toFixed(2) : '';
+          details = `${d.method || ''} ${_amt}`.trim();
+          details += d.confirmed
+            ? ' <span class="badge" style="background:#0d2e1f;color:#10b981;margin-left:6px">&#10003; Confirmed</span>'
+            : ' <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;margin-left:6px" onclick="confirmEpayProof(\'' + l.id + '\',this)">&#10003; Confirm Received</button>';
         } else {
           details = filtered.map(([k,v]) => `${k}: ${v}`).join(', ');
         }
