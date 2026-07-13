@@ -159,8 +159,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="sb-item" id="navInventory" onclick="nav('inventory')" title="Track stock levels for your raw materials and supplies, and add new items."><span class="ico">&#128230;</span> <span id="navInventoryLbl">Inventory</span> <span id="lowStockBadge" style="display:none;margin-left:auto;font-size:10px;background:#f59e0b;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('categories')" title="Organize your products and inventory items into categories."><span class="ico">&#128194;</span> Categories</div>
     <div class="sb-item" id="navProducts"  onclick="nav('products')" title="Add, edit, or remove the items you sell &mdash; set price, photo, and category."><span class="ico">&#127991;</span> <span id="navProductsLbl">Products</span></div>
-    <div class="sb-item" onclick="nav('staff')" title="Add your staff here &mdash; create their accounts, set name, password, and control access."><span class="ico">&#128101;</span> Staff</div>
-    <div class="sb-item" onclick="nav('activitylog')" title="See a log of staff actions and submitted receipts &mdash; view, accept, or mark as invalid."><span class="ico">&#128203;</span> Activity Log</div>
+    <div class="sb-item" onclick="nav('staff')" title="Add your staff here &mdash; create their accounts, set name, password, and control access. Also includes their activity log &mdash; actions and submitted receipts."><span class="ico">&#128101;</span> Staff</div>
     <div class="sb-item" onclick="nav('messages')" id="sbMessages" title="Send and receive messages with your staff."><span class="ico">&#128172;</span> Messages <span id="msgUnreadBadge" style="display:none;margin-left:auto;font-size:10px;background:#ef4444;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('salesreport')" title="View your sales totals, best sellers, and reports by day or date range."><span class="ico">&#128202;</span> Sales Report</div>
     <div class="sb-item" onclick="nav('checklist')" title="Set tasks your staff must complete when opening or closing the store."><span class="ico">&#9989;</span> Daily Checklist</div>
@@ -220,7 +219,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <strong style="color:#f59e0b">&#9888; Low Stock / Out of Stock</strong> &#8212; <span id="lowStockList" style="color:#ccc"></span> <span style="color:#f59e0b;text-decoration:underline">View Inventory &#8594;</span>
       </div>
       <!-- Late remittance alert (already remitted, but took too long) -->
-      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('activitylog')">
+      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#a78bfa">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:#ccc"></span> <span style="color:#a78bfa;text-decoration:underline">View Activity Log &#8594;</span>
       </div>
       <!-- Pending cash advance requests -->
@@ -462,11 +461,9 @@ input:checked + .slider:before{transform:translateX(18px)}
           <div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>
         </div>
       </div>
-    </div>
 
-    <!-- ACTIVITY LOG -->
-    <div class="section" id="sec-activitylog">
-      <div class="tbl-wrap">
+      <!-- Activity Log — folded into Staff so it's all in one place -->
+      <div class="tbl-wrap" style="margin-top:16px">
         <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
           <h3>&#128203; Staff Activity Log</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -1660,8 +1657,7 @@ function nav(id) {
   if (id === 'orders')     loadOrders();
   if (id === 'salesreport') loadReport('daily');
   if (id === 'inventory')  loadInventory();
-  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); }
-  if (id === 'activitylog')  loadActivityLog();
+  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); }
   if (id === 'messages')     loadMessages();
   if (id === 'categories') { loadDbCategories().then(() => loadProducts().then(loadCategories)); switchCatTab(catTab); }
   if (id === 'checklist')  loadChecklist();
@@ -3846,6 +3842,46 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     }));
   }
 
+  // What they actually DID — remittances, void/refund requests, and (for
+  // managers) COH received, stock purchases with proof, deposits to owner.
+  // Sales are deliberately left out — the shift table above already covers
+  // "how much cash" without listing every individual sale.
+  const actionWhitelist = isCashier
+    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
+    : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT'];
+  let actLogs = [];
+  if (STORE?.id) {
+    const { data } = await _sb.from('activity_logs')
+      .select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('actor_name', displayName)
+      .in('action', actionWhitelist)
+      .order('created_at', { ascending: false }).limit(50);
+    actLogs = data || [];
+  }
+  const actionRows = actLogs.map(l => {
+    const dt = new Date(l.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    let details = '', receiptB64 = null;
+    try {
+      if (l.details) {
+        const d = JSON.parse(l.details);
+        receiptB64 = d.receipt_b64 || null;
+        details = Object.entries(d).filter(([k]) => !['receipt_b64','cr_id'].includes(k)).map(([k,v]) => `${k}: ${v}`).join(' &bull; ');
+      }
+    } catch(_) { details = l.details || ''; }
+    if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
+    const receiptCell = receiptB64
+      ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px">&#129534; View</button>`
+      : l.action === 'RECEIVED_COH'
+      ? `<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px">&#129534; View</button>`
+      : '<span style="color:var(--dim)">—</span>';
+    return `<tr>
+      <td style="color:var(--muted);white-space:nowrap;font-size:12px">${dt}</td>
+      <td><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action] || l.action}</span></td>
+      <td style="color:var(--muted);font-size:12px">${details}</td>
+      <td>${receiptCell}</td>
+    </tr>`;
+  }).join('');
+
   body.innerHTML = `
     <table style="width:100%">
       <thead><tr><th>#</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}</tr></thead>
@@ -3871,6 +3907,11 @@ async function renderStaffLogsBody(staffId, displayName, role) {
         ${isCashier?`<td>${cashCell}</td>`:''}
       </tr>`;
       }).join('')}</tbody>
+    </table>
+    <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px">WHAT THEY DID</div>
+    <table style="width:100%;margin-top:6px">
+      <thead><tr><th>Time</th><th>Action</th><th>Details</th><th>Receipt</th></tr></thead>
+      <tbody>${actionRows || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px">No records found.</td></tr>'}</tbody>
     </table>`;
 }
 function openStaffModal(s) {
@@ -4027,6 +4068,23 @@ async function loadActivityLog() {
   }
   renderActivityLog();
 }
+const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded' };
+const ACTION_COLOR = {
+  ADD_STOCK:   'background:#0d2e1f;color:#10b981',
+  EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
+  ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
+  SALE:        'background:#0d2e2a;color:#14b8a6',
+  REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
+  RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
+  MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
+  OWNER_SEND:   'background:#0a2a10;color:#39ff14',
+  SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
+  EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
+  LOGIN:        'background:#0a2a2a;color:#06b6d4',
+  LOGOUT:       'background:#2a0a0a;color:#f87171',
+  ORDER_VOIDED:   'background:#2e0d0d;color:#ef4444',
+  ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
+};
 const _receiptCache = {};
 let _mgrRemitConfirm = {};
 function renderActivityLog() {
@@ -4038,21 +4096,8 @@ function renderActivityLog() {
   if (actorF)  rows = rows.filter(l => (l.actor_name || '').trim() === actorF.trim());
   if (actionF) rows = rows.filter(l => actionF === '__others__' ? ['OWNER_SEND','EXPENSE_PAID'].includes(l.action) : l.action === actionF);
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No activity found.</td></tr>'; return; }
-  const actionLabel = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout' };
-  const actionColor = {
-    ADD_STOCK:   'background:#0d2e1f;color:#10b981',
-    EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
-    ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
-    SALE:        'background:#0d2e2a;color:#14b8a6',
-    REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
-    RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
-    MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
-    OWNER_SEND:   'background:#0a2a10;color:#39ff14',
-    SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
-    EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
-    LOGIN:        'background:#0a2a2a;color:#06b6d4',
-    LOGOUT:       'background:#2a0a0a;color:#f87171',
-  };
+  const actionLabel = ACTION_LABEL;
+  const actionColor = ACTION_COLOR;
   tbody.innerHTML = rows.map(l => {
     const dt = new Date(l.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
     let details = '';
