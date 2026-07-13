@@ -18,24 +18,28 @@
   --ok-bg:#0d2e1f;--ok-text:#10b981;
   --danger-bg:#2a0a0a;--danger-text:#ef4444;
   --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --preview-stripe-a:#0d0d1a;--preview-stripe-b:#111120;
 }
 @media(prefers-color-scheme:light){:root{
   --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
   --ok-bg:#e6f9ef;--ok-text:#0a7a42;
   --danger-bg:#fdecec;--danger-text:#c0392b;
   --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --preview-stripe-a:#eef1f6;--preview-stripe-b:#e3e9f3;
 }}
 :root[data-theme="dark"]{
   --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
   --ok-bg:#0d2e1f;--ok-text:#10b981;
   --danger-bg:#2a0a0a;--danger-text:#ef4444;
   --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --preview-stripe-a:#0d0d1a;--preview-stripe-b:#111120;
 }
 :root[data-theme="light"]{
   --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
   --ok-bg:#e6f9ef;--ok-text:#0a7a42;
   --danger-bg:#fdecec;--danger-text:#c0392b;
   --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --preview-stripe-a:#eef1f6;--preview-stripe-b:#e3e9f3;
 }
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 
@@ -120,7 +124,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
 /* PREVIEW AREA */
 .cz-preview{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .cz-preview-bar{padding:8px 16px;font-size:10px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.7px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.cz-preview-canvas{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:repeating-linear-gradient(45deg,#0d0d1a 0,#0d0d1a 10px,#111120 10px,#111120 20px)}
+.cz-preview-canvas{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:repeating-linear-gradient(45deg,var(--preview-stripe-a) 0,var(--preview-stripe-a) 10px,var(--preview-stripe-b) 10px,var(--preview-stripe-b) 20px)}
 
 /* ── POS MOCK ───────────────────────────────────────────────────── */
 .pos-mock{
