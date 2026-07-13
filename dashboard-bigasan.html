@@ -1274,6 +1274,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <p id="pmQrHint">Click to upload QR (PNG or JPG)</p>
     </div>
     <input type="file" id="pmQrInput" accept="image/*" style="display:none" onchange="handleAddPayMethodQr(event)">
+    <button type="button" class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="openDashCam('paymethod')">&#128247; Scan QR with Camera</button>
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeModal('mAddPayMethod')">Cancel</button>
       <button class="btn-confirm" onclick="savePaymentMethod()">Save</button>
@@ -5547,7 +5548,8 @@ async function sha256(text) {
 
 // ── Dashboard Camera (product photo + barcode detection) ─────────────────
 let _dashStream = null, _dashBcLoopId = null, _dashZxing = null, _dashBarcode = null;
-let _dashCamMode = 'photo'; // 'photo' | 'barcode' | 'inventory'
+let _dashQrLoopId = null;
+let _dashCamMode = 'photo'; // 'photo' | 'barcode' | 'inventory' | 'paymethod'
 let _dashBcTarget = 'pSku'; // which input to fill with barcode
 let _invPendingImgs = [];  // captured photos for inventory item (up to 4)
 
@@ -5573,6 +5575,11 @@ async function openDashCam(mode, targetField){
     captureBtn.textContent = '📷 Capture ('+_prodPendingImgs.length+'/4)';
     bcBtn.style.display = 'none';
     document.querySelector('#dashCamModal h3').textContent = '📷 Product Photos';
+  } else if(_dashCamMode === 'paymethod'){
+    // Fully automatic — no capture button, closes itself the moment a QR is found.
+    captureBtn.style.display = 'none';
+    bcBtn.style.display = 'none';
+    document.querySelector('#dashCamModal h3').textContent = '📷 Scan Payment QR';
   } else {
     captureBtn.style.display = '';
     captureBtn.innerHTML = '📷 Capture Photo';
@@ -5586,7 +5593,8 @@ async function openDashCam(mode, targetField){
       video:{ facingMode:{ ideal:'environment' }, width:{ ideal:640 } }
     });
     video.srcObject = _dashStream; await video.play();
-    startDashBcLoop(video);
+    if (_dashCamMode === 'paymethod') startDashQrLoop(video);
+    else startDashBcLoop(video);
   } catch(e) {
     const errEl = document.getElementById('dashCamErr');
     errEl.textContent = '⚠️ Camera blocked — go to browser Settings → Site settings → Camera → Allow le0n1982.github.io';
@@ -5599,6 +5607,38 @@ function closeDashCam(){
   if(_dashStream){ _dashStream.getTracks().forEach(t=>t.stop()); _dashStream=null; }
   if(_dashBcLoopId){ clearTimeout(_dashBcLoopId); _dashBcLoopId=null; }
   if(_dashZxing){ try{ _dashZxing.reset(); }catch(_){} _dashZxing=null; }
+  if(_dashQrLoopId){ clearTimeout(_dashQrLoopId); _dashQrLoopId=null; }
+}
+// Live QR scan (payment-method QR) — points the camera, auto-captures and
+// decodes the moment a QR comes into frame, no manual "Capture" tap needed.
+async function startDashQrLoop(video){
+  await _loadJsQr();
+  if (typeof jsQR === 'undefined') { showToast('Could not load QR scanner. Use "upload photo" instead.', true); closeDashCam(); return; }
+  const cv = document.createElement('canvas');
+  async function loop(){
+    if(!_dashStream){ _dashQrLoopId=null; return; }
+    if(video.readyState>=2 && video.videoWidth>0){
+      cv.width = video.videoWidth; cv.height = video.videoHeight;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(video, 0, 0, cv.width, cv.height);
+      const id = ctx.getImageData(0, 0, cv.width, cv.height);
+      const code = jsQR(id.data, id.width, id.height);
+      if (code) {
+        const b64 = cv.toDataURL('image/jpeg', 0.85).split(',')[1];
+        pendingPmQrb64 = b64;
+        pendingPmQrPayload = code.data;
+        const img = document.getElementById('pmQrPreview');
+        img.src = 'data:image/jpeg;base64,' + b64; img.style.display = 'block';
+        document.getElementById('pmQrHint').style.display = 'none';
+        document.getElementById('pmQrDrop').classList.add('has-img');
+        closeDashCam();
+        showToast('✅ QR scanned — exact amount will pre-fill for the customer.');
+        return;
+      }
+    }
+    _dashQrLoopId=setTimeout(loop,250);
+  }
+  setTimeout(loop,400); // let video stabilize first
 }
 
 function startDashBcLoop(video){
