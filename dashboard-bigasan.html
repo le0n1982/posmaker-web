@@ -4022,17 +4022,35 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       }
     }
 
+    // Every action gets its own time + a one-line detail summary — without
+    // this, a busy day (several remits/shifts) renders as a wall of
+    // identical-looking "Remittance" badges with no way to tell them apart.
     const actionsHtml = dayActions.length
-      ? dayActions.map(l => {
-          let confirmBtn = '';
+      ? '<div style="max-height:150px;overflow-y:auto;padding-right:2px">' + dayActions.map(l => {
+          const timeStr = new Date(l.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+          let detailText = '', confirmBtn = '';
           if (l.action === 'EPAY_PROOF') {
             let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            const amt = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
+            detailText = `${d.method || ''} ${amt}`.trim();
             confirmBtn = d.confirmed
               ? ' <span class="badge" style="background:#0d2e1f;color:#10b981">&#10003;</span>'
               : ` <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
+          } else if (l.action === 'REMITTANCE') {
+            detailText = l.details || '';
+          } else if (l.action === 'ORDER_VOIDED' || l.action === 'ORDER_REFUNDED') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            detailText = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
+          } else if (l.action === 'ADD_STOCK' || l.action === 'MGR_REMIT') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            detailText = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : (d.added != null ? '+' + d.added : '');
           }
-          return `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}</div>`;
-        }).join('')
+          return `<div style="margin-bottom:5px">
+            <span style="color:var(--dim);font-size:10px">${timeStr}</span>
+            <span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}
+            ${detailText ? `<div style="color:var(--muted);font-size:11px;margin-top:1px">${detailText}</div>` : ''}
+          </div>`;
+        }).join('') + '</div>'
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {

@@ -1676,12 +1676,17 @@ function renderRemit() {
   const renderRow = (r, isPending) => {
     const diff = parseFloat(r.difference) || 0;
     const diffColor = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--muted)';
+    const ADJ_STATUS_LABEL = { coh_to_staff: 'C.A.', purchase: 'Purchase', deposit: 'Deposit', refund: 'Refund' };
     const statusBadge = isPending
       ? `<span class="badge" style="background:#2e1a0d;color:#f59e0b;animation:pulse 1.5s infinite">&#9679; Pending</span>`
       : r.status === 'mgr_remit'
       ? (r.owner_confirmed
           ? `<span class="badge" style="background:#0d2e1f;color:#10b981">&#10003; Confirmed</span>`
           : `<span class="badge" style="background:#2e2a0d;color:#facc15">&#9203; Under Review</span>`)
+      // Manager-initiated adjustments (cash advance, stock purchase, deposit, refund) aren't
+      // a cashier shift going over/short — label them by what they actually are instead.
+      : ADJ_STATUS_LABEL[r.status]
+      ? `<span class="badge" style="background:#0d1a2e;color:#00b4d8">${ADJ_STATUS_LABEL[r.status]}</span>`
       : diff > 0 ? `<span class="badge badge-ok">Over</span>`
       : diff < 0 ? `<span class="badge badge-out">Short</span>`
       : `<span style="font-size:11px;color:var(--muted)">Balanced</span>`;
