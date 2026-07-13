@@ -68,6 +68,13 @@ th{background:var(--s2);color:var(--muted);padding:10px 14px;text-align:left;fon
 td{padding:10px 14px;border-bottom:1px solid #111122;color:#ccc}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--s2)}
+/* Spreadsheet-style grid (vertical + horizontal lines) for dense log tables
+   like the Staff Logs modal, where lots of similar rows/columns need to be
+   easy to trace across at a glance. */
+.grid-table th, .grid-table td{border-right:1px solid #111122}
+.grid-table th:last-child, .grid-table td:last-child{border-right:none}
+.grid-table th{border-bottom:1px solid var(--border)}
+.grid-table td{border-bottom:1px solid #1a1a2e}
 .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
 .bg-cash{background:#0a2a1a;color:#10b981}
 .bg-card{background:#0a0a2a;color:#818cf8}
@@ -3883,7 +3890,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   }).join('');
 
   body.innerHTML = `
-    <table style="width:100%">
+    <table class="grid-table" style="width:100%">
       <thead><tr><th>#</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}</tr></thead>
       <tbody>${shifts.map((s,i) => {
         const loginStr = new Date(s.loginAt).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'});
@@ -3909,7 +3916,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       }).join('')}</tbody>
     </table>
     <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px">WHAT THEY DID</div>
-    <table style="width:100%;margin-top:6px">
+    <table class="grid-table" style="width:100%;margin-top:6px">
       <thead><tr><th>Time</th><th>Action</th><th>Details</th><th>Receipt</th></tr></thead>
       <tbody>${actionRows || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px">No records found.</td></tr>'}</tbody>
     </table>`;
