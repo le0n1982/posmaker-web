@@ -1374,9 +1374,18 @@ async function openRemitOnLogout() {
     const { data } = await _sb.from('orders').select('total,payment_method')
       .eq('store_id', STORE_ID).eq('cashier_name', name)
       .gte('timestamp', from).lte('timestamp', to);
+    // Sales made while offline sit in the local queue until the connection
+    // comes back (see queueOfflineOrder/syncOfflineQueue) — if logout happens
+    // before that sync finishes, those orders aren't in the 'orders' table
+    // yet and would silently drop out of the POS Sales total here, making
+    // the cash the cashier actually collected for them look like unexplained
+    // "Over" cash. Count them from the local queue too.
+    const _queuedOrders = getOfflineQueue()
+      .filter(o => o.cashier_name === name && o.timestamp >= from && o.timestamp <= to)
+      .map(o => ({ total: o.total, payment_method: o.payment_method }));
     // Compare against actual cash received only — card/GCash sales settle
     // electronically and were never in the physical drawer to count.
-    const _orders = data||[];
+    const _orders = (data||[]).concat(_queuedOrders);
     const total = _orders.filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
     _remitOnlineSales = _orders.filter(o => (o.payment_method || 'Cash') !== 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
     document.getElementById('remitLogPOS').textContent = (CUR||'₱') + total.toFixed(2);
