@@ -2354,7 +2354,7 @@ async function _buildLogoRaster() {
     const img = new Image();
     img.src = 'data:image/png;base64,' + STORE.logo_b64;
     await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    const maxW = 300, maxH = 150;
+    const maxW = 140, maxH = 70; // kept small so even cheap/slow Bluetooth or USB printers print it quickly and reliably
     const ratio = Math.min(maxW / (img.naturalWidth || 1), maxH / (img.naturalHeight || 1), 1);
     let w = Math.max(8, Math.round((img.naturalWidth || 1) * ratio));
     const h = Math.max(1, Math.round((img.naturalHeight || 1) * ratio));

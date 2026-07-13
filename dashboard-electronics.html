@@ -68,6 +68,13 @@ th{background:var(--s2);color:var(--muted);padding:10px 14px;text-align:left;fon
 td{padding:10px 14px;border-bottom:1px solid #111122;color:#ccc}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--s2)}
+/* Spreadsheet-style grid (vertical + horizontal lines) for dense log tables
+   like the Staff Logs modal, where lots of similar rows/columns need to be
+   easy to trace across at a glance. */
+.grid-table th, .grid-table td{border-right:1px solid #111122}
+.grid-table th:last-child, .grid-table td:last-child{border-right:none}
+.grid-table th{border-bottom:1px solid var(--border)}
+.grid-table td{border-bottom:1px solid #1a1a2e}
 .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
 .bg-cash{background:#0a2a1a;color:#10b981}
 .bg-card{background:#0a0a2a;color:#818cf8}
@@ -159,8 +166,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="sb-item" id="navInventory" onclick="nav('inventory')" title="Track stock levels for your raw materials and supplies, and add new items."><span class="ico">&#128230;</span> <span id="navInventoryLbl">Inventory</span> <span id="lowStockBadge" style="display:none;margin-left:auto;font-size:10px;background:#f59e0b;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('categories')" title="Organize your products and inventory items into categories."><span class="ico">&#128194;</span> Categories</div>
     <div class="sb-item" id="navProducts"  onclick="nav('products')" title="Add, edit, or remove the items you sell &mdash; set price, photo, and category."><span class="ico">&#127991;</span> <span id="navProductsLbl">Products</span></div>
-    <div class="sb-item" onclick="nav('staff')" title="Add your staff here &mdash; create their accounts, set name, password, and control access."><span class="ico">&#128101;</span> Staff</div>
-    <div class="sb-item" onclick="nav('activitylog')" title="See a log of staff actions and submitted receipts &mdash; view, accept, or mark as invalid."><span class="ico">&#128203;</span> Activity Log</div>
+    <div class="sb-item" onclick="nav('staff')" title="Add your staff here &mdash; create their accounts, set name, password, and control access. Also includes their activity log &mdash; actions and submitted receipts."><span class="ico">&#128101;</span> Staff</div>
     <div class="sb-item" onclick="nav('messages')" id="sbMessages" title="Send and receive messages with your staff."><span class="ico">&#128172;</span> Messages <span id="msgUnreadBadge" style="display:none;margin-left:auto;font-size:10px;background:#ef4444;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('salesreport')" title="View your sales totals, best sellers, and reports by day or date range."><span class="ico">&#128202;</span> Sales Report</div>
     <div class="sb-item" onclick="nav('checklist')" title="Set tasks your staff must complete when opening or closing the store."><span class="ico">&#9989;</span> Daily Checklist</div>
@@ -220,7 +226,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <strong style="color:#f59e0b">&#9888; Low Stock / Out of Stock</strong> &#8212; <span id="lowStockList" style="color:#ccc"></span> <span style="color:#f59e0b;text-decoration:underline">View Inventory &#8594;</span>
       </div>
       <!-- Late remittance alert (already remitted, but took too long) -->
-      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('activitylog')">
+      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#a78bfa">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:#ccc"></span> <span style="color:#a78bfa;text-decoration:underline">View Activity Log &#8594;</span>
       </div>
       <!-- Pending cash advance requests -->
@@ -464,9 +470,8 @@ input:checked + .slider:before{transform:translateX(18px)}
       </div>
     </div>
 
-    <!-- ACTIVITY LOG -->
-    <div class="section" id="sec-activitylog">
-      <div class="tbl-wrap">
+      <!-- Activity Log — folded into Staff so it's all in one place -->
+      <div class="tbl-wrap" style="margin-top:16px">
         <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
           <h3>&#128203; Staff Activity Log</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -492,6 +497,20 @@ input:checked + .slider:before{transform:translateX(18px)}
         <table>
           <thead><tr><th>Time</th><th>Staff</th><th>Role</th><th>Action</th><th>Item</th><th>Details</th><th>Receipt</th></tr></thead>
           <tbody id="activityTbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Unconfirmed Remittances — cashiers already submitted these, but the
+           manager hasn't clicked "Receive" on them yet, so the cash isn't
+           reflected in the manager's COH total until they do. -->
+      <div class="tbl-wrap" style="margin-top:16px" id="unconfirmedRemitCard">
+        <div class="tbl-head">
+          <h3>&#9203; Unconfirmed Remittances</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadUnconfirmedRemits()">&#8635; Refresh</button>
+        </div>
+        <table class="grid-table">
+          <thead><tr><th>Cashier</th><th>Date</th><th>POS Sales</th><th>Cash on Hand</th><th>Difference</th><th>Submitted</th></tr></thead>
+          <tbody id="unconfirmedRemitTbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1231,9 +1250,14 @@ input:checked + .slider:before{transform:translateX(18px)}
 
 <!-- STAFF LOGS MODAL -->
 <div class="modal" id="staffLogsModal">
-  <div class="mbox" style="width:min(520px,100%)">
+  <div class="mbox" style="width:min(720px,100%)">
     <h3 id="staffLogsTitle">Login History</h3>
-    <div id="staffLogsBody" style="max-height:360px;overflow-y:auto">
+    <div style="display:flex;gap:6px;margin:10px 0">
+      <button class="btn btn-sm" id="slfDay"   onclick="setStaffLogsFilter('day')">Day</button>
+      <button class="btn btn-sm" id="slfWeek"  onclick="setStaffLogsFilter('week')">Week</button>
+      <button class="btn btn-sm" id="slfMonth" onclick="setStaffLogsFilter('month')">Month</button>
+    </div>
+    <div id="staffLogsBody" style="max-height:420px;overflow-y:auto">
       <div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>
     </div>
     <div class="m-actions">
@@ -1671,8 +1695,7 @@ function nav(id) {
   if (id === 'orders')     loadOrders();
   if (id === 'salesreport') loadReport('daily');
   if (id === 'inventory')  loadInventory();
-  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); }
-  if (id === 'activitylog')  loadActivityLog();
+  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
   if (id === 'categories') { loadDbCategories().then(() => loadProducts().then(loadCategories)); switchCatTab(catTab); }
   if (id === 'checklist')  loadChecklist();
@@ -2075,6 +2098,40 @@ _resetIdleTimer();
 // only counts as "remitted" here if their latest remittance today happened
 // AFTER their latest login today. An old remittance from an earlier login
 // doesn't cover a session that started after it.
+async function loadUnconfirmedRemits() {
+  const tbody = document.getElementById('unconfirmedRemitTbody');
+  if (!tbody || !STORE?.id) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>';
+  const { data, error } = await _sb.from('cash_remittances')
+    .select('cashier_name,shift_date,pos_sales,cash_on_hand,difference,created_at')
+    .eq('store_id', STORE.id).eq('status', 'pending')
+    .order('created_at', { ascending: true }); // oldest/longest-waiting first
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">Error: ${error.message}</td></tr>`; return; }
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Nothing pending — the manager is all caught up. ✓</td></tr>';
+    return;
+  }
+  const ago = iso => {
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 60) return mins + 'm ago';
+    if (mins < 1440) return Math.round(mins/60) + 'h ago';
+    return Math.round(mins/1440) + 'd ago';
+  };
+  tbody.innerHTML = data.map(r => {
+    const diff = parseFloat(r.difference) || 0;
+    const diffColor = diff > 0 ? '#f97316' : diff < 0 ? '#ef4444' : '#00b4d8';
+    const dateStr = new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+    const overdue = (Date.now() - new Date(r.created_at).getTime()) > 24*60*60*1000;
+    return `<tr>
+      <td style="font-weight:600">${r.cashier_name}</td>
+      <td>${dateStr}</td>
+      <td>${CUR||'₱'}${parseFloat(r.pos_sales||0).toFixed(2)}</td>
+      <td>${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}</td>
+      <td style="color:${diffColor};font-weight:600">${diff>=0?'+':''}${CUR||'₱'}${Math.abs(diff).toFixed(2)}</td>
+      <td style="${overdue?'color:#ef4444;font-weight:600':'color:var(--muted)'}">${ago(r.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
 async function checkUnremittedCash() {
   const ratioEl = document.getElementById('remitStatusRatio');
   const pendingEl = document.getElementById('remitStatusPending');
@@ -3774,6 +3831,14 @@ function closeStaffLogsModal() {
   closeModal('staffLogsModal');
   clearInterval(_staffLogsPoll); _staffLogsPoll = null;
 }
+let _staffLogsRange = 'week';
+let _staffLogsCur = null;
+function setStaffLogsFilter(range) {
+  _staffLogsRange = range;
+  ['Day','Week','Month'].forEach(r => document.getElementById('slf'+r)?.classList.remove('btn-accent'));
+  document.getElementById('slf' + range[0].toUpperCase() + range.slice(1))?.classList.add('btn-accent');
+  if (_staffLogsCur) renderStaffLogsBody(_staffLogsCur.staffId, _staffLogsCur.displayName, _staffLogsCur.role);
+}
 async function viewStaffLogs(staffId, username) {
   document.getElementById('staffLogsTitle').textContent = username + ' — Login History';
   document.getElementById('staffLogsBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
@@ -3781,96 +3846,157 @@ async function viewStaffLogs(staffId, username) {
   const staffRec = (allStaff||[]).find(s => s.id === staffId);
   const displayName = staffRec ? (staffRec.full_name || staffRec.username) : username;
   const role = staffRec ? staffRec.role : 'cashier';
-  await renderStaffLogsBody(staffId, displayName, role);
+  _staffLogsCur = { staffId, displayName, role };
+  setStaffLogsFilter(_staffLogsRange); // also (re)renders
   clearInterval(_staffLogsPoll);
   if (role !== 'manager') _staffLogsPoll = setInterval(() => renderStaffLogsBody(staffId, displayName, role), 20000);
 }
+// One unified table, one row per CALENDAR DAY (not per login session) —
+// days with no login still get a row so an absence is visible at a glance
+// instead of just disappearing from the list. Range comes from the
+// Day/Week/Month buttons above the table.
 async function renderStaffLogsBody(staffId, displayName, role) {
   const body = document.getElementById('staffLogsBody');
-  const { data: logins, error } = await _sb.from('staff_logs')
-    .select('login_at').eq('staff_id', staffId).order('login_at', { ascending: true }).limit(100);
-  if (error || !logins?.length) {
-    body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">No login records found.</div>';
-    return;
-  }
   const isCashier = role !== 'manager';
-  let logoutTimes = [], remits = [];
-  if (STORE?.id) {
-    const { data: logoutData } = await _sb.from('activity_logs')
-      .select('created_at').eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'LOGOUT')
-      .order('created_at', { ascending: true }).limit(100);
-    logoutTimes = (logoutData||[]).map(l => l.created_at);
-    if (isCashier) {
-      const { data: remitData } = await _sb.from('cash_remittances')
-        .select('created_at,cash_on_hand').eq('store_id', STORE.id).eq('cashier_name', displayName)
-        .order('created_at', { ascending: true }).limit(200);
-      remits = remitData || [];
-    }
-  }
-  const loginTimes = logins.map(l => l.login_at);
-  // Group logins into shifts: a NEW shift only starts after an ACTUAL
-  // logout. Re-logging in without one (e.g. reopened after a crash/brownout,
-  // closed the window instead of clicking Logout) continues the SAME shift
-  // — same running total — instead of fragmenting into separate rows, since
-  // it's the same cashier still holding the same cash drawer.
-  const shiftsAsc = [];
-  let curStart = null;
-  for (let i = 0; i < loginTimes.length; i++) {
-    const loginAt = loginTimes[i];
-    if (curStart === null) curStart = loginAt;
-    const nextLoginAt = loginTimes[i+1] || null;
-    const logoutAt = logoutTimes.find(t => t > loginAt && (!nextLoginAt || t < nextLoginAt)) || null;
-    if (logoutAt) {
-      shiftsAsc.push({ loginAt: curStart, logoutAt, isOpen: false });
-      curStart = null;
-    } else if (!nextLoginAt) {
-      shiftsAsc.push({ loginAt: curStart, logoutAt: null, isOpen: true });
-      curStart = null;
-    }
-    // else: no logout yet, but another login follows — keep merging
-  }
-  const shifts = shiftsAsc.slice().reverse(); // newest first
+  if (!STORE?.id) { body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Store not loaded.</div>'; return; }
 
-  // Live running total for the open shift — sum of orders since the shift's
-  // (possibly merged) start, so the owner sees the current cash drawer
-  // total without listing each sale.
-  if (isCashier && STORE?.id) {
-    await Promise.all(shifts.filter(s => !s.logoutAt).map(async s => {
-      const { data: ord } = await _sb.from('orders').select('total,payment_method')
-        .eq('store_id', STORE.id).eq('cashier_name', displayName)
-        .gte('timestamp', s.loginAt);
-      // Cash drawer should only reflect actual cash received — card/GCash
-      // sales settle electronically and never touch the physical drawer.
-      s._total = (ord||[]).filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((sum,o) => sum + (parseFloat(o.total)||0), 0);
-    }));
+  const now = new Date();
+  let from;
+  if (_staffLogsRange === 'day')        { from = new Date(now); from.setHours(0,0,0,0); }
+  else if (_staffLogsRange === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+  else                                  { from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0,0,0,0); }
+  const fromISO = from.toISOString();
+  const actionWhitelist = isCashier
+    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
+    : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
+
+  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }] = await Promise.all([
+    _sb.from('staff_logs').select('login_at').eq('staff_id', staffId).gte('login_at', fromISO).order('login_at', { ascending: true }),
+    _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'LOGOUT').gte('created_at', fromISO).order('created_at', { ascending: true }),
+    isCashier ? _sb.from('cash_remittances').select('created_at,cash_on_hand').eq('store_id', STORE.id).eq('cashier_name', displayName).gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
+    _sb.from('activity_logs').select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('actor_name', displayName).in('action', actionWhitelist)
+      .gte('created_at', fromISO).order('created_at', { ascending: true }),
+    // Cash advances are logged against the RECIPIENT as target_name, not
+    // actor_name (the owner/manager is who actually performed the action) —
+    // so a staff member's own log needs a separate lookup to show up as the
+    // one who got the advance.
+    _sb.from('activity_logs').select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('target_name', displayName).in('action', ['CASH_ADVANCE_APPROVED', 'CASH_ADVANCE_GIVEN'])
+      .gte('created_at', fromISO).order('created_at', { ascending: true }),
+  ]);
+  const remits = remitRes.data || [];
+  const loginTimes = (logins || []).map(l => l.login_at);
+  const logoutTimes = (logoutData || []).map(l => l.created_at);
+  const actLogs = (actData || []).concat(caData || []);
+
+  // Live running total for an open (still logged-in, not yet logged out)
+  // shift — sum of today's Cash orders since that login, so the owner sees
+  // the current drawer total without listing each sale.
+  let liveTotal = null;
+  const lastLogin = loginTimes[loginTimes.length - 1];
+  const hasOpenShift = lastLogin && !logoutTimes.some(t => t > lastLogin);
+  if (isCashier && hasOpenShift) {
+    const { data: ord } = await _sb.from('orders').select('total,payment_method')
+      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', lastLogin);
+    liveTotal = (ord || []).filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+  }
+
+  const dayKey = iso => new Date(iso).toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  const loginsByDay = {}, logoutsByDay = {}, actionsByDay = {};
+  loginTimes.forEach(t => { const k = dayKey(t); (loginsByDay[k] ||= []).push(t); });
+  logoutTimes.forEach(t => { const k = dayKey(t); (logoutsByDay[k] ||= []).push(t); });
+  actLogs.forEach(l => { const k = dayKey(l.created_at); (actionsByDay[k] ||= []).push(l); });
+
+  const days = [];
+  { let d = new Date(from); d.setHours(0,0,0,0); const end = new Date(now); end.setHours(0,0,0,0);
+    while (d <= end) { days.push(new Date(d)); d.setDate(d.getDate() + 1); } }
+  days.reverse(); // newest first
+  const todayKey = now.toLocaleDateString('en-CA');
+
+  const rowsHtml = days.map(d => {
+    const k = d.toLocaleDateString('en-CA');
+    const dateLabel = d.toLocaleDateString('en-PH', { month:'short', day:'numeric', weekday:'short' });
+    const dayLogins  = (loginsByDay[k]  || []).slice().sort();
+    const dayLogouts = (logoutsByDay[k] || []).slice().sort();
+    const dayActions = actionsByDay[k] || [];
+
+    if (!dayLogins.length && !dayActions.length) {
+      return `<tr style="opacity:.45">
+        <td style="white-space:nowrap">${dateLabel}</td>
+        <td colspan="2" style="text-align:center;color:var(--dim)">Absent</td>
+        ${isCashier?'<td>—</td>':''}<td>—</td><td>—</td>
+      </tr>`;
+    }
+
+    // The MOST RECENT login of the day, not the first — a cashier can log
+    // out (e.g. lunch break, or after remitting) and log back in the same
+    // day. Anchoring on the latest login (and whatever logout comes after
+    // IT, if any) keeps a currently-open, not-yet-remitted shift visible
+    // instead of getting hidden behind an earlier, already-remitted one.
+    const loginAt  = dayLogins.length ? dayLogins[dayLogins.length - 1] : null;
+    const logoutAt = loginAt ? (dayLogouts.find(t => t > loginAt) || null) : (dayLogouts.length ? dayLogouts[dayLogouts.length - 1] : null);
+    const isOpenToday = k === todayKey && hasOpenShift && loginAt === lastLogin;
+    const loginStr  = loginAt  ? new Date(loginAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const logoutStr = logoutAt ? new Date(logoutAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
+                     : isOpenToday ? '<span style="color:#22c55e;font-weight:600">&#128994; Active</span>' : '—';
+
+    let cashCell = '—';
+    if (isCashier) {
+      if (logoutAt) {
+        const r = remits.filter(r => new Date(r.created_at).getTime() <= new Date(logoutAt).getTime() + 5000)
+          .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+        cashCell = r ? `${CUR||'₱'}${parseFloat(r.cash_on_hand).toFixed(2)} <span style="color:var(--muted);font-size:11px">remitted</span>` : '<span style="color:var(--dim)">no remit</span>';
+      } else if (isOpenToday && liveTotal != null) {
+        cashCell = `<span style="color:#22c55e;font-weight:600">${CUR||'₱'}${liveTotal.toFixed(2)}</span> <span style="color:var(--muted);font-size:11px">live</span>`;
+      }
+    }
+
+    const actionsHtml = dayActions.length
+      ? dayActions.map(l => `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span></div>`).join('')
+      : '<span style="color:var(--dim)">—</span>';
+
+    const receiptBtns = dayActions.map(l => {
+      let receiptB64 = null;
+      try { if (l.details) receiptB64 = JSON.parse(l.details).receipt_b64 || null; } catch(_) {}
+      if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
+      if (receiptB64) return `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
+      if (l.action === 'RECEIVED_COH') return `<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
+      return '';
+    }).filter(Boolean).join('') || '<span style="color:var(--dim)">—</span>';
+
+    return `<tr>
+      <td style="white-space:nowrap">${dateLabel}</td>
+      <td>${loginStr}</td>
+      <td>${logoutStr}</td>
+      ${isCashier?`<td>${cashCell}</td>`:''}
+      <td>${actionsHtml}</td>
+      <td>${receiptBtns}</td>
+    </tr>`;
+  }).join('');
+
+  // Which of THIS cashier's remittances is the manager still sitting on?
+  // Not scoped to the Day/Week/Month filter above — an old unconfirmed one
+  // shouldn't quietly drop out of view just because it's outside the range.
+  let unconfirmedHtml = '';
+  if (isCashier) {
+    const { data: pendingRemits } = await _sb.from('cash_remittances')
+      .select('shift_date,created_at').eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (pendingRemits && pendingRemits.length) {
+      unconfirmedHtml = `
+        <div style="margin-top:16px;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+          ${pendingRemits.map(r => `<span class="badge" style="background:#2e1a0d;color:#f59e0b">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
+        </div>`;
+    }
   }
 
   body.innerHTML = `
-    <table style="width:100%">
-      <thead><tr><th>#</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}</tr></thead>
-      <tbody>${shifts.map((s,i) => {
-        const loginStr = new Date(s.loginAt).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'});
-        const logoutStr = s.logoutAt
-          ? new Date(s.logoutAt).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'})
-          : '<span style="color:#22c55e;font-weight:600">&#128994; Active</span>';
-        let cashCell = '—';
-        if (isCashier) {
-          if (s.logoutAt) {
-            const r = remits.filter(r => new Date(r.created_at).getTime() >= new Date(s.loginAt).getTime() && new Date(r.created_at).getTime() <= new Date(s.logoutAt).getTime() + 5000)
-              .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
-            cashCell = r ? `${CUR||'₱'}${parseFloat(r.cash_on_hand).toFixed(2)} <span style="color:var(--muted);font-size:11px">remitted</span>` : '<span style="color:var(--dim)">no remit</span>';
-          } else {
-            cashCell = s._total != null ? `<span style="color:#22c55e;font-weight:600">${CUR||'₱'}${s._total.toFixed(2)}</span> <span style="color:var(--muted);font-size:11px">live</span>` : '—';
-          }
-        }
-        return `<tr>
-        <td style="color:var(--dim);font-size:12px">${i+1}</td>
-        <td>${loginStr}</td>
-        <td>${logoutStr}</td>
-        ${isCashier?`<td>${cashCell}</td>`:''}
-      </tr>`;
-      }).join('')}</tbody>
-    </table>`;
+    <table class="grid-table" style="width:100%">
+      <thead><tr><th>Date</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}<th>Actions</th><th>Receipt</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>${unconfirmedHtml}`;
 }
 function openStaffModal(s) {
   if (!IS_PRO && !s && allStaff.length >= FREE_STAFF_LIMIT) { showUpgradeModal('staff', allStaff.length, FREE_STAFF_LIMIT); return; }
@@ -4026,6 +4152,25 @@ async function loadActivityLog() {
   }
   renderActivityLog();
 }
+const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given' };
+const ACTION_COLOR = {
+  ADD_STOCK:   'background:#0d2e1f;color:#10b981',
+  EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
+  ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
+  SALE:        'background:#0d2e2a;color:#14b8a6',
+  REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
+  RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
+  MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
+  OWNER_SEND:   'background:#0a2a10;color:#39ff14',
+  SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
+  EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
+  LOGIN:        'background:#0a2a2a;color:#06b6d4',
+  LOGOUT:       'background:#2a0a0a;color:#f87171',
+  ORDER_VOIDED:   'background:#2e0d0d;color:#ef4444',
+  ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
+  CASH_ADVANCE_APPROVED: 'background:#0d2e2a;color:#2dd4bf',
+  CASH_ADVANCE_GIVEN:    'background:#0d2e2a;color:#2dd4bf',
+};
 const _receiptCache = {};
 let _mgrRemitConfirm = {};
 function renderActivityLog() {
@@ -4037,21 +4182,8 @@ function renderActivityLog() {
   if (actorF)  rows = rows.filter(l => (l.actor_name || '').trim() === actorF.trim());
   if (actionF) rows = rows.filter(l => actionF === '__others__' ? ['OWNER_SEND','EXPENSE_PAID'].includes(l.action) : l.action === actionF);
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No activity found.</td></tr>'; return; }
-  const actionLabel = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout' };
-  const actionColor = {
-    ADD_STOCK:   'background:#0d2e1f;color:#10b981',
-    EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
-    ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
-    SALE:        'background:#0d2e2a;color:#14b8a6',
-    REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
-    RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
-    MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
-    OWNER_SEND:   'background:#0a2a10;color:#39ff14',
-    SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
-    EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
-    LOGIN:        'background:#0a2a2a;color:#06b6d4',
-    LOGOUT:       'background:#2a0a0a;color:#f87171',
-  };
+  const actionLabel = ACTION_LABEL;
+  const actionColor = ACTION_COLOR;
   tbody.innerHTML = rows.map(l => {
     const dt = new Date(l.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
     let details = '';

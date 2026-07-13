@@ -3872,20 +3872,27 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   const fromISO = from.toISOString();
   const actionWhitelist = isCashier
     ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
-    : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT'];
+    : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
 
-  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }] = await Promise.all([
+  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }] = await Promise.all([
     _sb.from('staff_logs').select('login_at').eq('staff_id', staffId).gte('login_at', fromISO).order('login_at', { ascending: true }),
     _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'LOGOUT').gte('created_at', fromISO).order('created_at', { ascending: true }),
     isCashier ? _sb.from('cash_remittances').select('created_at,cash_on_hand').eq('store_id', STORE.id).eq('cashier_name', displayName).gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
     _sb.from('activity_logs').select('id,action,details,created_at')
       .eq('store_id', STORE.id).eq('actor_name', displayName).in('action', actionWhitelist)
       .gte('created_at', fromISO).order('created_at', { ascending: true }),
+    // Cash advances are logged against the RECIPIENT as target_name, not
+    // actor_name (the owner/manager is who actually performed the action) —
+    // so a staff member's own log needs a separate lookup to show up as the
+    // one who got the advance.
+    _sb.from('activity_logs').select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('target_name', displayName).in('action', ['CASH_ADVANCE_APPROVED', 'CASH_ADVANCE_GIVEN'])
+      .gte('created_at', fromISO).order('created_at', { ascending: true }),
   ]);
   const remits = remitRes.data || [];
   const loginTimes = (logins || []).map(l => l.login_at);
   const logoutTimes = (logoutData || []).map(l => l.created_at);
-  const actLogs = actData || [];
+  const actLogs = (actData || []).concat(caData || []);
 
   // Live running total for an open (still logged-in, not yet logged out)
   // shift — sum of today's Cash orders since that login, so the owner sees
@@ -4149,7 +4156,7 @@ async function loadActivityLog() {
   }
   renderActivityLog();
 }
-const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded' };
+const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given' };
 const ACTION_COLOR = {
   ADD_STOCK:   'background:#0d2e1f;color:#10b981',
   EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
@@ -4165,6 +4172,8 @@ const ACTION_COLOR = {
   LOGOUT:       'background:#2a0a0a;color:#f87171',
   ORDER_VOIDED:   'background:#2e0d0d;color:#ef4444',
   ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
+  CASH_ADVANCE_APPROVED: 'background:#0d2e2a;color:#2dd4bf',
+  CASH_ADVANCE_GIVEN:    'background:#0d2e2a;color:#2dd4bf',
 };
 const _receiptCache = {};
 let _mgrRemitConfirm = {};
