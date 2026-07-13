@@ -3874,8 +3874,13 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       </tr>`;
     }
 
-    const loginAt  = dayLogins[0] || null;
-    const logoutAt = dayLogouts.length ? dayLogouts[dayLogouts.length - 1] : null;
+    // The MOST RECENT login of the day, not the first — a cashier can log
+    // out (e.g. lunch break, or after remitting) and log back in the same
+    // day. Anchoring on the latest login (and whatever logout comes after
+    // IT, if any) keeps a currently-open, not-yet-remitted shift visible
+    // instead of getting hidden behind an earlier, already-remitted one.
+    const loginAt  = dayLogins.length ? dayLogins[dayLogins.length - 1] : null;
+    const logoutAt = loginAt ? (dayLogouts.find(t => t > loginAt) || null) : (dayLogouts.length ? dayLogouts[dayLogouts.length - 1] : null);
     const isOpenToday = k === todayKey && hasOpenShift && loginAt === lastLogin;
     const loginStr  = loginAt  ? new Date(loginAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
     const logoutStr = logoutAt ? new Date(logoutAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
