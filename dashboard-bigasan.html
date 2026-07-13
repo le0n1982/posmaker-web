@@ -3150,7 +3150,7 @@ function renderReport(orders, from, to) {
             <td style="padding:5px 10px;color:var(--dim);font-size:11px">#${o.id}</td>
             <td style="padding:5px 10px;white-space:nowrap;font-size:12px">${fmtTime(o.timestamp)}</td>
             <td style="padding:5px 10px;font-weight:500;font-size:12px">${o.cashier_name||'—'}</td>
-            <td style="padding:5px 10px;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${(o._items||[]).join(', ')}">${(o._items||[]).slice(0,3).join(', ')||'—'}${o._items&&o._items.length>3?' <span style=\'color:var(--purple-text);font-size:10px;font-weight:700\'>+${o._items.length-3}</span>':''}</td>
+            <td style="padding:5px 10px;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--teal-text)" title="${(o._items||[]).join(', ')}">${(o._items||[]).slice(0,3).join(', ')||'—'}${o._items&&o._items.length>3?' <span style=\'color:var(--purple-text);font-size:10px;font-weight:700\'>+${o._items.length-3}</span>':''}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;font-weight:700;color:var(--accent)">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
@@ -4992,7 +4992,7 @@ function renderOrders(orders) {
       <td style="font-weight:600">#${o.id}</td>
       <td>${dt}</td>
       <td>${o.cashier_name || ''}</td>
-      <td style="color:var(--muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(o._items||[]).join(', ')}">${itms}</td>
+      <td style="color:var(--teal-text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(o._items||[]).join(', ')}">${itms}</td>
       <td>${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
       <td style="color:var(--muted)">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
       <td style="color:${disc>0?'#f59e0b':'var(--muted)'}">${disc>0?disc+'%':'&#8212;'}</td>
