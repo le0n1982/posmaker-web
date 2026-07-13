@@ -3972,11 +3972,28 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     </tr>`;
   }).join('');
 
+  // Which of THIS cashier's remittances is the manager still sitting on?
+  // Not scoped to the Day/Week/Month filter above — an old unconfirmed one
+  // shouldn't quietly drop out of view just because it's outside the range.
+  let unconfirmedHtml = '';
+  if (isCashier) {
+    const { data: pendingRemits } = await _sb.from('cash_remittances')
+      .select('shift_date,created_at').eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (pendingRemits && pendingRemits.length) {
+      unconfirmedHtml = `
+        <div style="margin-top:16px;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+          ${pendingRemits.map(r => `<span class="badge" style="background:#2e1a0d;color:#f59e0b">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
+        </div>`;
+    }
+  }
+
   body.innerHTML = `
     <table class="grid-table" style="width:100%">
       <thead><tr><th>Date</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}<th>Actions</th><th>Receipt</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
-    </table>`;
+    </table>${unconfirmedHtml}`;
 }
 function openStaffModal(s) {
   if (!IS_PRO && !s && allStaff.length >= FREE_STAFF_LIMIT) { showUpgradeModal('staff', allStaff.length, FREE_STAFF_LIMIT); return; }
