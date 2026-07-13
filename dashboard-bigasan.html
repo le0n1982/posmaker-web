@@ -43,6 +43,8 @@
   --teal-bg:#e6faf6;--teal-text:#0a7d6e;
   --money-bg:#eafbea;--money-text:#1a7a1a;
   --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+  --card-shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.06);
+  --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
 }}
 :root[data-theme="dark"]{
   --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
@@ -67,11 +69,13 @@
   --teal-bg:#e6faf6;--teal-text:#0a7d6e;
   --money-bg:#eafbea;--money-text:#1a7a1a;
   --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+  --card-shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.06);
+  --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
 }
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
+body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
 
 /* SIDEBAR */
-.sidebar{width:220px;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
+.sidebar{width:220px;background:var(--sidebar-bg,var(--s1));border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
 .sb-logo{padding:20px 18px;font-size:18px;font-weight:800;border-bottom:1px solid var(--border)}
 .sb-logo span{color:var(--accent)}
 .sb-store{padding:12px 18px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -107,13 +111,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 
 /* STAT CARDS */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-.stat-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px}
+.stat-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--card-shadow,none)}
 .sc-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:8px}
 .sc-val{font-size:26px;font-weight:800;color:var(--accent)}
 .sc-sub{font-size:12px;color:var(--dim);margin-top:4px}
 
 /* TABLE */
-.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
 .tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .tbl-head h3{font-size:14px;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -171,7 +175,7 @@ tr:hover td{background:var(--s2)}
 
 /* CASHIER LINK BOX */
 .link-box{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;font-family:monospace;font-size:13px;color:var(--accent);word-break:break-all;margin:12px 0}
-.info-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.info-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:var(--card-shadow,none)}
 .info-card h3{font-size:15px;font-weight:700;margin-bottom:8px}
 .info-card p{font-size:13px;color:var(--muted);line-height:1.65}
 
