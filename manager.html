@@ -396,6 +396,16 @@ button{cursor:pointer}
     </div>
   </div>
 
+  <div class="modal" id="vrReceiptModal">
+    <div class="mbox" style="width:min(380px,100%)">
+      <div id="vrReceiptBody" style="background:var(--bg);border-radius:8px;padding:14px"></div>
+      <div class="m-actions">
+        <button class="btn btn-ghost" onclick="closeModal('vrReceiptModal')">Close</button>
+        <button class="btn btn-accent" onclick="printVoidRefundReceipt()">&#128424; Print</button>
+      </div>
+    </div>
+  </div>
+
   <!-- HELPERS -->
   <div class="section" id="sec-helpers">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1853,6 +1863,44 @@ async function approveVoidRefund(id) {
 
   if (r.type === 'refund') await restoreStockForOrder(r.order_id);
 
+  // Cash-on-hand deduction: only cash sales ever hit a physical drawer, so
+  // GCash/card originals don't move anyone's COH — the payment network
+  // reverses those on its own.
+  const orderTotal = parseFloat(orig.total) || 0;
+  if (orig.payment_method === 'Cash' && orderTotal > 0) {
+    // Where is this order's cash right now? If the cashier's shift that
+    // included it has already been received by the manager (status is
+    // over/short/balanced, not still 'pending'), the money is in the
+    // manager's hands — deduct it there. Otherwise the cashier is still
+    // holding it, uncounted — deduct from what they'll eventually hand over.
+    const { data: coveringRemit } = await _sb.from('cash_remittances')
+      .select('status')
+      .eq('store_id', MGR.store_id).eq('cashier_name', orig.cashier_name)
+      .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,payment_confirmed,refund)')
+      .gt('created_at', orig.timestamp)
+      .order('created_at', { ascending: true }).limit(1).maybeSingle();
+
+    const today = new Date().toISOString().slice(0, 10);
+    const desc = `${r.type === 'void' ? 'Void' : 'Refund'}: Order #${r.order_id}`;
+    if (coveringRemit && coveringRemit.status !== 'pending') {
+      // Already remitted — comes out of the manager's own cash.
+      await _sb.from('cash_remittances').insert({
+        store_id: MGR.store_id, cashier_name: MGR.name, shift_date: today,
+        pos_sales: 0, cash_on_hand: -orderTotal, difference: -orderTotal,
+        status: 'refund', description: desc
+      });
+    } else {
+      // Not remitted yet (or no remittance found at all) — still with the
+      // cashier, so reduce what they owe instead of the manager's cash.
+      await _sb.from('cash_remittances').insert({
+        store_id: MGR.store_id, cashier_name: orig.cashier_name, shift_date: today,
+        pos_sales: 0, cash_on_hand: -orderTotal, difference: -orderTotal,
+        status: 'pending', description: desc
+      });
+    }
+    loadCashSummary();
+  }
+
   await _sb.from('void_refund_requests').update({
     status: 'approved', decided_by: MGR.name, decided_at: new Date().toISOString()
   }).eq('id', id);
@@ -1861,6 +1909,47 @@ async function approveVoidRefund(id) {
   showToast(`${r.type === 'void' ? 'Void' : 'Refund'} approved.`);
   loadVoidRefund();
   checkPendingVoidRefund();
+  showVoidRefundReceipt(r, orig);
+}
+
+// Printable record of what was voided/refunded — the manager can print or
+// screenshot this to attach to the physical returned item.
+async function showVoidRefundReceipt(r, orig) {
+  const { data: items } = await _sb.from('order_items').select('name,price,qty').eq('order_id', r.order_id);
+  const CUR2 = orig.currency || '₱';
+  const rows = (items || []).map(i => `<tr>
+      <td style="padding:4px 0">${i.name}</td>
+      <td style="padding:4px 0;text-align:center">${i.qty}</td>
+      <td style="padding:4px 0;text-align:right">${CUR2}${(parseFloat(i.price)||0).toFixed(2)}</td>
+      <td style="padding:4px 0;text-align:right">${CUR2}${((parseFloat(i.price)||0)*(i.qty||1)).toFixed(2)}</td>
+    </tr>`).join('');
+  document.getElementById('vrReceiptBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:10px">
+      <div style="font-weight:800;font-size:16px">${r.type === 'void' ? 'VOID' : 'REFUND'} RECEIPT</div>
+      <div style="font-size:12px;color:var(--muted)">Order #${r.order_id} &middot; ${new Date().toLocaleString('en-PH')}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:4px 0">Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" style="padding:8px 0;color:var(--muted)">No item detail on this order.</td></tr>'}</tbody>
+    </table>
+    <div style="border-top:1px solid var(--border);padding-top:8px;font-size:13px">
+      <div style="display:flex;justify-content:space-between"><span>Cashier</span><strong>${orig.cashier_name || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Payment method</span><strong>${orig.payment_method || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Reason</span><strong>${r.reason || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Approved by</span><strong>${MGR.name}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:16px;margin-top:6px"><span>TOTAL ${r.type === 'void' ? 'VOIDED' : 'REFUNDED'}</span><strong>${CUR2}${(parseFloat(orig.total)||0).toFixed(2)}</strong></div>
+    </div>`;
+  document.getElementById('vrReceiptModal').classList.add('show');
+}
+function printVoidRefundReceipt() {
+  const html = document.getElementById('vrReceiptBody').innerHTML;
+  const w = window.open('', '_blank', 'width=380,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
+    <style>body{font-family:'Courier New',monospace;padding:16px;color:#000}</style>
+    </head><body>${html}<script>window.onload=function(){window.print();};<\/script></body></html>`);
+  w.document.close();
 }
 
 async function declineVoidRefund(id) {
@@ -2002,7 +2091,7 @@ async function loadCashSummary() {
     .order('created_at', { ascending: false });
 
   const rows = data || [];
-  const adjStatuses = ['purchase','deposit','coh_to_staff'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','refund'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
@@ -2041,7 +2130,7 @@ async function loadCashSummary() {
           <span style="font-weight:600;color:#10b981">+&#8369;${cash.toFixed(2)}</span>
         </div>`;
       }).join('') + (adjTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px solid var(--border);margin-top:4px">
-          <span style="color:var(--muted)">Adjustments (stock/deposit)</span>
+          <span style="color:var(--muted)">Adjustments (stock/deposit/refunds)</span>
           <span style="font-weight:600;color:${adjTotal>=0?'#10b981':'#ef4444'}">${adjTotal>=0?'+':''}&#8369;${adjTotal.toFixed(2)}</span>
         </div>` : '') + (mgrRemitTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
           <span style="color:var(--muted)">Previously deposited</span>
