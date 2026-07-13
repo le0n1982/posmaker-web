@@ -498,6 +498,20 @@ input:checked + .slider:before{transform:translateX(18px)}
           <tbody id="activityTbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
       </div>
+
+      <!-- Unconfirmed Remittances — cashiers already submitted these, but the
+           manager hasn't clicked "Receive" on them yet, so the cash isn't
+           reflected in the manager's COH total until they do. -->
+      <div class="tbl-wrap" style="margin-top:16px" id="unconfirmedRemitCard">
+        <div class="tbl-head">
+          <h3>&#9203; Unconfirmed Remittances</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadUnconfirmedRemits()">&#8635; Refresh</button>
+        </div>
+        <table class="grid-table">
+          <thead><tr><th>Cashier</th><th>Date</th><th>POS Sales</th><th>Cash on Hand</th><th>Difference</th><th>Submitted</th></tr></thead>
+          <tbody id="unconfirmedRemitTbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- MESSAGES -->
@@ -1669,7 +1683,7 @@ function nav(id) {
   if (id === 'orders')     loadOrders();
   if (id === 'salesreport') loadReport('daily');
   if (id === 'inventory')  loadInventory();
-  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); }
+  if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
   if (id === 'categories') { loadDbCategories().then(() => loadProducts().then(loadCategories)); switchCatTab(catTab); }
   if (id === 'checklist')  loadChecklist();
@@ -2070,6 +2084,44 @@ _resetIdleTimer();
 // log in today aren't counted (nothing for them to remit), and this never
 // fires while a shift is still in progress with no remittance due yet —
 // only day-old totals matter here, so nothing alarms an owner mid-shift.
+// Cashiers submit a remittance (status 'pending') the moment they log out
+// with a Cash on Hand count — but that cash isn't "confirmed" until a
+// MANAGER clicks Receive on it. Surfacing the backlog here lets the owner
+// see it directly instead of having to check inside the manager's own view.
+async function loadUnconfirmedRemits() {
+  const tbody = document.getElementById('unconfirmedRemitTbody');
+  if (!tbody || !STORE?.id) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>';
+  const { data, error } = await _sb.from('cash_remittances')
+    .select('cashier_name,shift_date,pos_sales,cash_on_hand,difference,created_at')
+    .eq('store_id', STORE.id).eq('status', 'pending')
+    .order('created_at', { ascending: true }); // oldest/longest-waiting first
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">Error: ${error.message}</td></tr>`; return; }
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Nothing pending — the manager is all caught up. ✓</td></tr>';
+    return;
+  }
+  const ago = iso => {
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 60) return mins + 'm ago';
+    if (mins < 1440) return Math.round(mins/60) + 'h ago';
+    return Math.round(mins/1440) + 'd ago';
+  };
+  tbody.innerHTML = data.map(r => {
+    const diff = parseFloat(r.difference) || 0;
+    const diffColor = diff > 0 ? '#f97316' : diff < 0 ? '#ef4444' : '#00b4d8';
+    const dateStr = new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+    const overdue = (Date.now() - new Date(r.created_at).getTime()) > 24*60*60*1000;
+    return `<tr>
+      <td style="font-weight:600">${r.cashier_name}</td>
+      <td>${dateStr}</td>
+      <td>${CUR||'₱'}${parseFloat(r.pos_sales||0).toFixed(2)}</td>
+      <td>${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}</td>
+      <td style="color:${diffColor};font-weight:600">${diff>=0?'+':''}${CUR||'₱'}${Math.abs(diff).toFixed(2)}</td>
+      <td style="${overdue?'color:#ef4444;font-weight:600':'color:var(--muted)'}">${ago(r.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
 async function checkUnremittedCash() {
   const ratioEl = document.getElementById('remitStatusRatio');
   const pendingEl = document.getElementById('remitStatusPending');
