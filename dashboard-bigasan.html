@@ -12,7 +12,7 @@
 // Applied before first paint so a saved preference doesn't flash the wrong
 // theme for a frame. No saved choice yet = leave data-theme unset, so the
 // @media(prefers-color-scheme:light) block below keeps following the OS.
-(function(){ try { var t = localStorage.getItem('pm_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(_) {} })();
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>

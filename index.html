@@ -9,7 +9,7 @@
 // Applied before first paint so a saved preference doesn't flash the wrong
 // theme for a frame. No saved choice yet = leave data-theme unset, so the
 // existing @media(prefers-color-scheme:light) block keeps following the OS.
-(function(){ try { var t = localStorage.getItem('pm_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(_) {} })();
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

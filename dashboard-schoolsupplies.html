@@ -8,17 +8,74 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>POSMaker &#8212; Dashboard</title>
+<script>
+// Applied before first paint so a saved preference doesn't flash the wrong
+// theme for a frame. No saved choice yet = leave data-theme unset, so the
+// @media(prefers-color-scheme:light) block below keeps following the OS.
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <script src="js/store-plan.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
+:root{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --pending-bg:#facc15;--pending-text:#1a1500;
+  --info-bg:#0d1a2e;--info-text:#00b4d8;
+  --purple-bg:#1a0a2a;--purple-text:#a78bfa;
+  --teal-bg:#0d2e2a;--teal-text:#14b8a6;
+  --money-bg:#0a2a10;--money-text:#39ff14;
+  --neutral-bg:#0a1a2a;--neutral-text:#8888aa;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --pending-bg:#fde047;--pending-text:#3f2d00;
+  --info-bg:#e6f7fb;--info-text:#0a7ea3;
+  --purple-bg:#f0edfd;--purple-text:#5b3fc4;
+  --teal-bg:#e6faf6;--teal-text:#0a7d6e;
+  --money-bg:#eafbea;--money-text:#1a7a1a;
+  --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+  --card-shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.06);
+  --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --pending-bg:#facc15;--pending-text:#1a1500;
+  --info-bg:#0d1a2e;--info-text:#00b4d8;
+  --purple-bg:#1a0a2a;--purple-text:#a78bfa;
+  --teal-bg:#0d2e2a;--teal-text:#14b8a6;
+  --money-bg:#0a2a10;--money-text:#39ff14;
+  --neutral-bg:#0a1a2a;--neutral-text:#8888aa;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --pending-bg:#fde047;--pending-text:#3f2d00;
+  --info-bg:#e6f7fb;--info-text:#0a7ea3;
+  --purple-bg:#f0edfd;--purple-text:#5b3fc4;
+  --teal-bg:#e6faf6;--teal-text:#0a7d6e;
+  --money-bg:#eafbea;--money-text:#1a7a1a;
+  --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+  --card-shadow:0 1px 2px rgba(16,24,40,.04),0 2px 8px rgba(16,24,40,.06);
+  --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
+}
+body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
 
 /* SIDEBAR */
-.sidebar{width:220px;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
+.sidebar{width:220px;background:var(--sidebar-bg,var(--s1));border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
 .sb-logo{padding:20px 18px;font-size:18px;font-weight:800;border-bottom:1px solid var(--border)}
 .sb-logo span{color:var(--accent)}
 .sb-store{padding:12px 18px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -30,7 +87,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .sb-bottom{padding:12px 10px;border-top:1px solid var(--border)}
 .sb-user{font-size:12px;color:var(--muted);padding:8px 12px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-logout{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:background .15s}
-.sb-logout:hover{background:var(--s2);color:#ef4444}
+.sb-logout:hover{background:var(--s2);color:var(--danger-text)}
 
 /* MAIN */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
@@ -54,18 +111,18 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 
 /* STAT CARDS */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-.stat-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px}
+.stat-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--card-shadow,none)}
 .sc-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:8px}
 .sc-val{font-size:26px;font-weight:800;color:var(--accent)}
 .sc-sub{font-size:12px;color:var(--dim);margin-top:4px}
 
 /* TABLE */
-.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
 .tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .tbl-head h3{font-size:14px;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{background:var(--s2);color:var(--muted);padding:10px 14px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
-td{padding:10px 14px;border-bottom:1px solid #111122;color:#ccc}
+td{padding:10px 14px;border-bottom:1px solid #111122;color:var(--text)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--s2)}
 /* Spreadsheet-style grid (vertical + horizontal lines) for dense log tables
@@ -76,9 +133,9 @@ tr:hover td{background:var(--s2)}
 .grid-table th{border-bottom:1px solid var(--border)}
 .grid-table td{border-bottom:1px solid #1a1a2e}
 .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
-.bg-cash{background:#0a2a1a;color:#10b981}
-.bg-card{background:#0a0a2a;color:#818cf8}
-.bg-gcash{background:#1a0a2a;color:#a78bfa}
+.bg-cash{background:var(--ok-bg);color:var(--ok-text)}
+.bg-card{background:var(--purple-bg);color:var(--purple-text)}
+.bg-gcash{background:var(--purple-bg);color:var(--purple-text)}
 
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:opacity .15s}
@@ -118,22 +175,22 @@ tr:hover td{background:var(--s2)}
 
 /* CASHIER LINK BOX */
 .link-box{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;font-family:monospace;font-size:13px;color:var(--accent);word-break:break-all;margin:12px 0}
-.info-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.info-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:var(--card-shadow,none)}
 .info-card h3{font-size:15px;font-weight:700;margin-bottom:8px}
 .info-card p{font-size:13px;color:var(--muted);line-height:1.65}
 
 /* TOGGLE */
 .toggle{position:relative;display:inline-block;width:40px;height:22px}
 .toggle input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;inset:0;background:#333;border-radius:22px;transition:.2s}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:22px;transition:.2s}
 .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
 input:checked + .slider{background:var(--accent)}
 input:checked + .slider:before{transform:translateX(18px)}
 
 /* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:#1a3a2a;border:1px solid #10b981;color:#10b981;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ok-bg);border:1px solid #10b981;color:var(--ok-text);padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateY(0)}
-.toast.err{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
+.toast.err{background:var(--danger-bg);border-color:var(--danger-text);color:var(--danger-text)}
 
 /* SPINNER */
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
@@ -193,6 +250,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <span class="topbar-title" id="topbarTitle">Dashboard</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+      <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
       <button id="btnHelp" onclick="document.getElementById('helpModal').classList.add('show')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;transition:all .2s">&#10067; Help</button>
       <button id="btnUpdate" onclick="applyUpdate()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;transition:all .2s">&#8635; Update</button>
     </div>
@@ -206,7 +264,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-size:20px">&#127873;</span>
           <div>
-            <div style="font-size:14px;font-weight:700;color:#c084fc" id="trialDaysText"></div>
+            <div style="font-size:14px;font-weight:700;color:var(--purple-text)" id="trialDaysText"></div>
             <div style="font-size:12px;color:var(--muted)">All Pro features are unlocked during your free trial.</div>
           </div>
         </div>
@@ -222,16 +280,16 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
       <!-- Low stock alert -->
-      <div id="lowStockAlert" style="display:none;background:#2a1a00;border:1px solid #f59e0b;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('inventory')">
-        <strong style="color:#f59e0b">&#9888; Low Stock / Out of Stock</strong> &#8212; <span id="lowStockList" style="color:#ccc"></span> <span style="color:#f59e0b;text-decoration:underline">View Inventory &#8594;</span>
+      <div id="lowStockAlert" style="display:none;background:var(--warn-bg);border:1px solid #f59e0b;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('inventory')">
+        <strong style="color:var(--warn-text)">&#9888; Low Stock / Out of Stock</strong> &#8212; <span id="lowStockList" style="color:var(--text)"></span> <span style="color:var(--warn-text);text-decoration:underline">View Inventory &#8594;</span>
       </div>
       <!-- Late remittance alert (already remitted, but took too long) -->
-      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
-        <strong style="color:#a78bfa">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:#ccc"></span> <span style="color:#a78bfa;text-decoration:underline">View Activity Log &#8594;</span>
+      <div id="lateRemitAlert" style="display:none;background:var(--purple-bg);border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+        <strong style="color:var(--purple-text)">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:var(--text)"></span> <span style="color:var(--purple-text);text-decoration:underline">View Activity Log &#8594;</span>
       </div>
       <!-- Pending cash advance requests -->
-      <div id="caPendingAlert" style="display:none;background:#0a1a2a;border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
-        <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:#ccc"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
+      <div id="caPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+        <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:var(--text)"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
       </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="sc-label">Today's Orders</div><div class="sc-val" id="tdOrders">&#8212;</div><div class="sc-sub">orders today</div></div>
@@ -335,7 +393,7 @@ input:checked + .slider:before{transform:translateX(18px)}
             <button class="btn btn-accent btn-sm" id="btnAddInv" onclick="openInvModal()" title="Add a new raw material or stock item and set its quantity and cost.">+ Add Item</button>
           </div>
         </div>
-        <div id="invExpiryBanner" style="display:none;background:#1a0505;border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
+        <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
           <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Unit</th><th>Cost</th><th>Stock</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
           <tbody id="invTbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
@@ -368,7 +426,7 @@ input:checked + .slider:before{transform:translateX(18px)}
           <h3 id="prodSecTitle">Products</h3>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="search" id="prodSearch" placeholder="Search..." oninput="filterProds()">
-            <button class="btn btn-sm" id="btnReindexAI" onclick="bulkReindexAI()" style="background:#1a2a3a;border:1px solid #2563eb;color:#60a5fa" title="Recompute AI embeddings for all products">🤖 Re-index AI</button>
+            <button class="btn btn-sm" id="btnReindexAI" onclick="bulkReindexAI()" style="background:var(--info-bg);border:1px solid #2563eb;color:var(--info-text)" title="Recompute AI embeddings for all products">🤖 Re-index AI</button>
             <button class="btn btn-accent btn-sm" id="btnAddProd" onclick="openProdModal()" title="Add a new item you sell &mdash; name, price, photo, and category.">+ Add</button>
           </div>
         </div>
@@ -797,7 +855,7 @@ input:checked + .slider:before{transform:translateX(18px)}
             <div style="font-size:22px;margin-bottom:8px">&#128187;</div>
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">Windows PC App</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Download the installer and your personal config file, then run <strong style="color:var(--text)">POSMaker.exe</strong> — it connects automatically, no typing needed.</div>
-            <div style="font-size:11px;background:var(--s2);border-radius:7px;padding:10px;color:#ccc;line-height:1.9;margin-bottom:12px">
+            <div style="font-size:11px;background:var(--s2);border-radius:7px;padding:10px;color:var(--text);line-height:1.9;margin-bottom:12px">
               1&#65039;&#8419; Download &amp; run the <strong style="color:var(--accent)">Setup</strong> (installs POSMaker)<br>
               2&#65039;&#8419; Download your <strong style="color:var(--accent)">Config File</strong> and put it in the install folder, next to POSMaker.exe<br>
               3&#65039;&#8419; Run <strong style="color:var(--accent)">POSMaker.exe</strong> — connects automatically<br>
@@ -813,7 +871,7 @@ input:checked + .slider:before{transform:translateX(18px)}
             <div style="font-size:22px;margin-bottom:8px">&#129354;</div>
             <div style="font-size:14px;font-weight:700;margin-bottom:4px">Android App</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Download and install the APK on your Android tablet or phone. Enter your Store Code on first launch to connect.</div>
-            <div style="font-size:11px;background:var(--s2);border-radius:7px;padding:10px;color:#ccc;line-height:1.9;margin-bottom:12px">
+            <div style="font-size:11px;background:var(--s2);border-radius:7px;padding:10px;color:var(--text);line-height:1.9;margin-bottom:12px">
               1&#65039;&#8419; Download the <strong style="color:var(--accent)">APK</strong> file<br>
               2&#65039;&#8419; Install it on your Android device<br>
               3&#65039;&#8419; Enter your <strong style="color:var(--accent)">Store Code</strong> on first launch<br>
@@ -847,10 +905,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <video id="dashCamVid" style="width:100%;height:220px;object-fit:cover;display:block" autoplay muted playsinline></video>
       <div class="dash-scanbar"></div>
     </div>
-    <div id="dashBcBadge" style="display:none;background:#0a2218;border:1px solid #1a5c38;border-radius:7px;padding:7px 12px;font-size:12px;margin-bottom:10px;color:#4ade80">
+    <div id="dashBcBadge" style="display:none;background:var(--ok-bg);border:1px solid #1a5c38;border-radius:7px;padding:7px 12px;font-size:12px;margin-bottom:10px;color:var(--ok-text)">
       &#127380; Barcode: <strong id="dashBcVal"></strong>
     </div>
-    <div id="dashCamErr" style="display:none;background:#2a0a0a;border:1px solid #6b1a1a;border-radius:7px;padding:8px 12px;font-size:12px;margin-bottom:8px;color:#f87171;text-align:center"></div>
+    <div id="dashCamErr" style="display:none;background:var(--danger-bg);border:1px solid #6b1a1a;border-radius:7px;padding:8px 12px;font-size:12px;margin-bottom:8px;color:var(--danger-text);text-align:center"></div>
     <div style="color:var(--dim);font-size:11px;text-align:center;margin-bottom:10px">Point camera at product. Barcode is auto-detected.</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" style="flex:1" onclick="closeDashCam()">Cancel</button>
@@ -865,7 +923,7 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="mbox">
     <h3 id="prodModalTitle">Add Product</h3>
     <input type="hidden" id="prodId">
-    <div id="noCatWarning" style="display:none;background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:13px;color:#f59e0b;margin-bottom:14px">
+    <div id="noCatWarning" style="display:none;background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:13px;color:var(--warn-text);margin-bottom:14px">
       No categories yet. <span style="text-decoration:underline;cursor:pointer" onclick="closeModal('prodModal');nav('categories');openCatModal()">Add a category first &#8594;</span>
     </div>
     <!-- Product image upload -->
@@ -921,12 +979,12 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="invLinkList"></div>
     </div>
     <!-- Income preview -->
-    <div id="profitPreview" style="display:none;background:#0a2218;border:1px solid #1a5c38;border-radius:8px;padding:9px 14px;font-size:13px;margin-bottom:10px">
+    <div id="profitPreview" style="display:none;background:var(--ok-bg);border:1px solid #1a5c38;border-radius:8px;padding:9px 14px;font-size:13px;margin-bottom:10px">
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
         <span style="color:var(--dim);font-size:12px">Total Cost: <strong id="invCostDisplay" style="color:var(--text)"></strong></span>
         <span>Income/unit: <strong id="profitAmt"></strong></span>
         <span>Margin: <strong id="profitPct"></strong></span>
-        <span id="profitNote" style="color:#fbbf24;font-size:12px"></span>
+        <span id="profitNote" style="color:var(--warn-text);font-size:12px"></span>
       </div>
     </div>
     <div class="field" id="pAvailField" style="display:flex;align-items:center;gap:10px">
@@ -992,14 +1050,14 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div class="field">
         <label>Total Purchase Price (<span id="invUnitHint">unit</span>s)</label>
         <input id="invQcPrice" type="number" min="0" step="0.01" placeholder="e.g. 300" oninput="qcCalc()"
-          style="width:100%;padding:11px 14px;background:#09090f;border:1.5px solid #252540;border-radius:8px;color:#f0f0f8;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
+          style="width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid #252540;border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
         <div id="invQcResult" style="margin-top:6px;font-size:13px;color:#00b4d8;font-weight:600;min-height:18px"></div>
       </div>
     </div>
-    <div class="field" id="invPiecesPerUnitField" style="display:none;background:#081a10;border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:16px">
+    <div class="field" id="invPiecesPerUnitField" style="display:none;background:var(--ok-bg);border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:16px">
       <label>How many pcs in 1 <span id="invPiecesPerUnitLabel">pack</span>? <span style="color:var(--dim);font-weight:400">(optional &mdash; splits stock into individual pieces)</span></label>
       <input id="invPiecesPerUnit" type="number" min="1" step="1" placeholder="e.g. 20" oninput="calcPiecesTotal()">
-      <div id="invPiecesTotalPreview" style="font-size:12px;color:#4ade80;margin-top:6px"></div>
+      <div id="invPiecesTotalPreview" style="font-size:12px;color:var(--ok-text);margin-top:6px"></div>
     </div>
     <div class="field" id="invServiceStockField" style="display:none">
       <label>Stock Qty</label>
@@ -1017,15 +1075,15 @@ input:checked + .slider:before{transform:translateX(18px)}
     <input type="hidden" id="invQcUnit" value="pc">
 
     <!-- Usage cost calculator -->
-    <div id="invCostCalc" style="background:#081a10;border:1px solid #1a4a25;border-radius:8px;padding:12px 14px;margin-bottom:16px">
-      <div style="font-size:11px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Cost Per Order Calculator</div>
+    <div id="invCostCalc" style="background:var(--ok-bg);border:1px solid #1a4a25;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--ok-text);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Cost Per Order Calculator</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <span style="font-size:13px;color:var(--muted)">I use</span>
         <input id="invUsageQty" type="number" min="0.001" step="0.001" value="1" oninput="calcUsageCost()"
           style="width:80px;padding:7px 10px;background:var(--bg);border:1.5px solid #1a4a25;border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none;text-align:center">
         <span id="invUsageUnit" style="font-size:13px;color:var(--muted)">pc</span>
         <span style="font-size:13px;color:var(--muted)">per order</span>
-        <strong id="invUsageCost" style="font-size:15px;color:#4ade80;margin-left:4px"></strong>
+        <strong id="invUsageCost" style="font-size:15px;color:var(--ok-text);margin-left:4px"></strong>
       </div>
       <div id="invUsageStock" style="font-size:13px;color:var(--muted);padding-top:8px;border-top:1px solid #1a4a25"></div>
     </div>
@@ -1042,11 +1100,11 @@ input:checked + .slider:before{transform:translateX(18px)}
         </label>
         <div id="invPromoFields" style="display:none;margin-top:8px">
           <input id="invSalePrice" type="number" min="0" step="0.01" placeholder="Sale price (e.g. 29.00)" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid #f59e0b;border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
-          <div id="invPromoHint" style="font-size:11px;color:#f59e0b;margin-top:5px"></div>
+          <div id="invPromoHint" style="font-size:11px;color:var(--warn-text);margin-top:5px"></div>
         </div>
       </div>
     </div>
-    <div id="invExpiryAlert" style="display:none;background:#2a0a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 14px;font-size:12px;color:#ef4444;margin-bottom:12px"></div>
+    <div id="invExpiryAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--danger-text);margin-bottom:12px"></div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('invModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveInvItem()">Save</button>
@@ -1127,7 +1185,7 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="modal" id="posInstallModal">
   <div class="mbox" style="width:min(420px,100%)">
     <h3>&#128640; Install on <span id="posInstallType">Android</span></h3>
-    <div id="posInstallSteps" style="font-size:13px;color:#ccc;line-height:2;margin-bottom:16px">
+    <div id="posInstallSteps" style="font-size:13px;color:var(--text);line-height:2;margin-bottom:16px">
       <div style="margin-bottom:10px;padding:12px;background:var(--s2);border-radius:8px">
         <div style="font-weight:700;color:var(--text);margin-bottom:6px">Your Cashier Link:</div>
         <div id="posInstallUrl" style="font-family:monospace;font-size:12px;color:var(--accent);word-break:break-all"></div>
@@ -1216,7 +1274,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <select id="expStaffSelect" onchange="onExpStaffChange()" style="padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;width:100%;outline:none">
         <option value="">Select staff...</option>
       </select>
-      <div id="expAdvanceNote" style="display:none;font-size:11px;color:#f59e0b;margin-top:6px"></div>
+      <div id="expAdvanceNote" style="display:none;font-size:11px;color:var(--warn-text);margin-top:6px"></div>
     </div>
     <div class="field"><label>Notes <span style="color:var(--dim);font-weight:400">(optional)</span></label><input id="expNotes" type="text" placeholder="Optional details"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
@@ -1467,6 +1525,23 @@ document.addEventListener('click', e => {
     document.querySelectorAll('.datepick-drop.open').forEach(d => d.classList.remove('open'));
 });
 
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
+
 let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
@@ -1500,7 +1575,7 @@ function _sig(ms = 25000) {
     const res = await Promise.race([_sb.auth.getSession(), _tout(15000, 'Connection timed out. Check your internet.')]);
     session = res.data.session;
   } catch(e) {
-    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
+    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:var(--danger-text);margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
     return;
   }
   if (!session) { location.href = 'login.html'; return; }
@@ -1517,7 +1592,7 @@ function _sig(ms = 25000) {
     const res = await Promise.race([_sb.from('stores').select('*').eq('owner_id', session.user.id).order('created_at', { ascending: true }).limit(1), _tout(15000, 'Store load timed out. Check your internet.')]);
     store = res.data?.[0]; storeErr = res.error;
   } catch(e) {
-    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
+    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:var(--danger-text);margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
     return;
   }
 
@@ -1788,7 +1863,7 @@ async function loadExpenses(period) {
           <td style="padding:10px 14px;font-weight:600">${e.name}<br><span style="font-size:10px;color:var(--muted);font-weight:400">Base: ${CUR}${parseFloat(e.amount).toFixed(2)} / ${e.cycleLabel}</span></td>
           <td style="padding:10px 14px"><span style="background:rgba(0,180,216,.12);color:var(--accent);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700">${e.category||'Other'}</span></td>
           <td style="padding:10px 14px;color:var(--muted);font-size:12px">${e.notes||'&mdash;'}</td>
-          <td style="padding:10px 14px;text-align:right;font-weight:700;color:#e53e3e">${CUR}${e.prorated.toFixed(2)}</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;color:var(--danger-text)">${CUR}${e.prorated.toFixed(2)}</td>
           <td style="padding:10px 14px;text-align:center">
             <div style="display:flex;gap:6px;justify-content:center">
               <button class="btn btn-ghost btn-sm" onclick="openExpenseModal('${e.id}')">Edit</button>
@@ -1798,7 +1873,7 @@ async function loadExpenses(period) {
         </tr>`).join('')}
         <tr style="border-top:2px solid var(--border)">
           <td colspan="4" style="padding:10px 14px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase">Total Expenses</td>
-          <td style="padding:10px 14px;text-align:right;color:#e53e3e;font-size:15px;font-weight:800">${CUR}${totalExp.toFixed(2)}</td>
+          <td style="padding:10px 14px;text-align:right;color:var(--danger-text);font-size:15px;font-weight:800">${CUR}${totalExp.toFixed(2)}</td>
           <td></td>
         </tr>
       </tbody></table>`;
@@ -1815,7 +1890,7 @@ async function loadExpenses(period) {
         </div>
         <div style="text-align:center;background:rgba(229,62,62,.08);border-radius:10px;padding:16px">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Expenses</div>
-          <div style="font-size:20px;font-weight:800;color:#e53e3e">${CUR}${totalExp.toFixed(2)}</div>
+          <div style="font-size:20px;font-weight:800;color:var(--danger-text)">${CUR}${totalExp.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px">${expList.length} item${expList.length!==1?'s':''}</div>
         </div>
         <div style="text-align:center;background:${netProfit>=0?'rgba(16,185,129,.1)':'rgba(229,62,62,.1)'};border-radius:10px;padding:16px;border:1.5px solid ${netProfit>=0?'#10b981':'#e53e3e'}">
@@ -1826,7 +1901,7 @@ async function loadExpenses(period) {
         ${dailyTarget > 0 ? `
         <div style="text-align:center;background:rgba(245,158,11,.08);border-radius:10px;padding:16px;border:1.5px solid #f59e0b">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">&#127919; Daily Target</div>
-          <div style="font-size:22px;font-weight:900;color:#f59e0b">${CUR}${dailyTarget.toFixed(2)}</div>
+          <div style="font-size:22px;font-weight:900;color:var(--warn-text)">${CUR}${dailyTarget.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px">needed per day to break even</div>
           ${period === 'daily' ? `<div style="margin-top:8px;font-size:12px;font-weight:700;color:${totalRev>=dailyTarget?'#10b981':'#e53e3e'}">
             ${totalRev>=dailyTarget?'&#9989; Goal met today!':'&#9888;&#65039; '+CUR+(dailyTarget-totalRev).toFixed(2)+' more needed'}
@@ -1996,7 +2071,7 @@ async function loadPayroll() {
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
           <strong>${s.name}</strong> <span style="font-size:10px;color:var(--muted);text-transform:capitalize">${s.role}</span>
-          ${s.advance > 0 ? `<div style="font-size:11px;color:#f59e0b;margin-top:2px">Base ${CUR}${s.base.toFixed(2)} &minus; ${CUR}${s.advance.toFixed(2)} cash advance</div>` : ''}
+          ${s.advance > 0 ? `<div style="font-size:11px;color:var(--warn-text);margin-top:2px">Base ${CUR}${s.base.toFixed(2)} &minus; ${CUR}${s.advance.toFixed(2)} cash advance</div>` : ''}
         </div>
         <div style="text-align:right">
           <div style="font-weight:700">${CUR}${s.net.toFixed(2)}</div>
@@ -2088,7 +2163,7 @@ async function loadUnconfirmedRemits() {
     .select('cashier_name,shift_date,pos_sales,cash_on_hand,difference,created_at')
     .eq('store_id', STORE.id).eq('status', 'pending')
     .order('created_at', { ascending: true }); // oldest/longest-waiting first
-  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">Error: ${error.message}</td></tr>`; return; }
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger-text);padding:20px">Error: ${error.message}</td></tr>`; return; }
   if (!data || !data.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Nothing pending — the manager is all caught up. ✓</td></tr>';
     return;
@@ -2110,7 +2185,7 @@ async function loadUnconfirmedRemits() {
       <td>${CUR||'₱'}${parseFloat(r.pos_sales||0).toFixed(2)}</td>
       <td>${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}</td>
       <td style="color:${diffColor};font-weight:600">${diff>=0?'+':''}${CUR||'₱'}${Math.abs(diff).toFixed(2)}</td>
-      <td style="${overdue?'color:#ef4444;font-weight:600':'color:var(--muted)'}">${ago(r.created_at)}</td>
+      <td style="${overdue?'color:var(--danger-text);font-weight:600':'color:var(--muted)'}">${ago(r.created_at)}</td>
     </tr>`;
   }).join('');
 }
@@ -2208,17 +2283,17 @@ async function loadCashAdvanceAdmin() {
   const pending = (advances || []).filter(a => a.status === 'pending');
   pendingEl.innerHTML = !pending.length
     ? '<div style="font-size:12px;color:var(--muted)">No pending requests.</div>'
-    : pending.map(a => `<div style="border:1px solid #f59e0b55;background:#2a1a0022;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+    : pending.map(a => `<div style="border:1px solid #f59e0b55;background:var(--warn-bg);border-radius:10px;padding:12px 14px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div>
-            <strong>${a.staff_name}</strong> — <strong style="color:#f59e0b">${CUR}${parseFloat(a.amount).toFixed(2)}</strong>
+            <strong>${a.staff_name}</strong> — <strong style="color:var(--warn-text)">${CUR}${parseFloat(a.amount).toFixed(2)}</strong>
             ${a.requested_by_name && a.requested_by_name !== a.staff_name ? `<span style="font-size:11px;color:var(--muted)"> · requested by ${a.requested_by_name}</span>` : ''}
             ${a.reason ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${a.reason}</div>` : ''}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','Online')">&#10003; Approve (Online)</button>
             <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','COH')">&#10003; Approve (COH)</button>
-            <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="declineCashAdvance('${a.id}')">&#10005; Decline</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="declineCashAdvance('${a.id}')">&#10005; Decline</button>
           </div>
         </div>
       </div>`).join('');
@@ -2235,7 +2310,7 @@ async function loadCashAdvanceAdmin() {
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px">
           <div>
             <strong>${a.staff_name}</strong> <span style="color:var(--muted)">${CUR}${parseFloat(a.amount).toFixed(2)}</span>
-            ${a.status === 'declined' && a.decline_note ? `<div style="font-size:11px;color:#ef4444;margin-top:2px">${a.decline_note}</div>` : ''}
+            ${a.status === 'declined' && a.decline_note ? `<div style="font-size:11px;color:var(--danger-text);margin-top:2px">${a.decline_note}</div>` : ''}
             ${a.status === 'disbursed' && a.proof_b64 ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="viewCaProof('${a.id}')">&#128247; View Proof</button>` : ''}
             ${(a.status === 'approved' || a.status === 'disbursed') ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="markCaSettled('${a.id}')" title="Use this if you already deducted it manually in an expense entry, so it doesn't get deducted again.">&#10003; Mark Settled</button>` : ''}
           </div>
@@ -2382,7 +2457,7 @@ async function loadDashboard() {
   const _rt = setTimeout(() => {
     if (_tbody.querySelector('.spinner') || _tbody.textContent.includes('Connecting')) {
       _tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px">
-        <div style="color:#f59e0b;font-weight:600;margin-bottom:6px">&#9203; Database is waking up...</div>
+        <div style="color:var(--warn-text);font-weight:600;margin-bottom:6px">&#9203; Database is waking up...</div>
         <div style="color:var(--muted);font-size:12px;margin-bottom:12px">Supabase free tier sleeps after inactivity.<br>First load can take up to 60 seconds.</div>
         <button class="btn btn-accent btn-sm" onclick="loadDashboard()">&#8635; Retry Now</button>
       </td></tr>`;
@@ -2492,7 +2567,7 @@ async function loadDashboard() {
     clearTimeout(_rt);
     console.error('loadDashboard error:', e);
     document.getElementById('ordersTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px">
-      <div style="color:#ef4444;margin-bottom:8px">&#10006; ${e.message || 'Connection failed'}</div>
+      <div style="color:var(--danger-text);margin-bottom:8px">&#10006; ${e.message || 'Connection failed'}</div>
       <div style="color:var(--muted);font-size:12px;margin-bottom:10px">Check your internet connection and try again.</div>
       <button class="btn btn-accent btn-sm" onclick="loadDashboard()">&#8635; Retry</button>
     </td></tr>`;
@@ -2518,7 +2593,7 @@ async function loadHelperStaff() {
   el.innerHTML = helpers.map(h => {
     const d = duty[h.id] || {};
     const dutyStr = d.in
-      ? (d.out ? `${d.in} &rarr; ${d.out}` : `${d.in} &rarr; <span style="color:#f59e0b">still on duty</span>`)
+      ? (d.out ? `${d.in} &rarr; ${d.out}` : `${d.in} &rarr; <span style="color:var(--warn-text)">still on duty</span>`)
       : '<span style="color:var(--dim)">&#8212; not clocked in</span>';
     const hTasks = tasks[h.id] || [];
     const doneCnt = hTasks.filter(t => t.done).length;
@@ -2526,7 +2601,7 @@ async function loadHelperStaff() {
     const rateColor = rate === null ? 'var(--muted)' : rate >= 80 ? '#10b981' : rate >= 50 ? '#f59e0b' : '#ef4444';
     const taskRows = hTasks.map(t =>
       `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">`+
-      `<span style="${t.done ? 'color:#10b981' : 'color:var(--muted)'}">${t.done ? '&#10003;' : '&#9675;'}</span>`+
+      `<span style="${t.done ? 'color:var(--ok-text)' : 'color:var(--muted)'}">${t.done ? '&#10003;' : '&#9675;'}</span>`+
       `<span style="${t.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${t.text}</span></div>`
     ).join('');
 
@@ -2616,14 +2691,14 @@ async function openMgrCohModal() {
         const cashSales = parseFloat(r.pos_sales||0);
         const onlineSales = parseFloat(r.online_sales||0);
         const diff = parseFloat(r.difference||0);
-        const badge = r.status==='over' ? '<span style="color:#f97316;font-size:11px;margin-left:6px">Over +'+CUR+Math.abs(diff).toFixed(2)+'</span>'
-          : r.status==='short' ? '<span style="color:#ef4444;font-size:11px;margin-left:6px">Short -'+CUR+Math.abs(diff).toFixed(2)+'</span>'
+        const badge = r.status==='over' ? '<span style="color:var(--warn-text);font-size:11px;margin-left:6px">Over +'+CUR+Math.abs(diff).toFixed(2)+'</span>'
+          : r.status==='short' ? '<span style="color:var(--danger-text);font-size:11px;margin-left:6px">Short -'+CUR+Math.abs(diff).toFixed(2)+'</span>'
           : '<span style="color:#00b4d8;font-size:11px;margin-left:6px">Balanced</span>';
-        const onlineLine = onlineSales > 0 ? ' &nbsp;·&nbsp; Online: <span style="color:#a78bfa">'+CUR+onlineSales.toFixed(2)+'</span>' : '';
+        const onlineLine = onlineSales > 0 ? ' &nbsp;·&nbsp; Online: <span style="color:var(--purple-text)">'+CUR+onlineSales.toFixed(2)+'</span>' : '';
         return '<div style="padding:7px 0;border-bottom:1px solid var(--border)">'+
           '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
           '<span><strong>'+r.cashier_name+'</strong> <span style="color:var(--dim);font-size:11px">'+(r.shift_date||'')+'</span>'+badge+'</span>'+
-          '<span style="font-weight:600;color:#10b981">COH +'+CUR+cash.toFixed(2)+'</span></div>'+
+          '<span style="font-weight:600;color:var(--ok-text)">COH +'+CUR+cash.toFixed(2)+'</span></div>'+
           '<div style="font-size:11px;color:var(--muted)">Cash Sales: '+CUR+cashSales.toFixed(2)+onlineLine+'</div>'+
           '</div>';
       }).join('')
@@ -2633,7 +2708,7 @@ async function openMgrCohModal() {
 
   el.innerHTML = '<div style="background:var(--s2);border-radius:8px;padding:14px 16px;text-align:center;margin-bottom:14px">'+
     '<div style="font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:4px;text-transform:uppercase">Net Cash with Manager</div>'+
-    '<div style="font-size:28px;font-weight:800;color:#10b981">'+CUR+netTotal.toFixed(2)+'</div>'+
+    '<div style="font-size:28px;font-weight:800;color:var(--ok-text)">'+CUR+netTotal.toFixed(2)+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+subLine+'</div>'+
     (staffTransferTotal>0?'<div style="font-size:11px;color:#a855f7;margin-top:4px">'+CUR+staffTransferTotal.toFixed(2)+' total transferred to Staff Funds</div>':'')+
     '</div>'+
@@ -2712,7 +2787,7 @@ async function loadManagerCash() {
 
   el.innerHTML = '<div style="background:var(--s2);border-radius:8px;padding:14px 16px;text-align:center">'+
     '<div style="font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:4px;text-transform:uppercase">Net Cash with Manager</div>'+
-    '<div style="font-size:28px;font-weight:800;color:#10b981">'+CUR+netTotal.toFixed(2)+'</div>'+
+    '<div style="font-size:28px;font-weight:800;color:var(--ok-text)">'+CUR+netTotal.toFixed(2)+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+subLine+'</div>'+
     '</div>';
 }
@@ -2822,9 +2897,9 @@ async function loadPerformance() {
           '<span style="font-size:11px;font-weight:700;color:' + r.color + ';background:' + r.color + '22;padding:2px 8px;border-radius:20px">' + r.label + '</span>' +
           '</div>' +
           '<div style="font-size:11px;color:var(--muted)">' + s.total + ' remittances since start &mdash; ' +
-          '<span style="color:#10b981">' + s.balanced + ' balanced</span> &bull; ' +
-          '<span style="color:#ef4444">' + s.over + ' over</span> &bull; ' +
-          '<span style="color:#f97316">' + s.short + ' short</span></div>' +
+          '<span style="color:var(--ok-text)">' + s.balanced + ' balanced</span> &bull; ' +
+          '<span style="color:var(--danger-text)">' + s.over + ' over</span> &bull; ' +
+          '<span style="color:var(--warn-text)">' + s.short + ' short</span></div>' +
           '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + CUR + s.discrepancy.toFixed(2) + ' discrepancy out of ' + CUR + s.sales.toFixed(2) + ' total sales handled</div>' +
           '</div></div>';
       }).join('');
@@ -2911,7 +2986,7 @@ async function loadReport(period) {
     .lte('timestamp', to.toISOString())
     .order('timestamp', {ascending: false});
 
-  if(error){ document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;color:#f87171”>' + error.message + '</div>'; return; }
+  if(error){ document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;color:var(--danger-text)”>' + error.message + '</div>'; return; }
 
   _rptAllData = data || [];
   if(_rptAllData.length) {
@@ -3011,7 +3086,7 @@ function renderReport(orders, from, to) {
             <td style="padding:5px 10px;color:var(--dim);font-size:11px">#${o.id}</td>
             <td style="padding:5px 10px;white-space:nowrap;font-size:12px">${fmtTime(o.timestamp)}</td>
             <td style="padding:5px 10px;font-weight:500;font-size:12px">${o.cashier_name||'—'}</td>
-            <td style="padding:5px 10px;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${(o._items||[]).join(', ')}">${(o._items||[]).slice(0,3).join(', ')||'—'}${o._items&&o._items.length>3?' <span style=\'color:#818cf8;font-size:10px;font-weight:700\'>+${o._items.length-3}</span>':''}</td>
+            <td style="padding:5px 10px;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--teal-text)" title="${(o._items||[]).join(', ')}">${(o._items||[]).slice(0,3).join(', ')||'—'}${o._items&&o._items.length>3?' <span style=\'color:var(--purple-text);font-size:10px;font-weight:700\'>+${o._items.length-3}</span>':''}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;font-weight:700;color:var(--accent)">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
@@ -3074,7 +3149,7 @@ function renderReport(orders, from, to) {
       </div>
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Capital (Cost)</div>
-        <div style="font-size:14px;font-weight:800;color:#f59e0b">${CUR}${grandCapital.toFixed(2)}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--warn-text)">${CUR}${grandCapital.toFixed(2)}</div>
       </div>
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Net Profit</div>
@@ -3290,16 +3365,16 @@ function renderPOSTerminals() {
   const devIconFor = d => ({'android':'&#128241;','ios':'&#128241;','windows':'&#128187;','web':'&#127760;'}[d.platform]||'&#128187;');
   function deviceBlockHtml(devs) {
     return devs.length
-      ? devs.map(dev => `<div style="background:#0a1a10;border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      ? devs.map(dev => `<div style="background:var(--s2);border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
            <div>
              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Registered Device</div>
-             <div style="font-size:13px;font-weight:700;color:#10b981;margin-top:2px">${devIconFor(dev)} ${dev.device_name||'Unknown Device'} <span style="font-size:11px;color:var(--muted);font-weight:400">(${dev.platform||'web'})</span></div>
+             <div style="font-size:13px;font-weight:700;color:var(--ok-text);margin-top:2px">${devIconFor(dev)} ${dev.device_name||'Unknown Device'} <span style="font-size:11px;color:var(--muted);font-weight:400">(${dev.platform||'web'})</span></div>
              <div style="font-size:11px;color:var(--muted);margin-top:1px">Since ${new Date(dev.registered_at).toLocaleDateString()}</div>
            </div>
            <button class="btn btn-danger btn-sm" onclick="resetPOSDevice('${dev.store_id}','${dev.device_id}')" title="Remove this device — it will need the code again to reconnect.">&#128260; Remove Device</button>
          </div>`).join('')
-      : `<div style="background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-           <div style="font-size:12px;color:#f59e0b;font-weight:600">&#9888; No device registered yet</div>
+      : `<div style="background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+           <div style="font-size:12px;color:var(--warn-text);font-weight:600">&#9888; No device registered yet</div>
            <div style="font-size:11px;color:var(--muted);margin-top:2px">Download the app and enter this code to connect a device.</div>
          </div>`;
   }
@@ -3324,8 +3399,8 @@ function renderPOSTerminals() {
             <div><div style="font-size:15px;font-weight:700">&#128187; Terminal #${slotNum} &mdash; ${slot.name}</div></div>
             ${frozenBadgeHtml()}
           </div>
-          <div style="background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px">
-            <div style="font-size:12px;color:#f59e0b;font-weight:600;margin-bottom:6px">&#128274; This terminal is over your free plan limit</div>
+          <div style="background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:14px 16px">
+            <div style="font-size:12px;color:var(--warn-text);font-weight:600;margin-bottom:6px">&#128274; This terminal is over your free plan limit</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Its code is hidden and it can't be used until you upgrade to Pro.</div>
             <button class="btn btn-accent btn-sm" onclick="showUpgradeModal('pos', ${totalTerminals}, FREE_POS_LIMIT)">Upgrade to Pro</button>
           </div>
@@ -3342,7 +3417,7 @@ function renderPOSTerminals() {
             <div style="font-size:15px;font-weight:700">&#128187; ${titleLabel}</div>
             ${s.business_type?`<div style="font-size:11px;color:var(--accent);margin-top:3px">${s.business_type}</div>`:''}
           </div>
-          <span class="badge" style="background:#0a2a1a;color:#10b981">&#9679; Active</span>
+          <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#9679; Active</span>
         </div>
         ${deviceBlockHtml(devs)}
         <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">&#128273; Code — Share this with your cashier</div>
@@ -3370,13 +3445,13 @@ function editStoreCode(storeId, currentCode, terminalId) {
   const d = document.createElement('div');
   d.id = '_editCodeModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:340px;width:100%">
-    <div style="font-size:15px;font-weight:700;color:#e0e0f0;margin-bottom:16px">&#9998; Edit Code</div>
-    <div style="font-size:12px;color:#888;margin-bottom:8px">Letters and numbers only, 4–10 characters</div>
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:340px;width:100%">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">&#9998; Edit Code</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Letters and numbers only, 4–10 characters</div>
     <input id="_editCodeInp" type="text" maxlength="10" value="${currentCode}"
-      style="width:100%;padding:12px;background:#252540;border:1px solid #444;color:#fff;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:4px;font-family:monospace;text-transform:uppercase;margin-bottom:16px">
+      style="width:100%;padding:12px;background:var(--border);border:1px solid #444;color:#fff;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:4px;font-family:monospace;text-transform:uppercase;margin-bottom:16px">
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_editCodeModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_editCodeModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:var(--muted);border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_editCodeOk" style="flex:1;padding:12px;background:var(--accent,#00b4d8);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>
     </div>
   </div>`;
@@ -3468,15 +3543,15 @@ function showAddPOSModal() {
   d.id = '_addPOSModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
   const defaultName = 'Terminal #' + (allStores.length + posTerminals.length + 1);
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:360px;width:100%">
-    <div style="font-size:15px;font-weight:700;color:#e0e0f0;margin-bottom:6px">&#128187; Add Terminal</div>
-    <div style="font-size:12px;color:#888;margin-bottom:16px">Creates a new code with its own device lock — sharing this store's same menu, staff, and sales.</div>
-    <label style="font-size:12px;color:#aaa;display:block;margin-bottom:6px;font-weight:600">Terminal Name</label>
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:360px;width:100%">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">&#128187; Add Terminal</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Creates a new code with its own device lock — sharing this store's same menu, staff, and sales.</div>
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;font-weight:600">Terminal Name</label>
     <input id="_addPOSName" type="text" maxlength="40" value="${defaultName.replace(/"/g,'&quot;')}" placeholder="e.g. Counter 2"
-      style="width:100%;padding:11px 14px;background:#252540;border:1.5px solid #444;color:#fff;border-radius:8px;font-size:14px;outline:none;margin-bottom:16px">
-    <div id="_addPOSErr" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:10px"></div>
+      style="width:100%;padding:11px 14px;background:var(--border);border:1.5px solid #444;color:#fff;border-radius:8px;font-size:14px;outline:none;margin-bottom:16px">
+    <div id="_addPOSErr" style="color:var(--danger-text);font-size:12px;min-height:16px;margin-bottom:10px"></div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_addPOSModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_addPOSModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:var(--muted);border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_addPOSOk" style="flex:2;padding:12px;background:var(--accent,#00b4d8);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Create Terminal</button>
     </div>
   </div>`;
@@ -3758,7 +3833,7 @@ async function loadStaff() {
   _sb2.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>';
   const _st = setTimeout(() => {
     if (_sb2.textContent.trim().startsWith('Loading')) {
-      _sb2.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px"><div style="color:#f59e0b;margin-bottom:8px">Supabase is taking too long.</div><button class="btn btn-accent btn-sm" onclick="loadStaff()">&#8635; Retry</button></td></tr>';
+      _sb2.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px"><div style="color:var(--warn-text);margin-bottom:8px">Supabase is taking too long.</div><button class="btn btn-accent btn-sm" onclick="loadStaff()">&#8635; Retry</button></td></tr>';
     }
   }, 8000);
   try {
@@ -3782,7 +3857,7 @@ async function loadStaff() {
     clearTimeout(_st);
     console.error('loadStaff error:', e);
     const msg = e.name === 'AbortError' ? 'Connection timed out — slow internet?' : e.message;
-    _sb2.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px"><div style="color:#ef4444;margin-bottom:8px">${msg}</div><button class="btn btn-accent btn-sm" onclick="loadStaff()">&#8635; Retry</button></td></tr>`;
+    _sb2.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px"><div style="color:var(--danger-text);margin-bottom:8px">${msg}</div><button class="btn btn-accent btn-sm" onclick="loadStaff()">&#8635; Retry</button></td></tr>`;
   }
 }
 function renderStaff(staff) {
@@ -3792,23 +3867,23 @@ function renderStaff(staff) {
     const _ll = s.last_login_at ? new Date(s.last_login_at) : null;
     const _isOnline = s.last_seen && (Date.now() - new Date(s.last_seen).getTime()) < 5 * 60 * 1000;
     const lastLogin = _isOnline
-      ? '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;box-shadow:0 0 6px #22c55e"></span><span style="color:#22c55e;font-weight:600">Online</span></span>'
+      ? '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;box-shadow:0 0 6px #22c55e"></span><span style="color:var(--ok-text);font-weight:600">Online</span></span>'
       : _ll
         ? new Date(_ll).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
         : '<span style="color:var(--dim)">Never</span>';
     return `<tr>
       <td style="font-weight:600;font-family:monospace">${s.username}${frozenStaffIds.has(s.id)?frozenBadgeHtml():''}</td>
       <td>${s.full_name || '&#8212;'}${s.job_title ? `<br><span style="font-size:11px;color:var(--muted);font-weight:400">${s.job_title}</span>` : ''}</td>
-      <td><span class="badge bg-cash" style="${s.role==='manager'?'background:#1a1a3a;color:#818cf8':''}">${s.role}</span></td>
+      <td><span class="badge bg-cash" style="${s.role==='manager'?'background:var(--purple-bg);color:var(--purple-text)':''}">${s.role}</span></td>
       <td><label class="toggle"><input type="checkbox" ${s.active?'checked':''} onchange="toggleStaff('${s.id}',this.checked)"><span class="slider"></span></label></td>
       <td style="font-size:12px;color:var(--muted)">${lastLogin}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="viewStaffLogs('${s.id}','${s.username}')">Logs</button>
         ${frozenStaffIds.has(s.id)?`<button class="btn btn-ghost btn-sm" onclick="showUpgradeModal('staff', allStaff.length, FREE_STAFF_LIMIT)">Edit</button>`:`<button class="btn btn-ghost btn-sm" onclick="openStaffModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">Edit</button>`}
         ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(0,180,216,.15);color:#00b4d8;border:1px solid rgba(0,180,216,.3)" onclick="copyStaffLink()">&#128279; Link</button>`:''}
-        ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)" onclick="openMgrCohModal()">&#128181; View COH</button>`:''}
-        ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)" onclick="openSendPayModal('${s.id}')">&#128176; Send</button>` : ''}
-        ${_isOnline?`<button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)" onclick="forceLogoutStaff('${s.id}','${s.username}')">&#128274; Force Logout</button>`:''}
+        ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:var(--warn-text);border:1px solid rgba(245,158,11,.3)" onclick="openMgrCohModal()">&#128181; View COH</button>`:''}
+        ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(16,185,129,.15);color:var(--ok-text);border:1px solid rgba(16,185,129,.3)" onclick="openSendPayModal('${s.id}')">&#128176; Send</button>` : ''}
+        ${_isOnline?`<button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:var(--danger-text);border:1px solid rgba(239,68,68,.3)" onclick="forceLogoutStaff('${s.id}','${s.username}')">&#128274; Force Logout</button>`:''}
         <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">Del</button>
       </td>
     </tr>`;
@@ -3927,7 +4002,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     const isOpenToday = k === todayKey && hasOpenShift && loginAt === lastLogin;
     const loginStr  = loginAt  ? new Date(loginAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
     const logoutStr = logoutAt ? new Date(logoutAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
-                     : isOpenToday ? '<span style="color:#22c55e;font-weight:600">&#128994; Active</span>' : '—';
+                     : isOpenToday ? '<span style="color:var(--ok-text);font-weight:600">&#128994; Active</span>' : '—';
 
     let cashCell = '—';
     if (isCashier) {
@@ -3936,12 +4011,12 @@ async function renderStaffLogsBody(staffId, displayName, role) {
           .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
         cashCell = r ? `${CUR||'₱'}${parseFloat(r.cash_on_hand).toFixed(2)} <span style="color:var(--muted);font-size:11px">remitted</span>` : '<span style="color:var(--dim)">no remit</span>';
       } else if (isOpenToday && liveTotal != null) {
-        cashCell = `<span style="color:#22c55e;font-weight:600">${CUR||'₱'}${liveTotal.toFixed(2)}</span> <span style="color:var(--muted);font-size:11px">live</span>`;
+        cashCell = `<span style="color:var(--ok-text);font-weight:600">${CUR||'₱'}${liveTotal.toFixed(2)}</span> <span style="color:var(--muted);font-size:11px">live</span>`;
       }
     }
 
     const actionsHtml = dayActions.length
-      ? dayActions.map(l => `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span></div>`).join('')
+      ? dayActions.map(l => `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span></div>`).join('')
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
@@ -3973,9 +4048,9 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       .order('created_at', { ascending: true });
     if (pendingRemits && pendingRemits.length) {
       unconfirmedHtml = `
-        <div style="margin-top:16px;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
+        <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--warn-text);letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
         <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
-          ${pendingRemits.map(r => `<span class="badge" style="background:#2e1a0d;color:#f59e0b">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
+          ${pendingRemits.map(r => `<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
         </div>`;
     }
   }
@@ -4100,7 +4175,7 @@ async function confirmMgrDeposit(crId, btnEl) {
 async function loadActivityLog() {
   const tbody = document.getElementById('activityTbody');
   if (!tbody) return;
-  if (!STORE?.id) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:24px">Store not loaded. Refresh the page.</td></tr>'; return; }
+  if (!STORE?.id) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger-text);padding:24px">Store not loaded. Refresh the page.</td></tr>'; return; }
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>';
   const { data, error } = await supabase.createClient(SUPABASE_URL, SUPABASE_ANON)
     .from('activity_logs')
@@ -4108,7 +4183,7 @@ async function loadActivityLog() {
     .eq('store_id', STORE.id)
     .order('created_at', { ascending: false })
     .limit(500);
-  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#ef4444">Error: ${error.message}</td></tr>`; return; }
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--danger-text)">Error: ${error.message}</td></tr>`; return; }
   if (!data || data.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No activity found.</td></tr>';
     return;
@@ -4142,22 +4217,22 @@ async function loadActivityLog() {
 }
 const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given' };
 const ACTION_COLOR = {
-  ADD_STOCK:   'background:#0d2e1f;color:#10b981',
-  EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
-  ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
-  SALE:        'background:#0d2e2a;color:#14b8a6',
-  REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
-  RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
-  MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
-  OWNER_SEND:   'background:#0a2a10;color:#39ff14',
-  SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
-  EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
-  LOGIN:        'background:#0a2a2a;color:#06b6d4',
-  LOGOUT:       'background:#2a0a0a;color:#f87171',
-  ORDER_VOIDED:   'background:#2e0d0d;color:#ef4444',
-  ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
-  CASH_ADVANCE_APPROVED: 'background:#0d2e2a;color:#2dd4bf',
-  CASH_ADVANCE_GIVEN:    'background:#0d2e2a;color:#2dd4bf',
+  ADD_STOCK:   'background:var(--ok-bg);color:var(--ok-text)',
+  EDIT_ITEM:   'background:var(--info-bg);color:var(--info-text)',
+  ADD_ITEM:    'background:var(--purple-bg);color:var(--purple-text)',
+  SALE:        'background:var(--teal-bg);color:var(--teal-text)',
+  REMITTANCE:  'background:var(--warn-bg);color:var(--warn-text)',
+  RECEIVED_COH: 'background:var(--ok-bg);color:var(--ok-text)',
+  MGR_REMIT:    'background:var(--purple-bg);color:var(--purple-text)',
+  OWNER_SEND:   'background:var(--money-bg);color:var(--money-text)',
+  SALARY_GIVEN: 'background:var(--money-bg);color:var(--money-text)',
+  EXPENSE_PAID: 'background:var(--warn-bg);color:var(--warn-text)',
+  LOGIN:        'background:var(--info-bg);color:var(--info-text)',
+  LOGOUT:       'background:var(--danger-bg);color:var(--danger-text)',
+  ORDER_VOIDED:   'background:var(--danger-bg);color:var(--danger-text)',
+  ORDER_REFUNDED: 'background:var(--warn-bg);color:var(--warn-text)',
+  CASH_ADVANCE_APPROVED: 'background:var(--teal-bg);color:var(--teal-text)',
+  CASH_ADVANCE_GIVEN:    'background:var(--teal-bg);color:var(--teal-text)',
 };
 const _receiptCache = {};
 let _mgrRemitConfirm = {};
@@ -4184,20 +4259,20 @@ function renderActivityLog() {
         if (l.action === 'MGR_REMIT') {
           const _crId = d.cr_id;
           details = filtered.filter(([k]) => k !== 'cr_id').map(([k,v]) => {
-            if (k === 'amount') return 'amount: <span style="color:#39ff14;font-weight:700">₱' + parseFloat(v).toFixed(2) + '</span>';
-            if (k === 'note')   return '<span style="color:#00e5ff;font-weight:700">' + v + '</span>';
+            if (k === 'amount') return 'amount: <span style="color:var(--money-text);font-weight:700">₱' + parseFloat(v).toFixed(2) + '</span>';
+            if (k === 'note')   return '<span style="color:var(--info-text);font-weight:700">' + v + '</span>';
             return k + ': ' + v;
           }).join(' &bull; ');
           if (_crId) {
             details += _mgrRemitConfirm[_crId]
-              ? ' <span class="badge" style="background:#0d2e1f;color:#10b981;margin-left:6px">&#10003; Confirmed</span>'
-              : ' <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;margin-left:6px" onclick="confirmMgrDeposit(\'' + _crId + '\',this)">&#10003; Confirm Received</button>';
+              ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text);margin-left:6px">&#10003; Confirmed</span>'
+              : ' <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;margin-left:6px" onclick="confirmMgrDeposit(\'' + _crId + '\',this)">&#10003; Confirm Received</button>';
           }
         } else if (l.action === 'OWNER_SEND' || l.action === 'SALARY_GIVEN' || l.action === 'EXPENSE_PAID') {
           const _amtColor = l.action === 'OWNER_SEND' ? '#39ff14' : '#ff3131';
           details = filtered.filter(([k]) => !['cr_id'].includes(k)).map(([k,v]) => {
             if (k === 'amount') return '<span style="color:' + _amtColor + ';font-weight:700">₱' + parseFloat(v).toFixed(2) + '</span>';
-            if (k === 'note' || k === 'desc') return '<span style="color:#00e5ff">' + v + '</span>';
+            if (k === 'note' || k === 'desc') return '<span style="color:var(--info-text)">' + v + '</span>';
             if (k === 'name') return v;
             if (k === 'category') return '<span style="color:var(--muted);font-size:11px">' + v + '</span>';
             return k + ': ' + v;
@@ -4212,7 +4287,7 @@ function renderActivityLog() {
       }
     } catch(_) { details = l.details || ''; }
     if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: l.actor_name || '' };
-    const roleColor = l.actor_role === 'manager' ? 'background:#1a1a3a;color:#818cf8' : 'background:#0a2a1a;color:#10b981';
+    const roleColor = l.actor_role === 'manager' ? 'background:var(--purple-bg);color:var(--purple-text)' : 'background:var(--ok-bg);color:var(--ok-text)';
     const receiptCell = receiptB64
       ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:12px">&#129534; View</button>`
       : l.action === 'RECEIVED_COH'
@@ -4222,7 +4297,7 @@ function renderActivityLog() {
       <td style="color:var(--muted);white-space:nowrap">${dt}</td>
       <td style="font-weight:600">${l.actor_name || '—'}</td>
       <td><span class="badge" style="${roleColor}">${l.actor_role || '—'}</span></td>
-      <td><span class="badge" style="${l.action==='REMITTANCE'?((l.details||'').includes('Short')?'background:#2e0d0d;color:#ef4444':(l.details||'').includes('Over')?'background:#2e1a0d;color:#f97316':'background:#0d1a2e;color:#00b4d8'):actionColor[l.action]||'background:#0a1a2a;color:#8888aa'}">${actionLabel[l.action] || l.action}</span></td>
+      <td><span class="badge" style="${l.action==='REMITTANCE'?((l.details||'').includes('Short')?'background:var(--danger-bg);color:var(--danger-text)':(l.details||'').includes('Over')?'background:var(--warn-bg);color:var(--warn-text)':'background:var(--info-bg);color:var(--info-text)'):actionColor[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${actionLabel[l.action] || l.action}</span></td>
       <td>${l.target_name || '—'}</td>
       <td style="color:var(--muted);font-size:12px">${details}</td>
       <td>${receiptCell}</td>
@@ -4474,17 +4549,17 @@ async function loadMessages() {
     tbody.innerHTML = data.map(m => {
       const dt = new Date(m.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
       const readBadge = m.read
-        ? '<span class="badge" style="background:#0a2a1a;color:#10b981">&#10003; Read</span>'
-        : '<span class="badge" style="background:#2a1a0a;color:#f59e0b">Unread</span>';
+        ? '<span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003; Read</span>'
+        : '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">Unread</span>';
       return `<tr>
         <td style="color:var(--muted);white-space:nowrap;font-size:12px">${dt}</td>
         <td style="font-weight:600">${m.to_name || m.to_username}</td>
-        <td style="color:#ccc;font-size:13px">${m.body}</td>
+        <td style="color:var(--text);font-size:13px">${m.body}</td>
         <td>${readBadge}</td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px"><div style="color:#ef4444;margin-bottom:8px">${e.message}</div><small style="color:var(--muted)">Make sure the store_messages table exists in Supabase.</small></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px"><div style="color:var(--danger-text);margin-bottom:8px">${e.message}</div><small style="color:var(--muted)">Make sure the store_messages table exists in Supabase.</small></td></tr>`;
   }
 }
 
@@ -4692,7 +4767,7 @@ function renderOrders(orders) {
       <td style="font-weight:600">#${o.id}</td>
       <td>${dt}</td>
       <td>${o.cashier_name || ''}</td>
-      <td style="color:var(--muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(o._items||[]).join(', ')}">${itms}</td>
+      <td style="color:var(--teal-text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(o._items||[]).join(', ')}">${itms}</td>
       <td>${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
       <td style="color:var(--muted)">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
       <td style="color:${disc>0?'#f59e0b':'var(--muted)'}">${disc>0?disc+'%':'&#8212;'}</td>
@@ -4714,7 +4789,7 @@ async function viewOrder(ordId) {
       <span>Date</span><span style="color:var(--text)">${dt}</span>
       <span>Cashier</span><span style="color:var(--text)">${o.cashier_name || '&#8212;'}</span>
       <span>Payment</span><span style="color:var(--text)">${o.payment_method || 'Cash'}</span>
-      ${disc > 0 ? `<span>Discount</span><span style="color:#f59e0b">${disc}%</span>` : ''}
+      ${disc > 0 ? `<span>Discount</span><span style="color:var(--warn-text)">${disc}%</span>` : ''}
     </div>
     <table style="margin-bottom:14px">
       <thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount</th></tr></thead>
@@ -4728,7 +4803,7 @@ async function viewOrder(ordId) {
     <div style="text-align:right;font-size:13px;line-height:2">
       <div style="color:var(--muted)">Subtotal: <strong style="color:var(--text)">${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</strong></div>
       <div style="color:var(--muted)">Tax (${TAX}%): <strong style="color:var(--text)">${CUR}${parseFloat(o.tax||0).toFixed(2)}</strong></div>
-      ${disc>0?`<div style="color:#f59e0b">Discount (${disc}%): <strong>-${CUR}${(parseFloat(o.subtotal||0)*disc/100).toFixed(2)}</strong></div>`:''}
+      ${disc>0?`<div style="color:var(--warn-text)">Discount (${disc}%): <strong>-${CUR}${(parseFloat(o.subtotal||0)*disc/100).toFixed(2)}</strong></div>`:''}
       <div style="font-size:16px;font-weight:800;color:var(--accent)">Total: ${CUR}${parseFloat(o.total||0).toFixed(2)}</div>
       <div style="color:var(--muted)">Tendered: <strong style="color:var(--text)">${CUR}${parseFloat(o.amount_tendered||0).toFixed(2)}</strong></div>
       <div style="color:var(--muted)">Change: <strong style="color:var(--text)">${CUR}${parseFloat(o.change_given||0).toFixed(2)}</strong></div>
@@ -4808,8 +4883,8 @@ async function loadInventory() {
       const _expiredCount=_expiringItems.filter(i=>new Date(i.expiry_date+'T00:00:00')<_today).length;
       const _soonCount=_expiringItems.length-_expiredCount;
       const _parts=[];
-      if(_expiredCount) _parts.push('<span style="color:#ef4444;font-weight:700">'+_expiredCount+' item'+(_expiredCount>1?'s':'')+' EXPIRED</span>');
-      if(_soonCount) _parts.push('<span style="color:#f59e0b;font-weight:700">'+_soonCount+' expiring within 3 months</span>');
+      if(_expiredCount) _parts.push('<span style="color:var(--danger-text);font-weight:700">'+_expiredCount+' item'+(_expiredCount>1?'s':'')+' EXPIRED</span>');
+      if(_soonCount) _parts.push('<span style="color:var(--warn-text);font-weight:700">'+_soonCount+' expiring within 3 months</span>');
       _expiryBanner.innerHTML='<span style="font-size:16px">&#9888;&#65039;</span> '+_parts.join(' &bull; ')+' &mdash; consider marking them on <b>Sale</b>.';
       _expiryBanner.style.display='';
     } else { _expiryBanner.style.display='none'; }
@@ -4829,7 +4904,7 @@ function renderInv(items) {
     const unlimited=false;
     const out=!unlimited&&stock===0;
     const low=!out&&!unlimited&&stock<=thresh;
-    const badge=unlimited?'<span class="badge bg-cash">Unlimited</span>':out?'<span class="badge" style="background:#2a0a0a;color:#ef4444">Out of Stock</span>':low?`<span class="badge" style="background:#2a1a0a;color:#f59e0b">Low</span>`:'<span class="badge bg-cash">In Stock</span>';
+    const badge=unlimited?'<span class="badge bg-cash">Unlimited</span>':out?'<span class="badge" style="background:var(--danger-bg);color:var(--danger-text)">Out of Stock</span>':low?`<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">Low</span>`:'<span class="badge bg-cash">In Stock</span>';
     const _expDate = i.expiry_date ? new Date(i.expiry_date + 'T00:00:00') : null;
     const _now = new Date(); _now.setHours(0,0,0,0);
     const _daysLeft = _expDate ? Math.round((_expDate - _now) / 86400000) : null;
@@ -4838,14 +4913,14 @@ function renderInv(items) {
     const _expWarn = _daysLeft !== null && _daysLeft > 90 && _daysLeft <= 180;
     const expiryCell = _expDate
       ? (_expired
-          ? '<span style="background:#2a0505;color:#ef4444;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">EXPIRED</span>'
+          ? '<span style="background:var(--danger-bg);color:var(--danger-text);font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">EXPIRED</span>'
           : _expCrit
-            ? '<span style="color:#ef4444;font-size:11px;font-weight:600">' + i.expiry_date + '<br><span style="font-size:10px">⚠ ' + _daysLeft + 'd left</span></span>'
+            ? '<span style="color:var(--danger-text);font-size:11px;font-weight:600">' + i.expiry_date + '<br><span style="font-size:10px">⚠ ' + _daysLeft + 'd left</span></span>'
             : _expWarn
-              ? '<span style="color:#f59e0b;font-size:11px">' + i.expiry_date + '<br><span style="font-size:10px;color:var(--muted)">' + _daysLeft + 'd left</span></span>'
+              ? '<span style="color:var(--warn-text);font-size:11px">' + i.expiry_date + '<br><span style="font-size:10px;color:var(--muted)">' + _daysLeft + 'd left</span></span>'
               : '<span style="color:var(--muted);font-size:11px">' + i.expiry_date + '</span>')
       : '<span style="color:var(--dim);font-size:11px">&#8212;</span>';
-    const promoTag = i.is_on_promo ? ' <span style="background:#1a0f00;color:#f59e0b;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle">SALE</span>' : '';
+    const promoTag = i.is_on_promo ? ' <span style="background:var(--warn-bg);color:var(--warn-text);font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle">SALE</span>' : '';
     const rs = (_expired||_expCrit) ? 'background:rgba(239,68,68,.05)' : _expWarn ? 'background:rgba(245,158,11,.03)' : out ? 'background:rgba(239,68,68,.04)' : low ? 'background:rgba(245,158,11,.04)' : '';
     return `<tr style="${rs}">
       <td style="font-family:monospace;font-size:12px;color:var(--muted)">${i.sku||'&#8212;'}</td>
@@ -5373,10 +5448,10 @@ function showConfirmModal(msg, onConfirm) {
   const d = document.createElement('div');
   d.id = '_confirmModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:320px;width:100%;text-align:center">
-    <div style="font-size:14px;color:#e0e0f0;margin-bottom:20px;white-space:pre-line">${msg}</div>
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:320px;width:100%;text-align:center">
+    <div style="font-size:14px;color:var(--text);margin-bottom:20px;white-space:pre-line">${msg}</div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_confirmModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_confirmModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:var(--muted);border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_confirmOk" style="flex:1;padding:12px;background:#ef4444;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Confirm</button>
     </div>
   </div>`;
@@ -5883,7 +5958,7 @@ async function saveSendPay(){
     </div>
     <div class="field">
       <label>Amount (&#8369;)</label>
-      <input id="spAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:#10b981">
+      <input id="spAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:var(--ok-text)">
     </div>
     <div class="field">
       <label>Note / Purpose (optional)</label>
@@ -5900,7 +5975,7 @@ async function saveSendPay(){
       </div>
       <div id="spPreview" style="display:none;margin-top:8px;text-align:center">
         <img id="spReceiptImg" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">
-        <div style="font-size:11px;color:#10b981;margin-top:4px">&#10003; Receipt attached</div>
+        <div style="font-size:11px;color:var(--ok-text);margin-top:4px">&#10003; Receipt attached</div>
       </div>
     </div>
     <div class="m-actions">
@@ -5929,7 +6004,7 @@ async function saveSendPay(){
   <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:right;font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;min-height:30px;overflow-x:auto;white-space:nowrap">0</div>
   <div style="display:flex;flex-direction:column;gap:6px">
     <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcClear()" style="flex:1;background:#3a1a1a;color:#ef4444">C</button>
+      <button type="button" class="calc-btn" onclick="calcClear()" style="flex:1;background:var(--danger-bg);color:var(--danger-text)">C</button>
       <button type="button" class="calc-btn" onclick="calcInput('/')" style="flex:1">&#247;</button>
       <button type="button" class="calc-btn" onclick="calcInput('*')" style="flex:1">&#215;</button>
       <button type="button" class="calc-btn" onclick="calcInput('-')" style="flex:1">&#8722;</button>

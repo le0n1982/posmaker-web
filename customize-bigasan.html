@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker &#8212; Customize POS</title>
 <script>
-(function(){ try { var t = localStorage.getItem('pm_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(_) {} })();
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
 </script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Lato:wght@400;700&family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;600;700&family=Raleway:wght@400;600;700;800&family=Oswald:wght@400;500;600;700&family=Ubuntu:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Dancing+Script:wght@400;600;700&family=Bebas+Neue&family=Titillium+Web:wght@400;600;700&display=swap">
 <script src="js/supabase.js"></script>
