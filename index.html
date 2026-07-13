@@ -371,6 +371,23 @@ nav{
 .feat:nth-child(6n+4) .feat-ico{background:#fbd3e6}
 .feat:nth-child(6n+5) .feat-ico{background:#e0d6fb}
 .feat:nth-child(6n+6) .feat-ico{background:#c8f2ea}
+/* Same rotation, washed onto the whole card — light mode only (these pale
+   tints are tuned for a white/near-white page; dark mode keeps its
+   existing plain var(--s1) card, unchanged). */
+@media(prefers-color-scheme:light){
+  .feat:nth-child(6n+1){background:#f5f9ff}
+  .feat:nth-child(6n+2){background:#fffaf0}
+  .feat:nth-child(6n+3){background:#f3fbf6}
+  .feat:nth-child(6n+4){background:#fef5f9}
+  .feat:nth-child(6n+5){background:#f9f7fe}
+  .feat:nth-child(6n+6){background:#f2fbfa}
+}
+:root[data-theme="light"] .feat:nth-child(6n+1){background:#f5f9ff}
+:root[data-theme="light"] .feat:nth-child(6n+2){background:#fffaf0}
+:root[data-theme="light"] .feat:nth-child(6n+3){background:#f3fbf6}
+:root[data-theme="light"] .feat:nth-child(6n+4){background:#fef5f9}
+:root[data-theme="light"] .feat:nth-child(6n+5){background:#f9f7fe}
+:root[data-theme="light"] .feat:nth-child(6n+6){background:#f2fbfa}
 .feat h3{font-size:15px;font-weight:700;margin-bottom:6px}
 .feat p{font-size:13px;color:var(--muted);line-height:1.65}
 
