@@ -1274,7 +1274,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <p id="pmQrHint">Click to upload QR (PNG or JPG)</p>
     </div>
     <input type="file" id="pmQrInput" accept="image/*" style="display:none" onchange="handleAddPayMethodQr(event)">
-    <button type="button" class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="openDashCam('paymethod')">&#128247; Scan QR with Camera</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button type="button" class="btn btn-ghost" style="flex:1" onclick="openDashCam('paymethod')">&#128247; PC Camera</button>
+      <button type="button" class="btn btn-ghost" style="flex:1" onclick="openImgUploadQR('paymethod',1)">&#128241; Scan QR w/ Phone</button>
+    </div>
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeModal('mAddPayMethod')">Cancel</button>
       <button class="btn-confirm" onclick="savePaymentMethod()">Save</button>
@@ -5749,6 +5752,13 @@ async function openImgUploadQR(type,maxImages){
     if(_imgQRType==='inventory'){
       if(_invPendingImgs.length===0) _invPendingImgs.push(imgs[0]);
       renderInvThumbs();
+    } else if(_imgQRType==='paymethod'){
+      pendingPmQrb64 = imgs[0];
+      const img = document.getElementById('pmQrPreview');
+      img.src = 'data:image/jpeg;base64,' + imgs[0]; img.style.display = 'block';
+      document.getElementById('pmQrHint').style.display = 'none';
+      document.getElementById('pmQrDrop').classList.add('has-img');
+      pendingPmQrPayload = await _decodeQrPayload(img.src);
     } else {
       imgs.forEach(b=>{if(_prodPendingImgs.length<4)_prodPendingImgs.push(b);});
       renderProdThumbs();
