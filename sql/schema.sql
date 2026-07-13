@@ -1031,6 +1031,28 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS gcash_qr_b64 TEXT;
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS dual_screen_enabled BOOLEAN DEFAULT FALSE;
 
 -- ============================================================
+--  Payment Methods — owner-configured e-payment QR codes (GCash, BDO,
+--  BPI, Maya, etc.), shown as options in the cashier's E-Pay widget.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS payment_methods (
+  id         UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  store_id   UUID        REFERENCES stores NOT NULL,
+  label      TEXT        NOT NULL,
+  qr_b64     TEXT        DEFAULT '',
+  qr_payload TEXT,
+  sort_order INTEGER     DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE payment_methods ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS pm_owner     ON payment_methods;
+DROP POLICY IF EXISTS pm_anon_read ON payment_methods;
+CREATE POLICY pm_owner ON payment_methods FOR ALL TO authenticated
+  USING     (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()))
+  WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
+CREATE POLICY pm_anon_read ON payment_methods FOR SELECT TO anon USING (TRUE);
+
+-- ============================================================
 --  Stock History — per-item log of sale deductions and manual
 --  stock add/adjust events, shown via "History" on the Inventory page.
 --  Run this block in Supabase -> SQL Editor (once)

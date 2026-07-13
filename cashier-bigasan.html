@@ -404,13 +404,20 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <div class="pay-label">Payment Method</div>
       <div class="methods">
         <button class="m-btn active" onclick="setMethod('Cash',this)">Cash</button>
-        <button class="m-btn"        onclick="setMethod('Card',this)">Card</button>
-        <button class="m-btn"        onclick="setMethod('GCash',this)">GCash</button>
+        <button class="m-btn"        onclick="setMethod('Split',this)">Split</button>
+        <button class="m-btn"        onclick="setMethod('EPay',this)">E-Pay</button>
       </div>
       <div id="cashSection">
         <div class="quick-row" id="quickRow"></div>
         <input class="inp" id="tendered" type="number" placeholder="Amount tendered" oninput="calcChange()" style="padding:8px 10px;margin-bottom:2px">
         <div class="chg" id="chgDisp"></div>
+      </div>
+      <div id="splitSection" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <input class="inp" id="splitCashAmt" type="number" placeholder="Cash amount" oninput="calcSplitRemainder()" style="padding:8px 10px;flex:1">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="fillSplitHalf()">&#189; Half</button>
+        </div>
+        <div class="chg" id="splitRemainderDisp"></div>
       </div>
     </div>
 
@@ -432,6 +439,35 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div class="m-actions" style="margin-top:10px">
       <button class="btn-cancel" onclick="closeM('mQty')">Cancel</button>
       <button class="btn-confirm" onclick="confirmQty()">Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── E-PAY WIDGET ── -->
+<div class="modal" id="mEpay">
+  <div class="mbox" style="text-align:center">
+    <!-- Picker view: shown only when more than one method is configured -->
+    <div id="epayPickerView" style="display:none">
+      <div class="mtitle">&#128241; Choose Payment Method</div>
+      <div id="epayPickerList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px"></div>
+      <div class="m-actions">
+        <button class="btn-cancel" onclick="closeEpayModal()">Cancel</button>
+      </div>
+    </div>
+    <!-- QR view -->
+    <div id="epayQrView" style="display:none">
+      <div class="mtitle" id="epayQrTitle">&#128241; Payment</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Show this to the customer to scan and pay.</div>
+      <div style="background:#fff;border-radius:10px;padding:12px;display:inline-block">
+        <img id="epayQrImg" style="width:220px;height:220px;display:block" alt="Payment QR">
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-top:12px">Amount to pay</div>
+      <div style="font-size:28px;font-weight:800;color:var(--accent)" id="epayAmt">&#8212;</div>
+      <div id="epayNote" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+      <div class="m-actions">
+        <button class="btn-cancel" onclick="closeEpayModal()">Cancel</button>
+        <button class="btn-confirm" onclick="_epayContinue()">&#10004; Payment Received</button>
+      </div>
     </div>
   </div>
 </div>
@@ -688,10 +724,16 @@ function bizCashierFile(bizType) { const s = BIZ_FILE_MAP[bizType]; return s ? `
 function bizDashboardFile(bizType) { const s = BIZ_FILE_MAP[bizType]; return s ? `dashboard-${s}.html` : 'dashboard.html'; }
 
 let STORE = null, CUR = '₱', TAX = 0, CASHIER = null, CASHIER_NAME = '';
+let PAYMENT_METHODS = [];
+async function loadPaymentMethods() {
+  if (!STORE?.id) return;
+  const { data } = await _sb.from('payment_methods').select('*').eq('store_id', STORE.id).order('sort_order');
+  PAYMENT_METHODS = data || [];
+}
 const FREE_PROD_LIMIT = 999999; // unlimited — products are always free, no tier limit
 let FREE_STAFF_LIMIT = 1;
 let IS_PRO = false;
-let prods = [], cart = {}, payMeth = 'Cash';
+let prods = [], cart = {}, payMeth = 'Cash', _splitCashAmt = null;
 let storeInvItems = [], invById = {}, invByName = {};
 let orderType = 'Dine In', tableNo = '', isKOT = false;
 let discPct = 0, discAmt = 0;
@@ -796,6 +838,7 @@ let _openScanTimer = null;
     if (!store) return;
     STORE = store; CUR = store.currency || '₱'; TAX = parseFloat(store.tax_rate) || 0;
     setStoreUI();
+    loadPaymentMethods();
     // Curated sample items — a Customize preview must always look good, even
     // for a brand-new store with no real products added yet.
     prods = [
@@ -905,6 +948,7 @@ let _openScanTimer = null;
     try { const _pl = await resolvePlanLimits(_sb, STORE.plan_tier); FREE_STAFF_LIMIT = _pl.staff; } catch (_) {}
   }
   setStoreUI();
+  loadPaymentMethods();
 })();
 
 function _resolveSupplyStock(rawStock, useQty) {
@@ -1310,7 +1354,7 @@ async function openRemitOnLogout() {
         .order('created_at', { ascending: true }).limit(1);
       from = firstLogin?.[0]?.created_at || (today + 'T00:00:00');
     }
-    const { data } = await _sb.from('orders').select('total,payment_method')
+    const { data } = await _sb.from('orders').select('total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', name)
       .gte('timestamp', from).lte('timestamp', to);
     // Sales made while offline sit in the local queue until the connection
@@ -1321,12 +1365,20 @@ async function openRemitOnLogout() {
     // "Over" cash. Count them from the local queue too.
     const _queuedOrders = getOfflineQueue()
       .filter(o => o.cashier_name === name && o.timestamp >= from && o.timestamp <= to)
-      .map(o => ({ total: o.total, payment_method: o.payment_method }));
-    // Compare against actual cash received only — card/GCash sales settle
-    // electronically and were never in the physical drawer to count.
+      .map(o => ({ total: o.total, payment_method: o.payment_method, amount_tendered: o.amount_tendered }));
+    // Compare against actual cash received only — e-pay sales settle
+    // electronically and were never in the physical drawer to count. Split
+    // sales only put their cash portion (amount_tendered) in the drawer —
+    // the rest went out electronically, same as a pure e-pay sale.
     const _orders = (data||[]).concat(_queuedOrders);
-    const total = _orders.filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
-    _remitOnlineSales = _orders.filter(o => (o.payment_method || 'Cash') !== 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
+    const _cashPortion = o => {
+      const t = parseFloat(o.total) || 0;
+      if ((o.payment_method || 'Cash') === 'Cash') return t;
+      if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
+      return 0;
+    };
+    const total = _orders.reduce((s,o) => s + _cashPortion(o), 0);
+    _remitOnlineSales = _orders.reduce((s,o) => s + ((parseFloat(o.total)||0) - _cashPortion(o)), 0);
     document.getElementById('remitLogPOS').textContent = (CUR||'₱') + total.toFixed(2);
   } catch(_) {
     document.getElementById('remitLogPOS').textContent = '—';
@@ -2222,11 +2274,119 @@ function onDiscAmt() {
 // ── Payment ───────────────────────────────────────────────────────────────
 function setCash(a) { document.getElementById('tendered').value = a; calcChange(); }
 
+// ── E-Pay widget ─────────────────────────────────────────────────────────
+// Single-screen equivalent of the dual-screen customer-display.html QR flow
+// — for stores without a second monitor (e.g. a single Android tablet),
+// this shows the QR right on the cashier itself so it can be turned around
+// / shown to the customer before the order is recorded and printed. Lists
+// whichever payment methods (GCash, BDO, BPI, etc.) the owner configured in
+// Settings; skips straight to the QR when only one is set up.
+function _crc16(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+// Injects a transaction-amount field (tag 54) into a decoded EMV/QR Ph
+// payload so the customer's app pre-fills the exact amount on scan. Works
+// for any EMV/QR Ph-compliant QR (GCash, bank apps, etc.), not just GCash.
+// Falls back to null (caller shows the plain static QR instead) if the
+// payload isn't a recognizable EMV QR.
+function _buildDynamicPayQr(staticPayload, amount) {
+  try {
+    const fields = [];
+    let i = 0;
+    while (i < staticPayload.length) {
+      const tag = staticPayload.slice(i, i + 2);
+      const len = parseInt(staticPayload.slice(i + 2, i + 4), 10);
+      if (isNaN(len) || i + 4 + len > staticPayload.length) break;
+      fields.push({ tag, value: staticPayload.slice(i + 4, i + 4 + len) });
+      i += 4 + len;
+    }
+    if (!fields.length || fields[0].tag !== '00') return null;
+
+    let working = fields.filter(f => f.tag !== '54' && f.tag !== '63');
+    const f01 = working.find(f => f.tag === '01');
+    if (f01) f01.value = '12';
+
+    const amtStr = parseFloat(amount).toFixed(2);
+    const insertIdx = working.findIndex(f => parseInt(f.tag) >= 55);
+    if (insertIdx >= 0) working.splice(insertIdx, 0, { tag: '54', value: amtStr });
+    else working.push({ tag: '54', value: amtStr });
+
+    let out = '';
+    for (const f of working) out += f.tag + String(f.value.length).padStart(2, '0') + f.value;
+    out += '6304';
+    return out + _crc16(out);
+  } catch (_) { return null; }
+}
+let _epayPendingAmount = 0, _epaySplitCashAmt = null, _epayChosenLabel = null;
+function openEpayModal(amount, splitCashAmt) {
+  if (!PAYMENT_METHODS.length) {
+    alert('No e-payment method set up yet. Ask the owner to add one in Settings.');
+    return;
+  }
+  _epayPendingAmount = amount;
+  _epaySplitCashAmt = splitCashAmt;
+  if (PAYMENT_METHODS.length === 1) {
+    _showEpayQr(PAYMENT_METHODS[0]);
+  } else {
+    document.getElementById('epayPickerView').style.display = '';
+    document.getElementById('epayQrView').style.display = 'none';
+    document.getElementById('epayPickerList').innerHTML = PAYMENT_METHODS.map(m =>
+      `<button class="btn btn-accent" onclick="_epayPick('${m.id}')">${m.label}</button>`).join('');
+  }
+  document.getElementById('mEpay').classList.add('show');
+}
+function _epayPick(id) {
+  const m = PAYMENT_METHODS.find(x => x.id === id);
+  if (m) _showEpayQr(m);
+}
+function _showEpayQr(method) {
+  _epayChosenLabel = method.label;
+  document.getElementById('epayPickerView').style.display = 'none';
+  document.getElementById('epayQrView').style.display = '';
+  document.getElementById('epayQrTitle').innerHTML = '&#128241; ' + method.label + ' Payment';
+  document.getElementById('epayAmt').textContent = CUR + parseFloat(_epayPendingAmount).toFixed(2);
+  const img = document.getElementById('epayQrImg');
+  const noteEl = document.getElementById('epayNote');
+  img.style.display = '';
+  const dyn = method.qr_payload ? _buildDynamicPayQr(method.qr_payload, _epayPendingAmount) : null;
+  if (dyn) {
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=440x440&ecc=M&data=' + encodeURIComponent(dyn);
+    noteEl.textContent = 'Amount is pre-filled automatically when scanned.';
+  } else {
+    img.src = 'data:image/png;base64,' + method.qr_b64;
+    noteEl.textContent = 'Customer must enter the amount above manually.';
+  }
+}
+function closeEpayModal() {
+  document.getElementById('mEpay').classList.remove('show');
+}
+
 function setMethod(m, btn) {
   payMeth = m;
   document.querySelectorAll('.m-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('cashSection').style.display = m === 'Cash' ? '' : 'none';
+  document.getElementById('splitSection').style.display = m === 'Split' ? '' : 'none';
+}
+function fillSplitHalf() {
+  const { total } = getCartTotals();
+  document.getElementById('splitCashAmt').value = (total / 2).toFixed(2);
+  calcSplitRemainder();
+}
+function calcSplitRemainder() {
+  const { total } = getCartTotals();
+  const cash = parseFloat(document.getElementById('splitCashAmt').value) || 0;
+  const el = document.getElementById('splitRemainderDisp');
+  if (cash > 0) {
+    const remain = total - cash;
+    el.style.color = remain >= 0 ? '#10b981' : '#ef4444';
+    el.textContent = remain >= 0 ? `Remaining (electronic): ${CUR}${remain.toFixed(2)}` : `Cash exceeds total by ${CUR}${Math.abs(remain).toFixed(2)}`;
+  } else { el.textContent = ''; }
 }
 
 function calcChange() {
@@ -2374,14 +2534,41 @@ window.addEventListener('offline', ()=>{ updateNetStatus(); });
 
 // ── Confirm Order ─────────────────────────────────────────────────────────
 async function confirmOrder() {
+  // E-Pay / Split sales: show the QR (with the exact amount, when the
+  // uploaded QR could be decoded) to the customer FIRST — the cashier only
+  // proceeds to actually record + print the order after confirming payment
+  // was received, instead of printing before the customer has even paid.
+  const { total } = getCartTotals();
+  if (payMeth === 'EPay' && !IS_DEMO) {
+    openEpayModal(total, null);
+    return;
+  }
+  if (payMeth === 'Split' && !IS_DEMO) {
+    const cashAmt = parseFloat(document.getElementById('splitCashAmt').value) || 0;
+    if (cashAmt <= 0 || cashAmt >= total) { alert('Enter a cash amount between 0 and the total (or use Cash / E-Pay instead).'); return; }
+    openEpayModal(total - cashAmt, cashAmt);
+    return;
+  }
+  await _doConfirmOrder();
+}
+async function _epayContinue() {
+  closeEpayModal();
+  if (_epaySplitCashAmt != null) { payMeth = 'Split'; _splitCashAmt = _epaySplitCashAmt; }
+  else { payMeth = _epayChosenLabel; }
+  await _doConfirmOrder();
+}
+async function _doConfirmOrder() {
   const { items, raw, disc, total, tax, sub } = getCartTotals();
-  const tender = payMeth === 'Cash' ? parseFloat(document.getElementById('tendered').value) || 0 : total;
+  const tender = payMeth === 'Cash' ? parseFloat(document.getElementById('tendered').value) || 0
+               : payMeth === 'Split' ? _splitCashAmt
+               : total;
   const change = payMeth === 'Cash' ? parseFloat((tender - total).toFixed(2)) : 0;
   const dPct   = discAmt > 0 && raw > 0 ? parseFloat(((disc / raw) * 100).toFixed(2)) : discPct;
 
   if (payMeth === 'Cash' && tender < total) { alert('Amount tendered is less than total.'); return; }
 
-  const receiptData = { order_id: 'DEMO', items, sub, tax, total, disc, tender, change, method: payMeth, cashier: CASHIER_NAME, orderType, tableNo, isKOT };
+  const receiptMethod = payMeth === 'Split' ? `Split (Cash ${CUR}${_splitCashAmt.toFixed(2)} + ${_epayChosenLabel} ${CUR}${(total - _splitCashAmt).toFixed(2)})` : payMeth;
+  const receiptData = { order_id: 'DEMO', items, sub, tax, total, disc, tender, change, method: receiptMethod, cashier: CASHIER_NAME, orderType, tableNo, isKOT };
 
   if (IS_DEMO) { showReceipt(receiptData); return; }
 
@@ -2785,6 +2972,10 @@ function newOrder() {
   updateDiscTriggerLabel();
   closeProductOptWidget();
   document.querySelectorAll('.m-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+  document.getElementById('splitSection').style.display = 'none';
+  document.getElementById('splitCashAmt').value = '';
+  document.getElementById('splitRemainderDisp').textContent = '';
+  _splitCashAmt = null; _epaySplitCashAmt = null; _epayChosenLabel = null;
   isKOT = false;
   document.getElementById('btnKOT').classList.remove('on');
   document.getElementById('btnKOT').textContent = '\u{1F468}‍\u{1F373} KOT';

@@ -463,7 +463,7 @@ function render(payload) {
 
     let leftQrShown = false;
     if (_method === 'gcash' && STORE.gcash_qr_payload) {
-      const dynPayload = buildDynamicQr(STORE.gcash_qr_payload, parseFloat(_total));
+      const dynPayload = _buildDynamicQr(STORE.gcash_qr_payload, parseFloat(_total));
       if (dynPayload) {
         storeQrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=760x760&ecc=M&data=' + encodeURIComponent(dynPayload);
         leftQrShown = true;

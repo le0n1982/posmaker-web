@@ -1375,10 +1375,17 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
 
   if (isCashier) {
     await Promise.all(shifts.filter(s => !s.logoutAt).map(async s => {
-      const { data: ord } = await _sb.from('orders').select('total,payment_method')
+      const { data: ord } = await _sb.from('orders').select('total,payment_method,amount_tendered')
         .eq('store_id', MGR.store_id).eq('cashier_name', displayName)
         .gte('timestamp', s.loginAt);
-      s._total = (ord||[]).filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((sum,o) => sum + (parseFloat(o.total)||0), 0);
+      // Split sales only put their cash portion (amount_tendered) in the
+      // drawer — the rest went out electronically, same as a pure e-pay sale.
+      s._total = (ord||[]).reduce((sum,o) => {
+        const pm = o.payment_method || 'Cash';
+        if (pm === 'Cash') return sum + (parseFloat(o.total)||0);
+        if (pm === 'Split') return sum + (parseFloat(o.amount_tendered)||0);
+        return sum;
+      }, 0);
     }));
   }
 
@@ -1863,11 +1870,15 @@ async function approveVoidRefund(id) {
 
   if (r.type === 'refund') await restoreStockForOrder(r.order_id);
 
-  // Cash-on-hand deduction: only cash sales ever hit a physical drawer, so
-  // GCash/card originals don't move anyone's COH — the payment network
-  // reverses those on its own.
+  // Cash-on-hand deduction: only the cash actually collected ever hit a
+  // physical drawer, so pure e-pay originals don't move anyone's COH — the
+  // payment network reverses those on its own. A Split sale only put its
+  // cash portion (amount_tendered) in the drawer, not the full order total.
   const orderTotal = parseFloat(orig.total) || 0;
-  if (orig.payment_method === 'Cash' && orderTotal > 0) {
+  const cashPortion = orig.payment_method === 'Cash' ? orderTotal
+                     : orig.payment_method === 'Split' ? (parseFloat(orig.amount_tendered) || 0)
+                     : 0;
+  if (cashPortion > 0) {
     // Where is this order's cash right now? If the cashier's shift that
     // included it has already been received by the manager (status is
     // over/short/balanced, not still 'pending'), the money is in the
@@ -1886,7 +1897,7 @@ async function approveVoidRefund(id) {
       // Already remitted — comes out of the manager's own cash.
       await _sb.from('cash_remittances').insert({
         store_id: MGR.store_id, cashier_name: MGR.name, shift_date: today,
-        pos_sales: 0, cash_on_hand: -orderTotal, difference: -orderTotal,
+        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
         status: 'refund', description: desc
       });
     } else {
@@ -1894,7 +1905,7 @@ async function approveVoidRefund(id) {
       // cashier, so reduce what they owe instead of the manager's cash.
       await _sb.from('cash_remittances').insert({
         store_id: MGR.store_id, cashier_name: orig.cashier_name, shift_date: today,
-        pos_sales: 0, cash_on_hand: -orderTotal, difference: -orderTotal,
+        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
         status: 'pending', description: desc
       });
     }
