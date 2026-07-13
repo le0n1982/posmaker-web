@@ -8,13 +8,66 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>POSMaker &#8212; Dashboard</title>
+<script>
+// Applied before first paint so a saved preference doesn't flash the wrong
+// theme for a frame. No saved choice yet = leave data-theme unset, so the
+// @media(prefers-color-scheme:light) block below keeps following the OS.
+(function(){ try { var t = localStorage.getItem('pm_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(_) {} })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <script src="js/store-plan.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
+:root{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --pending-bg:#facc15;--pending-text:#1a1500;
+  --info-bg:#0d1a2e;--info-text:#00b4d8;
+  --purple-bg:#1a0a2a;--purple-text:#a78bfa;
+  --teal-bg:#0d2e2a;--teal-text:#14b8a6;
+  --money-bg:#0a2a10;--money-text:#39ff14;
+  --neutral-bg:#0a1a2a;--neutral-text:#8888aa;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --pending-bg:#fde047;--pending-text:#3f2d00;
+  --info-bg:#e6f7fb;--info-text:#0a7ea3;
+  --purple-bg:#f0edfd;--purple-text:#5b3fc4;
+  --teal-bg:#e6faf6;--teal-text:#0a7d6e;
+  --money-bg:#eafbea;--money-text:#1a7a1a;
+  --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --pending-bg:#facc15;--pending-text:#1a1500;
+  --info-bg:#0d1a2e;--info-text:#00b4d8;
+  --purple-bg:#1a0a2a;--purple-text:#a78bfa;
+  --teal-bg:#0d2e2a;--teal-text:#14b8a6;
+  --money-bg:#0a2a10;--money-text:#39ff14;
+  --neutral-bg:#0a1a2a;--neutral-text:#8888aa;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --pending-bg:#fde047;--pending-text:#3f2d00;
+  --info-bg:#e6f7fb;--info-text:#0a7ea3;
+  --purple-bg:#f0edfd;--purple-text:#5b3fc4;
+  --teal-bg:#e6faf6;--teal-text:#0a7d6e;
+  --money-bg:#eafbea;--money-text:#1a7a1a;
+  --neutral-bg:#eef1f6;--neutral-text:#5a6478;
+}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
 
 /* SIDEBAR */
@@ -76,9 +129,9 @@ tr:hover td{background:var(--s2)}
 .grid-table th{border-bottom:1px solid var(--border)}
 .grid-table td{border-bottom:1px solid #1a1a2e}
 .badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
-.bg-cash{background:#0a2a1a;color:#10b981}
-.bg-card{background:#0a0a2a;color:#818cf8}
-.bg-gcash{background:#1a0a2a;color:#a78bfa}
+.bg-cash{background:var(--ok-bg);color:var(--ok-text)}
+.bg-card{background:var(--purple-bg);color:var(--purple-text)}
+.bg-gcash{background:var(--purple-bg);color:var(--purple-text)}
 
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:opacity .15s}
@@ -125,15 +178,15 @@ tr:hover td{background:var(--s2)}
 /* TOGGLE */
 .toggle{position:relative;display:inline-block;width:40px;height:22px}
 .toggle input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;inset:0;background:#333;border-radius:22px;transition:.2s}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:22px;transition:.2s}
 .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
 input:checked + .slider{background:var(--accent)}
 input:checked + .slider:before{transform:translateX(18px)}
 
 /* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:#1a3a2a;border:1px solid #10b981;color:#10b981;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ok-bg);border:1px solid #10b981;color:#10b981;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateY(0)}
-.toast.err{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
+.toast.err{background:var(--danger-bg);border-color:#ef4444;color:#ef4444}
 
 /* SPINNER */
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
@@ -193,6 +246,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <span class="topbar-title" id="topbarTitle">Dashboard</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+      <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
       <button id="btnHelp" onclick="document.getElementById('helpModal').classList.add('show')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;transition:all .2s">&#10067; Help</button>
       <button id="btnUpdate" onclick="applyUpdate()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;transition:all .2s">&#8635; Update</button>
     </div>
@@ -222,19 +276,19 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
       <!-- Low stock alert -->
-      <div id="lowStockAlert" style="display:none;background:#2a1a00;border:1px solid #f59e0b;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('inventory')">
+      <div id="lowStockAlert" style="display:none;background:var(--warn-bg);border:1px solid #f59e0b;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('inventory')">
         <strong style="color:#f59e0b">&#9888; Low Stock / Out of Stock</strong> &#8212; <span id="lowStockList" style="color:#ccc"></span> <span style="color:#f59e0b;text-decoration:underline">View Inventory &#8594;</span>
       </div>
       <!-- Late remittance alert (already remitted, but took too long) -->
-      <div id="lateRemitAlert" style="display:none;background:#1a1230;border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+      <div id="lateRemitAlert" style="display:none;background:var(--purple-bg);border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#a78bfa">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:#ccc"></span> <span style="color:#a78bfa;text-decoration:underline">View Activity Log &#8594;</span>
       </div>
       <!-- Pending cash advance requests -->
-      <div id="caPendingAlert" style="display:none;background:#0a1a2a;border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+      <div id="caPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:#ccc"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
       </div>
       <!-- Unconfirmed E-Pay proofs -->
-      <div id="epayPendingAlert" style="display:none;background:#0d1a2e;border:1px solid #60a5fa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+      <div id="epayPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #60a5fa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#60a5fa">&#128241; Unconfirmed E-Pay Payments</strong> &#8212; <span id="epayPendingCount" style="color:#ccc"></span> <span style="color:#60a5fa;text-decoration:underline">View Staff &#8594;</span>
       </div>
       <div class="stat-grid">
@@ -339,7 +393,7 @@ input:checked + .slider:before{transform:translateX(18px)}
             <button class="btn btn-accent btn-sm" id="btnAddInv" onclick="openInvModal()" title="Add a new raw material or stock item and set its quantity and cost.">+ Add Item</button>
           </div>
         </div>
-        <div id="invExpiryBanner" style="display:none;background:#1a0505;border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
+        <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
           <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Unit</th><th>Cost</th><th>Stock</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
           <tbody id="invTbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
@@ -372,7 +426,7 @@ input:checked + .slider:before{transform:translateX(18px)}
           <h3 id="prodSecTitle">Products</h3>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="search" id="prodSearch" placeholder="Search..." oninput="filterProds()">
-            <button class="btn btn-sm" id="btnReindexAI" onclick="bulkReindexAI()" style="background:#1a2a3a;border:1px solid #2563eb;color:#60a5fa" title="Recompute AI embeddings for all products">🤖 Re-index AI</button>
+            <button class="btn btn-sm" id="btnReindexAI" onclick="bulkReindexAI()" style="background:var(--info-bg);border:1px solid #2563eb;color:#60a5fa" title="Recompute AI embeddings for all products">🤖 Re-index AI</button>
             <button class="btn btn-accent btn-sm" id="btnAddProd" onclick="openProdModal()" title="Add a new item you sell &mdash; name, price, photo, and category.">+ Add</button>
           </div>
         </div>
@@ -856,10 +910,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <video id="dashCamVid" style="width:100%;height:220px;object-fit:cover;display:block" autoplay muted playsinline></video>
       <div class="dash-scanbar"></div>
     </div>
-    <div id="dashBcBadge" style="display:none;background:#0a2218;border:1px solid #1a5c38;border-radius:7px;padding:7px 12px;font-size:12px;margin-bottom:10px;color:#4ade80">
+    <div id="dashBcBadge" style="display:none;background:var(--ok-bg);border:1px solid #1a5c38;border-radius:7px;padding:7px 12px;font-size:12px;margin-bottom:10px;color:#4ade80">
       &#127380; Barcode: <strong id="dashBcVal"></strong>
     </div>
-    <div id="dashCamErr" style="display:none;background:#2a0a0a;border:1px solid #6b1a1a;border-radius:7px;padding:8px 12px;font-size:12px;margin-bottom:8px;color:#f87171;text-align:center"></div>
+    <div id="dashCamErr" style="display:none;background:var(--danger-bg);border:1px solid #6b1a1a;border-radius:7px;padding:8px 12px;font-size:12px;margin-bottom:8px;color:#f87171;text-align:center"></div>
     <div style="color:var(--dim);font-size:11px;text-align:center;margin-bottom:10px">Point camera at product. Barcode is auto-detected.</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" style="flex:1" onclick="closeDashCam()">Cancel</button>
@@ -874,7 +928,7 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="mbox">
     <h3 id="prodModalTitle">Add Product</h3>
     <input type="hidden" id="prodId">
-    <div id="noCatWarning" style="display:none;background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:13px;color:#f59e0b;margin-bottom:14px">
+    <div id="noCatWarning" style="display:none;background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;font-size:13px;color:#f59e0b;margin-bottom:14px">
       No categories yet. <span style="text-decoration:underline;cursor:pointer" onclick="closeModal('prodModal');nav('categories');openCatModal()">Add a category first &#8594;</span>
     </div>
     <!-- Product image upload -->
@@ -936,7 +990,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="invLinkList"></div>
     </div>
     <!-- Income preview -->
-    <div id="profitPreview" style="display:none;background:#0a2218;border:1px solid #1a5c38;border-radius:8px;padding:9px 14px;font-size:13px;margin-bottom:10px">
+    <div id="profitPreview" style="display:none;background:var(--ok-bg);border:1px solid #1a5c38;border-radius:8px;padding:9px 14px;font-size:13px;margin-bottom:10px">
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
         <span style="color:var(--dim);font-size:12px">Total Cost: <strong id="invCostDisplay" style="color:var(--text)"></strong></span>
         <span>Income/unit: <strong id="profitAmt"></strong></span>
@@ -1007,11 +1061,11 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div class="field">
         <label>Total Purchase Price (<span id="invUnitHint">unit</span>s)</label>
         <input id="invQcPrice" type="number" min="0" step="0.01" placeholder="e.g. 300" oninput="qcCalc()"
-          style="width:100%;padding:11px 14px;background:#09090f;border:1.5px solid #252540;border-radius:8px;color:#f0f0f8;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
+          style="width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid #252540;border-radius:8px;color:#f0f0f8;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
         <div id="invQcResult" style="margin-top:6px;font-size:13px;color:#00b4d8;font-weight:600;min-height:18px"></div>
       </div>
     </div>
-    <div class="field" id="invPiecesPerUnitField" style="display:none;background:#081a10;border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:16px">
+    <div class="field" id="invPiecesPerUnitField" style="display:none;background:var(--ok-bg);border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:16px">
       <label>How many pcs in 1 <span id="invPiecesPerUnitLabel">pack</span>? <span style="color:var(--dim);font-weight:400">(optional &mdash; splits stock into individual pieces)</span></label>
       <input id="invPiecesPerUnit" type="number" min="1" step="1" placeholder="e.g. 20" oninput="calcPiecesTotal()">
       <div id="invPiecesTotalPreview" style="font-size:12px;color:#4ade80;margin-top:6px"></div>
@@ -1032,7 +1086,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <input type="hidden" id="invQcUnit" value="pc">
 
     <!-- Usage cost calculator -->
-    <div id="invCostCalc" style="background:#081a10;border:1px solid #1a4a25;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+    <div id="invCostCalc" style="background:var(--ok-bg);border:1px solid #1a4a25;border-radius:8px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:11px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Cost Per Order Calculator</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <span style="font-size:13px;color:var(--muted)">I use</span>
@@ -1061,7 +1115,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
     </div>
-    <div id="invExpiryAlert" style="display:none;background:#2a0a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 14px;font-size:12px;color:#ef4444;margin-bottom:12px"></div>
+    <div id="invExpiryAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:8px;padding:10px 14px;font-size:12px;color:#ef4444;margin-bottom:12px"></div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('invModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveInvItem()">Save</button>
@@ -1503,6 +1557,23 @@ document.addEventListener('click', e => {
     document.querySelectorAll('.datepick-drop.open').forEach(d => d.classList.remove('open'));
 });
 
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
+
 let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
@@ -1539,7 +1610,7 @@ function _sig(ms = 25000) {
     const res = await Promise.race([_sb.auth.getSession(), _tout(15000, 'Connection timed out. Check your internet.')]);
     session = res.data.session;
   } catch(e) {
-    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
+    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
     return;
   }
   if (!session) { location.href = 'login.html'; return; }
@@ -1556,7 +1627,7 @@ function _sig(ms = 25000) {
     const res = await Promise.race([_sb.from('stores').select('*').eq('owner_id', session.user.id).order('created_at', { ascending: true }).limit(1), _tout(15000, 'Store load timed out. Check your internet.')]);
     store = res.data?.[0]; storeErr = res.error;
   } catch(e) {
-    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
+    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" style="padding:10px 24px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Retry</button></div>`;
     return;
   }
 
@@ -2274,7 +2345,7 @@ async function loadCashAdvanceAdmin() {
   const pending = (advances || []).filter(a => a.status === 'pending');
   pendingEl.innerHTML = !pending.length
     ? '<div style="font-size:12px;color:var(--muted)">No pending requests.</div>'
-    : pending.map(a => `<div style="border:1px solid #f59e0b55;background:#2a1a0022;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+    : pending.map(a => `<div style="border:1px solid #f59e0b55;background:var(--warn-bg);border-radius:10px;padding:12px 14px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div>
             <strong>${a.staff_name}</strong> — <strong style="color:#f59e0b">${CUR}${parseFloat(a.amount).toFixed(2)}</strong>
@@ -3358,7 +3429,7 @@ function renderPOSTerminals() {
   const devIconFor = d => ({'android':'&#128241;','ios':'&#128241;','windows':'&#128187;','web':'&#127760;'}[d.platform]||'&#128187;');
   function deviceBlockHtml(devs) {
     return devs.length
-      ? devs.map(dev => `<div style="background:#0a1a10;border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      ? devs.map(dev => `<div style="background:var(--s2);border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
            <div>
              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Registered Device</div>
              <div style="font-size:13px;font-weight:700;color:#10b981;margin-top:2px">${devIconFor(dev)} ${dev.device_name||'Unknown Device'} <span style="font-size:11px;color:var(--muted);font-weight:400">(${dev.platform||'web'})</span></div>
@@ -3366,7 +3437,7 @@ function renderPOSTerminals() {
            </div>
            <button class="btn btn-danger btn-sm" onclick="resetPOSDevice('${dev.store_id}','${dev.device_id}')" title="Remove this device — it will need the code again to reconnect.">&#128260; Remove Device</button>
          </div>`).join('')
-      : `<div style="background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+      : `<div style="background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px">
            <div style="font-size:12px;color:#f59e0b;font-weight:600">&#9888; No device registered yet</div>
            <div style="font-size:11px;color:var(--muted);margin-top:2px">Download the app and enter this code to connect a device.</div>
          </div>`;
@@ -3392,7 +3463,7 @@ function renderPOSTerminals() {
             <div><div style="font-size:15px;font-weight:700">&#128187; Terminal #${slotNum} &mdash; ${slot.name}</div></div>
             ${frozenBadgeHtml()}
           </div>
-          <div style="background:#2a1a00;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px">
+          <div style="background:var(--warn-bg);border:1px solid #f59e0b;border-radius:8px;padding:14px 16px">
             <div style="font-size:12px;color:#f59e0b;font-weight:600;margin-bottom:6px">&#128274; This terminal is over your free plan limit</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Its code is hidden and it can't be used until you upgrade to Pro.</div>
             <button class="btn btn-accent btn-sm" onclick="showUpgradeModal('pos', ${totalTerminals}, FREE_POS_LIMIT)">Upgrade to Pro</button>
@@ -3410,7 +3481,7 @@ function renderPOSTerminals() {
             <div style="font-size:15px;font-weight:700">&#128187; ${titleLabel}</div>
             ${s.business_type?`<div style="font-size:11px;color:var(--accent);margin-top:3px">${s.business_type}</div>`:''}
           </div>
-          <span class="badge" style="background:#0a2a1a;color:#10b981">&#9679; Active</span>
+          <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#9679; Active</span>
         </div>
         ${deviceBlockHtml(devs)}
         <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">&#128273; Code — Share this with your cashier</div>
@@ -3438,13 +3509,13 @@ function editStoreCode(storeId, currentCode, terminalId) {
   const d = document.createElement('div');
   d.id = '_editCodeModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:340px;width:100%">
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:340px;width:100%">
     <div style="font-size:15px;font-weight:700;color:#e0e0f0;margin-bottom:16px">&#9998; Edit Code</div>
     <div style="font-size:12px;color:#888;margin-bottom:8px">Letters and numbers only, 4–10 characters</div>
     <input id="_editCodeInp" type="text" maxlength="10" value="${currentCode}"
-      style="width:100%;padding:12px;background:#252540;border:1px solid #444;color:#fff;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:4px;font-family:monospace;text-transform:uppercase;margin-bottom:16px">
+      style="width:100%;padding:12px;background:var(--border);border:1px solid #444;color:#fff;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:4px;font-family:monospace;text-transform:uppercase;margin-bottom:16px">
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_editCodeModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_editCodeModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_editCodeOk" style="flex:1;padding:12px;background:var(--accent,#00b4d8);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>
     </div>
   </div>`;
@@ -3536,15 +3607,15 @@ function showAddPOSModal() {
   d.id = '_addPOSModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
   const defaultName = 'Terminal #' + (allStores.length + posTerminals.length + 1);
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:360px;width:100%">
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:360px;width:100%">
     <div style="font-size:15px;font-weight:700;color:#e0e0f0;margin-bottom:6px">&#128187; Add Terminal</div>
     <div style="font-size:12px;color:#888;margin-bottom:16px">Creates a new code with its own device lock — sharing this store's same menu, staff, and sales.</div>
     <label style="font-size:12px;color:#aaa;display:block;margin-bottom:6px;font-weight:600">Terminal Name</label>
     <input id="_addPOSName" type="text" maxlength="40" value="${defaultName.replace(/"/g,'&quot;')}" placeholder="e.g. Counter 2"
-      style="width:100%;padding:11px 14px;background:#252540;border:1.5px solid #444;color:#fff;border-radius:8px;font-size:14px;outline:none;margin-bottom:16px">
+      style="width:100%;padding:11px 14px;background:var(--border);border:1.5px solid #444;color:#fff;border-radius:8px;font-size:14px;outline:none;margin-bottom:16px">
     <div id="_addPOSErr" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:10px"></div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_addPOSModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_addPOSModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_addPOSOk" style="flex:2;padding:12px;background:var(--accent,#00b4d8);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Create Terminal</button>
     </div>
   </div>`;
@@ -3874,7 +3945,7 @@ function renderStaff(staff) {
     return `<tr>
       <td style="font-weight:600;font-family:monospace">${s.username}${frozenStaffIds.has(s.id)?frozenBadgeHtml():''}</td>
       <td>${s.full_name || '&#8212;'}${s.job_title ? `<br><span style="font-size:11px;color:var(--muted);font-weight:400">${s.job_title}</span>` : ''}</td>
-      <td><span class="badge bg-cash" style="${s.role==='manager'?'background:#1a1a3a;color:#818cf8':''}">${s.role}</span></td>
+      <td><span class="badge bg-cash" style="${s.role==='manager'?'background:var(--purple-bg);color:var(--purple-text)':''}">${s.role}</span></td>
       <td><label class="toggle"><input type="checkbox" ${s.active?'checked':''} onchange="toggleStaff('${s.id}',this.checked)"><span class="slider"></span></label></td>
       <td style="font-size:12px;color:var(--muted)">${lastLogin}</td>
       <td style="white-space:nowrap">
@@ -4034,8 +4105,8 @@ async function renderStaffLogsBody(staffId, displayName, role) {
             const amt = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
             detailText = `${d.method || ''} ${amt}`.trim();
             confirmBtn = d.confirmed
-              ? ' <span class="badge" style="background:#0d2e1f;color:#10b981">&#10003;</span>'
-              : ` <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
+              ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003;</span>'
+              : ` <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
           } else if (l.action === 'REMITTANCE') {
             detailText = l.details || '';
           } else if (l.action === 'ORDER_VOIDED' || l.action === 'ORDER_REFUNDED') {
@@ -4047,7 +4118,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
           }
           return `<div style="margin-bottom:5px">
             <span style="color:var(--dim);font-size:10px">${timeStr}</span>
-            <span class="badge" style="${ACTION_COLOR[l.action]||'background:#0a1a2a;color:#8888aa'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}
+            <span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}
             ${detailText ? `<div style="color:var(--muted);font-size:11px;margin-top:1px">${detailText}</div>` : ''}
           </div>`;
         }).join('') + '</div>'
@@ -4084,7 +4155,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       unconfirmedHtml = `
         <div style="margin-top:16px;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
         <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
-          ${pendingRemits.map(r => `<span class="badge" style="background:#2e1a0d;color:#f59e0b">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
+          ${pendingRemits.map(r => `<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">${new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`).join('')}
         </div>`;
     }
   }
@@ -4275,23 +4346,23 @@ async function loadActivityLog() {
 }
 const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given', EPAY_PROOF: '📱 E-Pay Proof' };
 const ACTION_COLOR = {
-  ADD_STOCK:   'background:#0d2e1f;color:#10b981',
-  EDIT_ITEM:   'background:#0d1a2e;color:#00b4d8',
-  ADD_ITEM:    'background:#1a0d2e;color:#818cf8',
-  SALE:        'background:#0d2e2a;color:#14b8a6',
-  REMITTANCE:  'background:#2e1a0d;color:#f59e0b',
-  RECEIVED_COH: 'background:#0d2e1f;color:#10b981',
-  MGR_REMIT:    'background:#1a0a2e;color:#c084fc',
-  OWNER_SEND:   'background:#0a2a10;color:#39ff14',
-  SALARY_GIVEN: 'background:#0a2a10;color:#39ff14',
-  EXPENSE_PAID: 'background:#2a1a0a;color:#f59e0b',
-  LOGIN:        'background:#0a2a2a;color:#06b6d4',
-  LOGOUT:       'background:#2a0a0a;color:#f87171',
-  ORDER_VOIDED:   'background:#2e0d0d;color:#ef4444',
-  ORDER_REFUNDED: 'background:#2e1a0d;color:#f97316',
-  CASH_ADVANCE_APPROVED: 'background:#0d2e2a;color:#2dd4bf',
-  CASH_ADVANCE_GIVEN:    'background:#0d2e2a;color:#2dd4bf',
-  EPAY_PROOF:            'background:#0d1a2e;color:#60a5fa',
+  ADD_STOCK:   'background:var(--ok-bg);color:var(--ok-text)',
+  EDIT_ITEM:   'background:var(--info-bg);color:var(--info-text)',
+  ADD_ITEM:    'background:var(--purple-bg);color:var(--purple-text)',
+  SALE:        'background:var(--teal-bg);color:var(--teal-text)',
+  REMITTANCE:  'background:var(--warn-bg);color:var(--warn-text)',
+  RECEIVED_COH: 'background:var(--ok-bg);color:var(--ok-text)',
+  MGR_REMIT:    'background:var(--purple-bg);color:var(--purple-text)',
+  OWNER_SEND:   'background:var(--money-bg);color:var(--money-text)',
+  SALARY_GIVEN: 'background:var(--money-bg);color:var(--money-text)',
+  EXPENSE_PAID: 'background:var(--warn-bg);color:var(--warn-text)',
+  LOGIN:        'background:var(--info-bg);color:var(--info-text)',
+  LOGOUT:       'background:var(--danger-bg);color:var(--danger-text)',
+  ORDER_VOIDED:   'background:var(--danger-bg);color:var(--danger-text)',
+  ORDER_REFUNDED: 'background:var(--warn-bg);color:var(--warn-text)',
+  CASH_ADVANCE_APPROVED: 'background:var(--teal-bg);color:var(--teal-text)',
+  CASH_ADVANCE_GIVEN:    'background:var(--teal-bg);color:var(--teal-text)',
+  EPAY_PROOF:            'background:var(--info-bg);color:var(--info-text)',
 };
 const _receiptCache = {};
 let _mgrRemitConfirm = {};
@@ -4324,8 +4395,8 @@ function renderActivityLog() {
           }).join(' &bull; ');
           if (_crId) {
             details += _mgrRemitConfirm[_crId]
-              ? ' <span class="badge" style="background:#0d2e1f;color:#10b981;margin-left:6px">&#10003; Confirmed</span>'
-              : ' <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;margin-left:6px" onclick="confirmMgrDeposit(\'' + _crId + '\',this)">&#10003; Confirm Received</button>';
+              ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text);margin-left:6px">&#10003; Confirmed</span>'
+              : ' <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;margin-left:6px" onclick="confirmMgrDeposit(\'' + _crId + '\',this)">&#10003; Confirm Received</button>';
           }
         } else if (l.action === 'OWNER_SEND' || l.action === 'SALARY_GIVEN' || l.action === 'EXPENSE_PAID') {
           const _amtColor = l.action === 'OWNER_SEND' ? '#39ff14' : '#ff3131';
@@ -4344,15 +4415,15 @@ function renderActivityLog() {
           const _amt = d.amount != null ? CUR + parseFloat(d.amount).toFixed(2) : '';
           details = `${d.method || ''} ${_amt}`.trim();
           details += d.confirmed
-            ? ' <span class="badge" style="background:#0d2e1f;color:#10b981;margin-left:6px">&#10003; Confirmed</span>'
-            : ' <button class="btn btn-sm" style="background:#facc15;color:#1a1500;font-weight:700;margin-left:6px" onclick="confirmEpayProof(\'' + l.id + '\',this)">&#10003; Confirm Received</button>';
+            ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text);margin-left:6px">&#10003; Confirmed</span>'
+            : ' <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;margin-left:6px" onclick="confirmEpayProof(\'' + l.id + '\',this)">&#10003; Confirm Received</button>';
         } else {
           details = filtered.map(([k,v]) => `${k}: ${v}`).join(', ');
         }
       }
     } catch(_) { details = l.details || ''; }
     if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: l.actor_name || '' };
-    const roleColor = l.actor_role === 'manager' ? 'background:#1a1a3a;color:#818cf8' : 'background:#0a2a1a;color:#10b981';
+    const roleColor = l.actor_role === 'manager' ? 'background:var(--purple-bg);color:var(--purple-text)' : 'background:var(--ok-bg);color:var(--ok-text)';
     const receiptCell = receiptB64
       ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:12px">&#129534; View</button>`
       : l.action === 'RECEIVED_COH'
@@ -4362,7 +4433,7 @@ function renderActivityLog() {
       <td style="color:var(--muted);white-space:nowrap">${dt}</td>
       <td style="font-weight:600">${l.actor_name || '—'}</td>
       <td><span class="badge" style="${roleColor}">${l.actor_role || '—'}</span></td>
-      <td><span class="badge" style="${l.action==='REMITTANCE'?((l.details||'').includes('Short')?'background:#2e0d0d;color:#ef4444':(l.details||'').includes('Over')?'background:#2e1a0d;color:#f97316':'background:#0d1a2e;color:#00b4d8'):actionColor[l.action]||'background:#0a1a2a;color:#8888aa'}">${actionLabel[l.action] || l.action}</span></td>
+      <td><span class="badge" style="${l.action==='REMITTANCE'?((l.details||'').includes('Short')?'background:var(--danger-bg);color:var(--danger-text)':(l.details||'').includes('Over')?'background:var(--warn-bg);color:var(--warn-text)':'background:var(--info-bg);color:var(--info-text)'):actionColor[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${actionLabel[l.action] || l.action}</span></td>
       <td>${l.target_name || '—'}</td>
       <td style="color:var(--muted);font-size:12px">${details}</td>
       <td>${receiptCell}</td>
@@ -4614,8 +4685,8 @@ async function loadMessages() {
     tbody.innerHTML = data.map(m => {
       const dt = new Date(m.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
       const readBadge = m.read
-        ? '<span class="badge" style="background:#0a2a1a;color:#10b981">&#10003; Read</span>'
-        : '<span class="badge" style="background:#2a1a0a;color:#f59e0b">Unread</span>';
+        ? '<span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003; Read</span>'
+        : '<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">Unread</span>';
       return `<tr>
         <td style="color:var(--muted);white-space:nowrap;font-size:12px">${dt}</td>
         <td style="font-weight:600">${m.to_name || m.to_username}</td>
@@ -5058,7 +5129,7 @@ function renderInv(items) {
     const unlimited=false;
     const out=!unlimited&&stock===0;
     const low=!out&&!unlimited&&stock<=thresh;
-    const badge=unlimited?'<span class="badge bg-cash">Unlimited</span>':out?'<span class="badge" style="background:#2a0a0a;color:#ef4444">Out of Stock</span>':low?`<span class="badge" style="background:#2a1a0a;color:#f59e0b">Low</span>`:'<span class="badge bg-cash">In Stock</span>';
+    const badge=unlimited?'<span class="badge bg-cash">Unlimited</span>':out?'<span class="badge" style="background:var(--danger-bg);color:var(--danger-text)">Out of Stock</span>':low?`<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">Low</span>`:'<span class="badge bg-cash">In Stock</span>';
     const _expDate = i.expiry_date ? new Date(i.expiry_date + 'T00:00:00') : null;
     const _now = new Date(); _now.setHours(0,0,0,0);
     const _daysLeft = _expDate ? Math.round((_expDate - _now) / 86400000) : null;
@@ -5067,14 +5138,14 @@ function renderInv(items) {
     const _expWarn = _daysLeft !== null && _daysLeft > 90 && _daysLeft <= 180;
     const expiryCell = _expDate
       ? (_expired
-          ? '<span style="background:#2a0505;color:#ef4444;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">EXPIRED</span>'
+          ? '<span style="background:var(--danger-bg);color:var(--danger-text);font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">EXPIRED</span>'
           : _expCrit
             ? '<span style="color:#ef4444;font-size:11px;font-weight:600">' + i.expiry_date + '<br><span style="font-size:10px">⚠ ' + _daysLeft + 'd left</span></span>'
             : _expWarn
               ? '<span style="color:#f59e0b;font-size:11px">' + i.expiry_date + '<br><span style="font-size:10px;color:var(--muted)">' + _daysLeft + 'd left</span></span>'
               : '<span style="color:var(--muted);font-size:11px">' + i.expiry_date + '</span>')
       : '<span style="color:var(--dim);font-size:11px">&#8212;</span>';
-    const promoTag = i.is_on_promo ? ' <span style="background:#1a0f00;color:#f59e0b;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle">SALE</span>' : '';
+    const promoTag = i.is_on_promo ? ' <span style="background:var(--warn-bg);color:var(--warn-text);font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle">SALE</span>' : '';
     const rs = (_expired||_expCrit) ? 'background:rgba(239,68,68,.05)' : _expWarn ? 'background:rgba(245,158,11,.03)' : out ? 'background:rgba(239,68,68,.04)' : low ? 'background:rgba(245,158,11,.04)' : '';
     return `<tr style="${rs}">
       <td style="font-family:monospace;font-size:12px;color:var(--muted)">${i.sku||'&#8212;'}</td>
@@ -5602,10 +5673,10 @@ function showConfirmModal(msg, onConfirm) {
   const d = document.createElement('div');
   d.id = '_confirmModal';
   d.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML = `<div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:24px;max-width:320px;width:100%;text-align:center">
+  d.innerHTML = `<div style="background:var(--s2);border:1px solid #333;border-radius:14px;padding:24px;max-width:320px;width:100%;text-align:center">
     <div style="font-size:14px;color:#e0e0f0;margin-bottom:20px;white-space:pre-line">${msg}</div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('_confirmModal').remove()" style="flex:1;padding:12px;background:#252540;border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="document.getElementById('_confirmModal').remove()" style="flex:1;padding:12px;background:var(--border);border:1px solid #333;color:#aaa;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
       <button id="_confirmOk" style="flex:1;padding:12px;background:#ef4444;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Confirm</button>
     </div>
   </div>`;
@@ -6205,7 +6276,7 @@ async function saveSendPay(){
   <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:right;font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;min-height:30px;overflow-x:auto;white-space:nowrap">0</div>
   <div style="display:flex;flex-direction:column;gap:6px">
     <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcClear()" style="flex:1;background:#3a1a1a;color:#ef4444">C</button>
+      <button type="button" class="calc-btn" onclick="calcClear()" style="flex:1;background:var(--danger-bg);color:var(--danger-text)">C</button>
       <button type="button" class="calc-btn" onclick="calcInput('/')" style="flex:1">&#247;</button>
       <button type="button" class="calc-btn" onclick="calcInput('*')" style="flex:1">&#215;</button>
       <button type="button" class="calc-btn" onclick="calcInput('-')" style="flex:1">&#8722;</button>

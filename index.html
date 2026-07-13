@@ -5,6 +5,12 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Build Your Store's POS in 60 Seconds</title>
+<script>
+// Applied before first paint so a saved preference doesn't flash the wrong
+// theme for a frame. No saved choice yet = leave data-theme unset, so the
+// existing @media(prefers-color-scheme:light) block keeps following the OS.
+(function(){ try { var t = localStorage.getItem('pm_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(_) {} })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -459,6 +465,7 @@ footer{background:var(--s1);border-top:1px solid var(--border);padding:44px 5vw 
     <a href="https://github.com/le0n1982/posmaker-web/releases/latest/download/POSMakerSetup.exe" target="_blank" class="btn-ghost" style="font-size:12px;padding:7px 12px;gap:5px">&#11015; Windows</a>
     <a href="https://github.com/le0n1982/posmaker-web/releases/latest/download/POSMaker-Android.apk" target="_blank" class="btn-ghost" style="font-size:12px;padding:7px 12px;gap:5px">&#11015; Android</a>
   </div>
+  <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;margin-right:4px">&#127769;</button>
   <div class="nav-btns">
     <a href="login.html" class="btn-ghost">Log in</a>
     <a href="signup.html" class="btn-cta">Get Started Free</a>
@@ -771,6 +778,23 @@ footer{background:var(--s1);border-top:1px solid var(--border);padding:44px 5vw 
 </footer>
 
 <script>
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
+
 (function() {
   const ref = new URLSearchParams(location.search).get('ref');
   if (ref) localStorage.setItem('pm_ref_code', ref);
