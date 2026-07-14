@@ -1992,9 +1992,26 @@ async function loadExpenses(period) {
     _sb.from('expenses').select('*').eq('store_id', STORE.id)
        .lte('expense_date', toDate)
        .order('expense_date', { ascending: false }),
-    _sb.from('orders').select('total').eq('store_id', STORE.id)
+    _sb.from('orders').select('id,total').eq('store_id', STORE.id)
        .gte('timestamp', fromISO).lte('timestamp', toISO)
   ]);
+
+  // Cost of goods sold for these orders — without this, "Net Profit" here
+  // was really just Revenue minus Other Expenses, silently skipping product
+  // cost entirely and overstating profit (same capital math already used
+  // in Sales Report's grandCapital).
+  let totalCapital = 0;
+  if ((orders || []).length) {
+    const orderIds = orders.map(o => o.id);
+    const { data: oItems } = await _sb.from('order_items').select('order_id,product_id,qty').in('order_id', orderIds);
+    const pids = [...new Set((oItems||[]).map(i => i.product_id).filter(Boolean))];
+    let costById = {};
+    if (pids.length) {
+      const { data: prodCosts } = await _sb.from('products').select('id,cost_price').in('id', pids);
+      (prodCosts||[]).forEach(p => { costById[p.id] = parseFloat(p.cost_price) || 0; });
+    }
+    totalCapital = (oItems||[]).reduce((s,i) => s + (costById[i.product_id] || 0) * (i.qty || 0), 0);
+  }
 
   // Pro-rate amounts based on billing cycle and selected period
   const CYCLE_LABELS = { 'one-time':'One-time', daily:'Daily', weekly:'Weekly', monthly:'Monthly' };
@@ -2014,7 +2031,7 @@ async function loadExpenses(period) {
 
   const totalExp = expList.reduce((s, e) => s + e.prorated, 0);
   const totalRev = (orders || []).reduce((s, o) => s + parseFloat(o.total || 0), 0);
-  const netProfit = totalRev - totalExp;
+  const netProfit = totalRev - totalCapital - totalExp;
 
   // Daily break-even: convert every recurring expense to its daily rate
   const dailyTarget = (rawExps || []).reduce((s, e) => {
@@ -2068,6 +2085,11 @@ async function loadExpenses(period) {
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Revenue</div>
           <div style="font-size:20px;font-weight:800;color:var(--accent)">${CUR}${totalRev.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px">from orders</div>
+        </div>
+        <div style="text-align:center;background:rgba(245,158,11,.08);border-radius:10px;padding:16px">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Capital (Cost)</div>
+          <div style="font-size:20px;font-weight:800;color:var(--warn-text)">${CUR}${totalCapital.toFixed(2)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">cost of goods sold</div>
         </div>
         <div style="text-align:center;background:rgba(229,62,62,.08);border-radius:10px;padding:16px">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Expenses</div>
