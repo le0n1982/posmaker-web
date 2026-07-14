@@ -2213,9 +2213,21 @@ async function loadCashSummary() {
   const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal;
   const purchaseTotal  = adjRows.filter(r=>r.status==='purchase').reduce((s,r)=>s+Math.abs(parseFloat(r.cash_on_hand||0)),0);
   const depositTotal   = adjRows.filter(r=>r.status==='deposit').reduce((s,r)=>s+parseFloat(r.cash_on_hand||0),0);
+  // List only the adjustment types actually present, in plain words — a
+  // static "(stock/deposit/refunds)" label was misleading when e.g. no
+  // stock was ever bought with drawer cash, just refunds.
+  const ADJ_TYPE_LABELS = { purchase: 'added stocks', deposit: 'owner deposits', coh_to_staff: 'staff cash out', refund: 'refunds' };
+  const adjTypesPresent = [...new Set(adjRows.map(r => r.status))].map(t => ADJ_TYPE_LABELS[t] || t);
 
-  // Store for modal display
+  // Store for modal display, and a structured snapshot (not just HTML) so a
+  // deposit can carry its own itemized justification with it — otherwise
+  // the owner only ever sees a lump "Deposit ₱X" with no way to see which
+  // cashier remittances / adjustments actually made up that number.
   _cashNetTotal = netTotal;
+  _cashBreakdownData = {
+    rows: confirmedRows.map(r => ({ name: r.cashier_name, date: r.shift_date, amount: parseFloat(r.cash_on_hand||0) })),
+    adjTotal, adjTypesPresent, mgrRemitTotal, netTotal
+  };
   _cashBreakdown = confirmedRows.length
     ? confirmedRows.map(r => {
         const d = r.shift_date || '';
@@ -2225,7 +2237,7 @@ async function loadCashSummary() {
           <span style="font-weight:600;color:#10b981">+&#8369;${cash.toFixed(2)}</span>
         </div>`;
       }).join('') + (adjTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px solid var(--border);margin-top:4px">
-          <span style="color:var(--muted)">Adjustments (stock/deposit/refunds)</span>
+          <span style="color:var(--muted)">Adjustments (${adjTypesPresent.join('/')})</span>
           <span style="font-weight:600;color:${adjTotal>=0?'#10b981':'#ef4444'}">${adjTotal>=0?'+':''}&#8369;${adjTotal.toFixed(2)}</span>
         </div>` : '') + (mgrRemitTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
           <span style="color:var(--muted)">Previously deposited</span>
@@ -3171,7 +3183,7 @@ init();
 
 // ── Manager Deposit to Owner ────────────────────────────────────────────────
 let _mgrDepQRPoll = null, _mgrDepQRToken = null;
-let _cashNetTotal = 0, _cashBreakdown = '';
+let _cashNetTotal = 0, _cashBreakdown = '', _cashBreakdownData = null;
 function openMgrDepositModal() {
   document.getElementById('mgrDepAmt').value = '';
   document.getElementById('mgrDepNote').value = '';
@@ -3249,7 +3261,8 @@ async function saveMgrDeposit() {
     return;
   }
   await logAction('MGR_REMIT', MGR.name, {
-    amount: amt, ...(note ? { note } : {}), ...(receiptB64 ? { receipt_b64: receiptB64 } : {}), cr_id: crRow.id
+    amount: amt, ...(note ? { note } : {}), ...(receiptB64 ? { receipt_b64: receiptB64 } : {}),
+    ...(_cashBreakdownData ? { breakdown: _cashBreakdownData } : {}), cr_id: crRow.id
   });
   closeModal('mgrDepositModal');
   loadCashSummary();

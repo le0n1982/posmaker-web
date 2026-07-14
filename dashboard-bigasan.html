@@ -4212,13 +4212,21 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
-      let receiptB64 = null;
-      try { if (l.details) receiptB64 = JSON.parse(l.details).receipt_b64 || null; } catch(_) {}
-      if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
-      if (receiptB64) return `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      if (l.action === 'RECEIVED_COH') return `<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      if (l.action === 'REMITTANCE') return `<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      return '';
+      const btns = [];
+      let receiptB64 = null, breakdown = null;
+      try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
+      if (receiptB64) {
+        _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
+        btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      }
+      if (!receiptB64 && l.action === 'RECEIVED_COH') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      if (!receiptB64 && l.action === 'REMITTANCE') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      // A deposit can have BOTH an uploaded photo (deposit slip / GCash
+      // screenshot) AND a structured breakdown of which cashier remittances
+      // made up the amount — show both when both exist, so the owner isn't
+      // stuck with just a lump "Deposit ₱X" and no way to see why.
+      if (l.action === 'MGR_REMIT' && breakdown) btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewMgrDepositBreakdown('${l.id}')" style="font-size:11px;margin-bottom:2px">&#128203; Breakdown</button>`);
+      return btns.join('');
     }).filter(Boolean).join('') || '<span style="color:var(--dim)">—</span>';
 
     return `<tr>
@@ -4725,6 +4733,69 @@ async function viewRemitReceipt(logId) {
     const a = document.createElement('a');
     a.href = png;
     a.download = 'Remit_' + (log.actor_name || 'cashier').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
+    a.click();
+  };
+  img.src = png;
+  document.getElementById('receiptMeta').textContent = '';
+  document.getElementById('receiptModal').classList.add('show');
+}
+// Renders the itemized snapshot captured at deposit time (which cashier
+// remittances + adjustments made up this deposit) as a receipt image —
+// same idea as _cohReceiptToPng, but a variable-length itemized list
+// instead of a handful of fixed fields.
+async function _mgrDepositBreakdownToPng(d, depositedBy, dateStr, amount) {
+  const ln = '─'.repeat(34);
+  const lines = ['DEPOSIT BREAKDOWN', ln, 'Deposited by: ' + depositedBy, 'Date: ' + dateStr, ln, 'CASH FROM CASHIERS'];
+  (d.rows || []).forEach(r => {
+    lines.push(`${r.name} (${r.date || '—'})`);
+    lines.push(`  ${r.amount >= 0 ? '+' : ''}${CUR||'₱'}${parseFloat(r.amount||0).toFixed(2)}`);
+  });
+  if (!d.rows || !d.rows.length) lines.push('(none)');
+  lines.push(ln);
+  if (d.adjTotal) lines.push(`Adjustments (${(d.adjTypesPresent||[]).join('/')}): ${d.adjTotal>=0?'+':''}${CUR||'₱'}${parseFloat(d.adjTotal||0).toFixed(2)}`);
+  if (d.mgrRemitTotal) lines.push(`Previously deposited: ${CUR||'₱'}${parseFloat(d.mgrRemitTotal||0).toFixed(2)}`);
+  lines.push(ln);
+  lines.push(`TOTAL DEPOSITED: ${CUR||'₱'}${parseFloat(amount||0).toFixed(2)}`);
+
+  const FS = 14, LH = 19, PAD = 16, W = 380;
+  const H = PAD * 2 + lines.length * LH;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, W, H);
+  cx.fillStyle = '#000000';
+  cx.font = FS + 'px "Courier New", Courier, monospace';
+  cx.textBaseline = 'top';
+  lines.forEach((l, i) => cx.fillText(l, PAD, PAD + i * LH));
+  return cv.toDataURL('image/png');
+}
+async function viewMgrDepositBreakdown(logId) {
+  const log = _activityLogs.find(l => l.id === logId);
+  if (!log) return;
+  let d = {};
+  try { d = log.details ? JSON.parse(log.details) : {}; } catch(_) { d = {}; }
+  if (!d.breakdown) { showToast('No breakdown recorded for this deposit.', true); return; }
+
+  const dateStr = new Date(log.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const png = await _mgrDepositBreakdownToPng(d.breakdown, log.actor_name || '—', dateStr, d.amount);
+
+  const banner     = document.getElementById('receiptStatusBanner');
+  const imgWrap    = document.getElementById('receiptImgWrap');
+  const img        = document.getElementById('receiptImg');
+  const invalidBtn = document.getElementById('receiptInvalidBtn');
+  const acceptBtn  = document.getElementById('receiptAcceptBtn');
+  const downloadBtn = document.getElementById('receiptDownloadBtn');
+
+  banner.style.display = 'none';
+  imgWrap.style.display = '';
+  invalidBtn.style.display = 'none';
+  acceptBtn.style.display = 'none';
+  downloadBtn.style.display = '';
+  downloadBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = 'DepositBreakdown_' + (log.actor_name || 'manager').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
     a.click();
   };
   img.src = png;
