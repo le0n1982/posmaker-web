@@ -597,8 +597,6 @@ input:checked + .slider:before{transform:translateX(18px)}
           <h3>&#128202; Sales Report</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
-            <button class="btn btn-ghost btn-sm"  id="rptWeekly"  onclick="loadReport('weekly')" >Weekly</button>
-            <button class="btn btn-ghost btn-sm"  id="rptMonthly" onclick="loadReport('monthly')">Monthly</button>
             <input type="hidden" id="rptFrom">
             <input type="hidden" id="rptTo">
             <div class="datepick">
@@ -3053,7 +3051,7 @@ async function loadPerformance() {
 // ── Sales Report ────────────────────────────────────────────────────────────────
 let rptData = [];
 
-let _rptAllData = [], _rptFrom = null, _rptTo = null;
+let _rptAllData = [], _rptFrom = null, _rptTo = null, _rptExpenseTotal = 0, _rptExpenseByDay = {};
 function filterReportByCashier() {
   const cashier = document.getElementById('rptCashier').value;
   rptData = cashier ? _rptAllData.filter(o => o.cashier_name === cashier) : _rptAllData;
@@ -3066,15 +3064,13 @@ async function loadReport(period) {
   if(period === 'daily') {
     from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     to   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  } else if(period === 'weekly') {
-    const day = now.getDay(); // 0=Sun
-    from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
-    to   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - day), 23, 59, 59);
-  } else if(period === 'monthly') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1);
-    to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
   } else {
-    // custom
+    // custom — also covers what used to be the Weekly/Monthly quick buttons.
+    // Those always compared a FULL nominal period's worth of expenses
+    // (e.g. a whole month's rent) against whatever partial revenue existed
+    // so far when the period wasn't finished yet, making "Monthly" look
+    // like a loss for no real reason. Picking an exact, already-complete
+    // date range here avoids that mismatch entirely.
     const f = document.getElementById('rptFrom').value;
     const t = document.getElementById('rptTo').value;
     if(!f || !t) { showToast('Select From and To dates.', true); return; }
@@ -3082,10 +3078,7 @@ async function loadReport(period) {
     to   = new Date(t + 'T23:59:59');
   }
   // highlight active period button
-  ['rptDaily','rptWeekly','rptMonthly'].forEach(id => {
-    document.getElementById(id).className = 'btn btn-ghost btn-sm';
-  });
-  if(period !== 'custom') document.getElementById('rpt' + period.charAt(0).toUpperCase() + period.slice(1)).className = 'btn btn-accent btn-sm';
+  document.getElementById('rptDaily').className = period === 'daily' ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
 
   document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;text-align:center;color:var(--muted)”><div class=”spinner” style=”width:20px;height:20px;border-width:2px;display:inline-block”></div> Loading...</div>';
 
@@ -3097,6 +3090,40 @@ async function loadReport(period) {
     .order('timestamp', {ascending: false});
 
   if(error){ document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;color:var(--danger-text)”>' + error.message + '</div>'; return; }
+
+  // Other Expenses for this exact date range, prorated to the actual number
+  // of days picked here — not a fixed 7/30-day assumption, since the old
+  // Weekly/Monthly quick buttons always compared a full nominal period's
+  // worth of expenses against whatever partial revenue existed so far,
+  // which is exactly why they were removed in favor of an explicit range.
+  const _rptViewDays = Math.max(1, Math.round((to - from) / 86400000));
+  const _rptToDate = to.toISOString().split('T')[0];
+  const _rptFromDate = from.toISOString().split('T')[0];
+  const { data: _rptRawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', _rptToDate);
+  const _RPT_CYCLE_DAYS = { daily: 1, weekly: 7, monthly: 30 };
+  _rptExpenseTotal = (_rptRawExps || []).reduce((s, e) => {
+    const cycle = e.billing_cycle || 'one-time';
+    const base = parseFloat(e.amount) || 0;
+    if (cycle === 'one-time') return (e.expense_date >= _rptFromDate && e.expense_date <= _rptToDate) ? s + base : s;
+    return s + base * (_rptViewDays / (_RPT_CYCLE_DAYS[cycle] || 30));
+  }, 0);
+  // Same totals, but split per calendar day — for the candlestick chart,
+  // each day's "cost" bar needs its own fair share of recurring expenses
+  // rather than the whole range's lump sum.
+  _rptExpenseByDay = {};
+  { let d = new Date(from); d.setHours(0,0,0,0); const endD = new Date(to); endD.setHours(0,0,0,0);
+    while (d <= endD) {
+      const key = d.toLocaleDateString('en-CA');
+      _rptExpenseByDay[key] = (_rptRawExps || []).reduce((s, e) => {
+        const cycle = e.billing_cycle || 'one-time';
+        const base = parseFloat(e.amount) || 0;
+        if (cycle === 'one-time') return e.expense_date === key ? s + base : s;
+        if (e.expense_date > key) return s;
+        return s + base / (_RPT_CYCLE_DAYS[cycle] || 30);
+      }, 0);
+      d.setDate(d.getDate() + 1);
+    }
+  }
 
   _rptAllData = data || [];
   if(_rptAllData.length) {
@@ -3162,6 +3189,19 @@ function renderReport(orders, from, to) {
     <span style=”color:var(--muted)”>${from.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})} &#8212; ${to.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</span>
   </div>`;
 
+  // Revenue vs Cost candlestick — one candle per day, green when that
+  // day's Subtotal covered its Capital + Other Expenses share, red when it
+  // didn't. Actually drawn onto the canvas after el.innerHTML is set below
+  // (a canvas needs to exist in the DOM before it can be drawn on).
+  html += `<div style=”background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:14px”>
+    <div style=”font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px”>&#128200; Daily Revenue vs Cost</div>
+    <div style=”overflow-x:auto”><canvas id=”rptCandleCanvas” style=”display:block”></canvas></div>
+    <div style=”display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--muted)”>
+      <span><span style=”display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px”></span>Revenue covered cost</span>
+      <span><span style=”display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px”></span>Cost exceeded revenue</span>
+    </div>
+  </div>`;
+
   // Per-day tables
   days.forEach(day => {
     const rows = byDay[day];
@@ -3221,7 +3261,7 @@ function renderReport(orders, from, to) {
   const grandSub = orders.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
   const grandVat = orders.reduce((s,o) => s + parseFloat(o.tax||0), 0);
   const grandCapital = orders.reduce((s,o) => s + (o._capital||0), 0);
-  const grandProfit  = grandSub - grandCapital;
+  const grandProfit  = grandSub - grandCapital - _rptExpenseTotal;
   // Cash vs E-Pay split — a Split sale's cash portion (amount_tendered)
   // counts as cash, same as the cash-drawer math elsewhere in this file;
   // everything else (GCash, GoTym, any configured e-wallet) is E-Pay.
@@ -3272,6 +3312,10 @@ function renderReport(orders, from, to) {
         <div style="font-size:14px;font-weight:800;color:var(--warn-text)">${CUR}${grandCapital.toFixed(2)}</div>
       </div>
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Other Expenses</div>
+        <div style="font-size:14px;font-weight:800;color:var(--danger-text)">${CUR}${_rptExpenseTotal.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Net Profit</div>
         <div style="font-size:14px;font-weight:800;color:${grandProfit>=0?'#10b981':'#f87171'}">${CUR}${grandProfit.toFixed(2)}</div>
       </div>
@@ -3295,6 +3339,64 @@ function renderReport(orders, from, to) {
   html += '</div>';
   el.innerHTML = `<div style="display:flex;gap:0;align-items:flex-start"><div style="flex:1;min-width:0">${html}</div><div style="width:1px;background:var(--border);margin:0 18px;align-self:stretch;flex-shrink:0"></div><div style="width:260px;flex-shrink:0;position:sticky;top:16px">${summaryHtml}</div></div>`;
   document.getElementById('rptDownload').style.display = '';
+  _drawRptCandles(days, byDay);
+}
+// One candle per day: body spans Cost (Capital + that day's share of Other
+// Expenses) to Revenue (Subtotal ex-VAT) — green when Revenue reaches Cost,
+// red when it doesn't. The thin wick shows that day's smallest/largest
+// single order, for a sense of how spread out the day's sales were.
+function _drawRptCandles(days, byDay) {
+  const cv = document.getElementById('rptCandleCanvas');
+  if (!cv) return;
+  const chronoDays = days.slice().reverse(); // oldest first, left to right
+  const n = chronoDays.length;
+  const W = Math.max(cv.parentElement.clientWidth || 600, n * 46);
+  const H = 200, PAD_T = 10, PAD_B = 34, PAD_L = 8, PAD_R = 8;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const cx = cv.getContext('2d');
+  cx.scale(dpr, dpr);
+  cx.clearRect(0, 0, W, H);
+
+  const points = chronoDays.map(day => {
+    const rows = byDay[day];
+    const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+    const capital = rows.reduce((s,o) => s + (o._capital||0), 0);
+    const expShare = _rptExpenseByDay[day] || 0;
+    const cost = capital + expShare;
+    const orderTotals = rows.map(o => parseFloat(o.total||0));
+    return { day, revenue, cost, lo: Math.min(...orderTotals, revenue, cost), hi: Math.max(...orderTotals, revenue, cost) };
+  });
+
+  const allVals = points.flatMap(p => [p.lo, p.hi, p.revenue, p.cost]).concat([0]);
+  const vMin = Math.min(...allVals), vMax = Math.max(...allVals, 1);
+  const range = (vMax - vMin) || 1;
+  const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
+
+  const slotW = (W - PAD_L - PAD_R) / n;
+  const bodyW = Math.min(26, slotW * 0.55);
+
+  // Zero/baseline gridline for orientation
+  cx.strokeStyle = 'rgba(255,255,255,.08)'; cx.lineWidth = 1;
+  cx.beginPath(); cx.moveTo(PAD_L, y(0)); cx.lineTo(W - PAD_R, y(0)); cx.stroke();
+
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    const profit = p.revenue >= p.cost;
+    const color = profit ? '#10b981' : '#ef4444';
+    // Wick
+    cx.strokeStyle = color; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.moveTo(xc, y(p.hi)); cx.lineTo(xc, y(p.lo)); cx.stroke();
+    // Body (Cost -> Revenue)
+    const yTop = y(Math.max(p.revenue, p.cost)), yBot = y(Math.min(p.revenue, p.cost));
+    cx.fillStyle = color;
+    cx.fillRect(xc - bodyW/2, yTop, bodyW, Math.max(2, yBot - yTop));
+    // Date label
+    cx.fillStyle = 'rgba(255,255,255,.5)'; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center';
+    const lbl = new Date(p.day + 'T12:00:00').toLocaleDateString('en-PH', {month:'short',day:'numeric'});
+    cx.fillText(lbl, xc, H - PAD_B + 16);
+  });
 }
 
 function downloadReport() {
