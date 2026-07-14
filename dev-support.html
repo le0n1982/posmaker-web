@@ -454,6 +454,16 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
           </select>
           <button class="btn btn-accent btn-sm" id="bugCheckBtn" onclick="runBugCheck()">&#128269; Run Check</button>
         </div>
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--muted)">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="radio" name="bugCheckScope" value="store" checked>
+            This store only
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="radio" name="bugCheckScope" value="account">
+            Whole account (all stores under this owner)
+          </label>
+        </div>
         <div id="bugCheckResults" style="margin-top:18px"></div>
       </div>
     </div>
@@ -1256,6 +1266,86 @@ BEGIN
       SELECT 1 FROM information_schema.tables t
       WHERE t.table_schema = 'public' AND t.table_name = want.tbl
     );
+END; $$;
+
+-- Same checks as dev_check_store_bugs, but scoped to the WHOLE ACCOUNT
+-- (every store owned by whoever owns p_store_id) instead of just one store —
+-- for cases like "Golden K88" x2, where the bug only shows up when you look
+-- across all of one owner's stores at once. Each finding is prefixed with
+-- which store it came from since this can span several.
+CREATE OR REPLACE FUNCTION dev_check_account_bugs(p_token text, p_store_id uuid)
+RETURNS TABLE(category text, severity text, message text, details text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_owner_id uuid;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+
+  SELECT owner_id INTO v_owner_id FROM stores WHERE id = p_store_id;
+  IF v_owner_id IS NULL THEN RETURN; END IF;
+
+  -- Duplicate store accounts for this owner
+  RETURN QUERY
+    SELECT 'Duplicate Store Accounts'::text, 'critical'::text,
+           'This account has ' || count(*) || ' store accounts (should be 1)',
+           string_agg(s.name || ' (' || s.id::text || ', created ' || s.created_at::date || ')', E'\n' ORDER BY s.created_at)
+    FROM stores s
+    WHERE s.owner_id = v_owner_id
+    GROUP BY s.owner_id
+    HAVING count(*) > 1;
+
+  -- Duplicate products, per store owned by this account
+  RETURN QUERY
+    SELECT 'Duplicate Products'::text, 'warning'::text,
+           '[' || s.name || '] Product "' || min(p.name) || '" appears ' || count(*) || ' times',
+           string_agg(p.id::text, ', ')
+    FROM products p JOIN stores s ON s.id = p.store_id
+    WHERE s.owner_id = v_owner_id
+    GROUP BY s.id, s.name, lower(trim(p.name))
+    HAVING count(*) > 1;
+
+  -- Duplicate inventory items, per store
+  RETURN QUERY
+    SELECT 'Duplicate Inventory Items'::text, 'warning'::text,
+           '[' || s.name || '] Inventory item "' || min(i.name) || '" appears ' || count(*) || ' times',
+           string_agg(i.id::text, ', ')
+    FROM inventory_items i JOIN stores s ON s.id = i.store_id
+    WHERE s.owner_id = v_owner_id
+    GROUP BY s.id, s.name, lower(trim(i.name))
+    HAVING count(*) > 1;
+
+  -- Broken inv_links, per store
+  RETURN QUERY
+    SELECT 'Broken Inventory Link'::text, 'critical'::text,
+           '[' || s.name || '] Product "' || p.name || '" links to a deleted inventory item',
+           'product id: ' || p.id::text
+    FROM products p JOIN stores s ON s.id = p.store_id,
+         LATERAL jsonb_array_elements(
+           CASE WHEN p.inv_links IS NULL OR p.inv_links = '' THEN '[]'::jsonb ELSE p.inv_links::jsonb END
+         ) AS link
+    WHERE s.owner_id = v_owner_id
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_items ii
+        WHERE ii.id = (CASE WHEN jsonb_typeof(link) = 'string' THEN trim(both '"' from link::text)::uuid ELSE (link->>'id')::uuid END)
+      );
+
+  -- Duplicate staff usernames, per store
+  RETURN QUERY
+    SELECT 'Duplicate Staff Username'::text, 'critical'::text,
+           '[' || s.name || '] Username "' || min(su.username) || '" is used by ' || count(*) || ' staff accounts',
+           string_agg(su.id::text, ', ')
+    FROM store_users su JOIN stores s ON s.id = su.store_id
+    WHERE s.owner_id = v_owner_id
+    GROUP BY s.id, s.name, lower(su.username)
+    HAVING count(*) > 1;
+
+  -- Invalid prices, per store
+  RETURN QUERY
+    SELECT 'Invalid Price'::text, 'warning'::text,
+           '[' || s.name || '] Product "' || p.name || '" has an invalid price (' || COALESCE(p.price::text, 'null') || ')',
+           'product id: ' || p.id::text
+    FROM products p JOIN stores s ON s.id = p.store_id
+    WHERE s.owner_id = v_owner_id AND (p.price IS NULL OR p.price < 0);
 END; $$;`;
 
 function showSqlSetup() {
@@ -1365,14 +1455,16 @@ async function runBugCheck() {
   const storeId = document.getElementById('bugCheckStoreSel').value;
   const resultsEl = document.getElementById('bugCheckResults');
   if (!storeId) { showToast('Select a store first.', true); return; }
+  const scope = document.querySelector('input[name="bugCheckScope"]:checked').value;
+  const fn = scope === 'account' ? 'dev_check_account_bugs' : 'dev_check_store_bugs';
   const btn = document.getElementById('bugCheckBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Checking…';
   resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Running checks…</p>';
-  const { data, error } = await _sb.rpc('dev_check_store_bugs', { p_token: _devToken, p_store_id: storeId });
+  const { data, error } = await _sb.rpc(fn, { p_token: _devToken, p_store_id: storeId });
   btn.disabled = false; btn.innerHTML = '&#128269; Run Check';
   if (error) {
     if (error.message && error.message.includes('does not exist')) {
-      resultsEl.innerHTML = '<p style="color:var(--danger);font-size:13px">The dev_check_store_bugs function isn\'t set up in Supabase yet. Run the latest setup SQL (Settings → re-copy setup SQL) in the SQL Editor, then try again.</p>';
+      resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">The ${fn} function isn't set up in Supabase yet. Run the latest setup SQL (Settings → re-copy setup SQL) in the SQL Editor, then try again.</p>`;
     } else {
       handleAuthError(error);
       resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">Error: ${esc(error.message)}</p>`;
