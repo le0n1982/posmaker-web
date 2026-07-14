@@ -645,6 +645,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
         <div class="tbl-wrap" style="width:250px;flex-shrink:0">
           <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
+          <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
           <div id="bestSellerList" style="padding:14px">Loading...</div>
         </div>
       </div>
@@ -1820,7 +1821,7 @@ function nav(id) {
   closeSidebar();
   if (id === 'dashboard') { loadDashboard(); }
   if (id === 'orders')     loadOrders();
-  if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); }
+  if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); loadBestSellers(); }
   if (id === 'inventory')  loadInventory();
   if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
@@ -3157,10 +3158,9 @@ async function loadReport(period) {
   }
 
   _rptAllData = data || [];
-  _rptItemAgg = {};
   if(_rptAllData.length) {
     const ids = _rptAllData.map(o => o.id);
-    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,price,product_id').in('order_id', ids);
+    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,product_id').in('order_id', ids);
     const imap = {};
     (items || []).forEach(i => {
       if(!imap[i.order_id]) imap[i.order_id] = [];
@@ -3176,14 +3176,6 @@ async function loadReport(period) {
     (items || []).forEach(i => {
       capMap[i.order_id] = (capMap[i.order_id] || 0) + (costById[i.product_id] || 0) * (i.qty || 0);
     });
-    // Best Sellers ranking — aggregated across the whole period, by product
-    // name (not per-order), independent of the cashier filter below.
-    (items || []).forEach(i => {
-      const key = i.name || 'Unknown';
-      if (!_rptItemAgg[key]) _rptItemAgg[key] = { qty: 0, revenue: 0 };
-      _rptItemAgg[key].qty += (i.qty || 0);
-      _rptItemAgg[key].revenue += (parseFloat(i.price) || 0) * (i.qty || 0);
-    });
     _rptAllData.forEach(o => { o._items = imap[o.id] || []; o._capital = capMap[o.id] || 0; });
   }
   _rptFrom = from; _rptTo = to;
@@ -3194,6 +3186,26 @@ async function loadReport(period) {
   if(_prev) _cs.value = _prev;
   rptData = _cs.value ? _rptAllData.filter(o => o.cashier_name === _cs.value) : _rptAllData;
   renderReport(rptData, from, to);
+}
+
+// Best Sellers — all-time since the store started, independent of the
+// Daily/Custom period filter above (so it doesn't say "no sales" just
+// because today happens to have none yet).
+async function loadBestSellers() {
+  if (!STORE?.id) return;
+  const el = document.getElementById('bestSellerList');
+  const { data: orders } = await _sb.from('orders').select('id').eq('store_id', STORE.id);
+  const ids = (orders || []).map(o => o.id);
+  _rptItemAgg = {};
+  if (ids.length) {
+    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,price').in('order_id', ids);
+    (items || []).forEach(i => {
+      const key = i.name || 'Unknown';
+      if (!_rptItemAgg[key]) _rptItemAgg[key] = { qty: 0, revenue: 0 };
+      _rptItemAgg[key].qty += (i.qty || 0);
+      _rptItemAgg[key].revenue += (parseFloat(i.price) || 0) * (i.qty || 0);
+    });
+  }
   renderBestSellers();
 }
 
@@ -3202,7 +3214,7 @@ function renderBestSellers() {
   if (!el) return;
   const list = Object.entries(_rptItemAgg).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.qty - a.qty).slice(0, 10);
   if (!list.length) {
-    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">No sales in this period.</div>';
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">No sales yet.</div>';
     return;
   }
   const maxQty = list[0].qty || 1;
