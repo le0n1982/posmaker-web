@@ -1892,7 +1892,27 @@ async function loadExpenses(period) {
     return { ...e, prorated, cycleLabel: CYCLE_LABELS[cycle] || cycle };
   }).filter(Boolean);
 
-  const totalExp = expList.reduce((s, e) => s + e.prorated, 0);
+  // Staff salary is a committed monthly cost the moment it's set on their
+  // profile — Profit Summary/Daily Target must reflect it right away, not
+  // only after someone remembers to click "Run Payroll". This doesn't
+  // create a real expenses row (nothing was actually paid out yet) and it
+  // doesn't show in the table below — it's folded into the totals only,
+  // and skipped for any staff already paid this month so a real payroll
+  // run isn't counted twice.
+  const now2 = new Date();
+  const monthStart2 = new Date(now2.getFullYear(), now2.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd2 = new Date(now2.getFullYear(), now2.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const [{ data: salaryStaff }, { data: paidThisMonth }] = await Promise.all([
+    _sb.from('store_users').select('id,full_name,username,monthly_salary')
+      .eq('store_id', STORE.id).eq('active', true).not('monthly_salary', 'is', null),
+    _sb.from('expenses').select('name').eq('store_id', STORE.id).eq('category', 'Salaries')
+      .gte('expense_date', monthStart2).lte('expense_date', monthEnd2),
+  ]);
+  const paidNames2 = new Set((paidThisMonth || []).map(e => e.name.replace(/^Salary - /, '')));
+  const unpaidSalaryStaff = (salaryStaff || []).filter(s => !paidNames2.has(s.full_name || s.username));
+  const totalUnpaidSalary = unpaidSalaryStaff.reduce((s, st) => s + (parseFloat(st.monthly_salary) || 0) * (viewDays / 30), 0);
+
+  const totalExp = expList.reduce((s, e) => s + e.prorated, 0) + totalUnpaidSalary;
   const totalRev = (orders || []).reduce((s, o) => s + parseFloat(o.total || 0), 0);
   const netProfit = totalRev - totalCapital - totalExp;
 
@@ -1904,7 +1924,7 @@ async function loadExpenses(period) {
     if (cycle === 'weekly')  return s + amt / 7;
     if (cycle === 'monthly') return s + amt / 30;
     return s;
-  }, 0);
+  }, unpaidSalaryStaff.reduce((s, st) => s + (parseFloat(st.monthly_salary) || 0) / 30, 0));
 
   if (!expList.length) {
     el.innerHTML = `<div style="padding:28px;text-align:center;color:var(--muted)">No expenses recorded for this period.<br><button class="btn btn-accent btn-sm" style="margin-top:12px" onclick="openExpenseModal()">&#43; Add First Expense</button></div>`;
@@ -1957,7 +1977,7 @@ async function loadExpenses(period) {
         <div style="text-align:center;background:rgba(229,62,62,.08);border-radius:10px;padding:16px">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Expenses</div>
           <div style="font-size:20px;font-weight:800;color:var(--danger-text)">${CUR}${totalExp.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">${expList.length} item${expList.length!==1?'s':''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">${expList.length} item${expList.length!==1?'s':''}${unpaidSalaryStaff.length ? ` + ${CUR}${totalUnpaidSalary.toFixed(2)} unpaid salary (${unpaidSalaryStaff.length})` : ''}</div>
         </div>
         <div style="text-align:center;background:${netProfit>=0?'rgba(16,185,129,.1)':'rgba(229,62,62,.1)'};border-radius:10px;padding:16px;border:1.5px solid ${netProfit>=0?'#10b981':'#e53e3e'}">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Net Profit</div>
@@ -2151,7 +2171,7 @@ async function loadPayroll() {
 
 async function runPayroll() {
   const pending = _payrollStaffCache.filter(s => !s.alreadyPaid && s.net > 0);
-  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this month.', true); return; }
+  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this month.'); return; }
   const total = pending.reduce((s, x) => s + x.net, 0);
   if (!confirm(`Run payroll for ${pending.length} staff, total ${CUR}${total.toFixed(2)}?`)) return;
 
