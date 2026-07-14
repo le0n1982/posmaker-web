@@ -69,7 +69,10 @@ button{cursor:pointer}
   <div class="mbox">
     <h3>&#128247; Take Photo</h3>
     <p id="capItemText" style="font-size:13px;color:var(--muted);margin-bottom:14px"></p>
-    <input id="capInput" type="file" accept="image/*" capture="environment" onchange="previewCapture()">
+    <label class="btn btn-accent" for="capInput" style="display:block;text-align:center;cursor:pointer;margin-bottom:8px">&#128247; Take Photo</label>
+    <input id="capInput" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewCapture(this)">
+    <label class="btn btn-ghost" for="capInputGallery" style="display:block;text-align:center;cursor:pointer;margin-bottom:14px">&#128247; Upload from Gallery</label>
+    <input id="capInputGallery" type="file" accept="image/*" style="display:none" onchange="previewCapture(this)">
     <div id="capPreviewWrap" style="display:none;text-align:center;margin-bottom:12px">
       <img id="capImg" style="max-width:100%;border-radius:8px">
     </div>
@@ -160,14 +163,15 @@ function openCapture(idx){
   const items = _opsData.checklistItems[KIND] || [];
   document.getElementById('capItemText').textContent = items[idx] || '';
   document.getElementById('capInput').value = '';
+  document.getElementById('capInputGallery').value = '';
   document.getElementById('capPreviewWrap').style.display = 'none';
   document.getElementById('capImg').src = '';
   document.getElementById('capUploadBtn').disabled = true;
   document.getElementById('captureModal').classList.add('show');
 }
 
-function previewCapture(){
-  const file = document.getElementById('capInput').files[0];
+function previewCapture(inputEl){
+  const file = inputEl.files[0];
   if(!file){
     document.getElementById('capPreviewWrap').style.display = 'none';
     document.getElementById('capUploadBtn').disabled = true;
