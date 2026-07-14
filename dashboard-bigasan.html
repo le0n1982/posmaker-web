@@ -599,10 +599,13 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
           <h3>&#128200; This Month at a Glance</h3>
           <div style="display:flex;align-items:center;gap:14px;font-size:12px">
-            <span id="candleMonthLabel" style="color:var(--muted)"></span>
             <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px"></span>Revenue (covered cost)</span>
             <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px"></span>Revenue (below cost)</span>
             <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b"></span>Cost</span>
+            <span style="width:1px;height:16px;background:var(--border)"></span>
+            <span id="candleMonthLabel" style="color:var(--muted)"></span>
+            <span style="width:1px;height:16px;background:var(--border)"></span>
+            <span id="candleProfitLabel" style="font-weight:700"></span>
           </div>
         </div>
         <div style="padding:14px">
@@ -3403,6 +3406,13 @@ async function loadCandleChart() {
     const cost = capital + (expenseByDay[key] || 0);
     const orderTotals = rows.map(o => parseFloat(o.total||0));
     points.push({ dNum, revenue, cost, lo: Math.min(...orderTotals, revenue, cost, 0), hi: Math.max(...orderTotals, revenue, cost) });
+  }
+
+  const monthProfit = points.reduce((s,p) => s + (p.revenue - p.cost), 0);
+  const profitEl = document.getElementById('candleProfitLabel');
+  if (profitEl) {
+    profitEl.textContent = (monthProfit >= 0 ? 'Profit: ' : 'Loss: ') + (CUR||'₱') + Math.abs(monthProfit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    profitEl.style.color = monthProfit >= 0 ? '#10b981' : '#ef4444';
   }
 
   _drawRptCandles(points);
