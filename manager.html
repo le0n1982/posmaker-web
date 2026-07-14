@@ -822,7 +822,6 @@ function renderInv(items){
       <td><span class="badge ${sCls}">${sTxt}</span></td>
       <td style="white-space:nowrap;display:flex;gap:4px;padding:8px">
         <button class="btn btn-accent btn-sm" data-tip="Add stock for this item." onclick="openAddStock('${i.id}')">+Add</button>
-        <button class="btn btn-ghost btn-sm" data-tip="Edit the name, category, unit, or low-stock threshold for this item." onclick="openEditItem('${i.id}')">Edit</button>
       </td>
     </tr>`;
   }).join('');
