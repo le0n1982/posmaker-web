@@ -595,50 +595,58 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
-      <div class="tbl-wrap" style="margin-bottom:16px">
-        <div class="tbl-head"><h3 id="candleTitle">&#128200; This Month at a Glance</h3>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-accent btn-sm" id="candleViewMonth" onclick="setCandleView('month')">Month</button>
-            <button class="btn btn-ghost btn-sm" id="candleViewYear" onclick="setCandleView('year')">Year</button>
-          </div>
-        </div>
-        <div style="padding:14px;display:flex;gap:0;align-items:stretch">
-          <div style="flex:1;min-width:0;overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
-          <div style="width:1px;background:var(--border);margin:0 16px;flex-shrink:0"></div>
-          <div style="width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;font-size:12px">
-            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Legend</div>
-            <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;flex-shrink:0"></span>Revenue (covered cost)</span>
-            <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;flex-shrink:0"></span>Revenue (below cost)</span>
-            <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b;flex-shrink:0"></span>Cost</span>
-            <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #a78bfa;flex-shrink:0"></span><span id="candleAvgLegendLabel">Average Sales</span></span>
-            <div style="height:1px;background:var(--border);margin:4px 0"></div>
-            <div>
-              <div id="candleMonthHeading" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sales This Month</div>
-              <div id="candleMonthLabel" style="font-weight:700;font-size:14px"></div>
+      <div style="display:flex;gap:16px;align-items:stretch">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+          <div class="tbl-wrap">
+            <div class="tbl-head"><h3 id="candleTitle">&#128200; This Month at a Glance</h3>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-accent btn-sm" id="candleViewMonth" onclick="setCandleView('month')">Month</button>
+                <button class="btn btn-ghost btn-sm" id="candleViewYear" onclick="setCandleView('year')">Year</button>
+              </div>
             </div>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Profit / Loss</div>
-              <div id="candleProfitLabel" style="font-weight:700;font-size:14px"></div>
+            <div style="padding:14px;display:flex;gap:0;align-items:stretch">
+              <div style="flex:1;min-width:0;overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
+              <div style="width:1px;background:var(--border);margin:0 16px;flex-shrink:0"></div>
+              <div style="width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;font-size:12px">
+                <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Legend</div>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;flex-shrink:0"></span>Revenue (covered cost)</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;flex-shrink:0"></span>Revenue (below cost)</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b;flex-shrink:0"></span>Cost</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #a78bfa;flex-shrink:0"></span><span id="candleAvgLegendLabel">Average Sales</span></span>
+                <div style="height:1px;background:var(--border);margin:4px 0"></div>
+                <div>
+                  <div id="candleMonthHeading" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sales This Month</div>
+                  <div id="candleMonthLabel" style="font-weight:700;font-size:14px"></div>
+                </div>
+                <div>
+                  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Profit / Loss</div>
+                  <div id="candleProfitLabel" style="font-weight:700;font-size:14px"></div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
-          <h3>&#128202; Sales Report</h3>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
-            <input type="date" id="rptFrom" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
-            <span style="color:var(--muted);font-size:13px">to</span>
-            <input type="date" id="rptTo" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
-            <button class="btn btn-ghost btn-sm" onclick="loadReport('custom')">Go</button>
-            <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
-              <option value="">All Cashiers</option>
-            </select>
-            <button class="btn btn-accent btn-sm" id="rptDownload" onclick="downloadReport()" style="display:none">&#128229; Download Excel</button>
+          <div class="tbl-wrap" style="flex:1">
+            <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
+              <h3>&#128202; Sales Report</h3>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
+                <input type="date" id="rptFrom" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+                <span style="color:var(--muted);font-size:13px">to</span>
+                <input type="date" id="rptTo" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+                <button class="btn btn-ghost btn-sm" onclick="loadReport('custom')">Go</button>
+                <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
+                  <option value="">All Cashiers</option>
+                </select>
+                <button class="btn btn-accent btn-sm" id="rptDownload" onclick="downloadReport()" style="display:none">&#128229; Download Excel</button>
+              </div>
+            </div>
+            <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
           </div>
         </div>
-        <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
+        <div class="tbl-wrap" style="width:250px;flex-shrink:0">
+          <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
+          <div id="bestSellerList" style="padding:14px">Loading...</div>
+        </div>
       </div>
     </div>
     <!-- DAILY CHECKLIST + RECIPE/SOP NOTES -->
@@ -3074,7 +3082,7 @@ async function loadPerformance() {
 // ── Sales Report ────────────────────────────────────────────────────────────────
 let rptData = [];
 
-let _rptAllData = [], _rptFrom = null, _rptTo = null, _rptExpenseTotal = 0, _rptExpenseByDay = {};
+let _rptAllData = [], _rptFrom = null, _rptTo = null, _rptExpenseTotal = 0, _rptExpenseByDay = {}, _rptItemAgg = {};
 function filterReportByCashier() {
   const cashier = document.getElementById('rptCashier').value;
   rptData = cashier ? _rptAllData.filter(o => o.cashier_name === cashier) : _rptAllData;
@@ -3149,9 +3157,10 @@ async function loadReport(period) {
   }
 
   _rptAllData = data || [];
+  _rptItemAgg = {};
   if(_rptAllData.length) {
     const ids = _rptAllData.map(o => o.id);
-    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,product_id').in('order_id', ids);
+    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,price,product_id').in('order_id', ids);
     const imap = {};
     (items || []).forEach(i => {
       if(!imap[i.order_id]) imap[i.order_id] = [];
@@ -3167,6 +3176,14 @@ async function loadReport(period) {
     (items || []).forEach(i => {
       capMap[i.order_id] = (capMap[i.order_id] || 0) + (costById[i.product_id] || 0) * (i.qty || 0);
     });
+    // Best Sellers ranking — aggregated across the whole period, by product
+    // name (not per-order), independent of the cashier filter below.
+    (items || []).forEach(i => {
+      const key = i.name || 'Unknown';
+      if (!_rptItemAgg[key]) _rptItemAgg[key] = { qty: 0, revenue: 0 };
+      _rptItemAgg[key].qty += (i.qty || 0);
+      _rptItemAgg[key].revenue += (parseFloat(i.price) || 0) * (i.qty || 0);
+    });
     _rptAllData.forEach(o => { o._items = imap[o.id] || []; o._capital = capMap[o.id] || 0; });
   }
   _rptFrom = from; _rptTo = to;
@@ -3177,6 +3194,31 @@ async function loadReport(period) {
   if(_prev) _cs.value = _prev;
   rptData = _cs.value ? _rptAllData.filter(o => o.cashier_name === _cs.value) : _rptAllData;
   renderReport(rptData, from, to);
+  renderBestSellers();
+}
+
+function renderBestSellers() {
+  const el = document.getElementById('bestSellerList');
+  if (!el) return;
+  const list = Object.entries(_rptItemAgg).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.qty - a.qty).slice(0, 10);
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">No sales in this period.</div>';
+    return;
+  }
+  const maxQty = list[0].qty || 1;
+  const medal = ['#f59e0b', '#c0c0c0', '#cd7f32'];
+  el.innerHTML = list.map((it, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div style="width:18px;flex-shrink:0;font-size:11px;font-weight:800;color:${medal[i] || 'var(--muted)'}">#${i + 1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${it.name}">${it.name}</div>
+        <div style="height:4px;background:var(--bg);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${(it.qty / maxQty * 100).toFixed(0)}%;background:var(--accent);border-radius:2px"></div></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:12px;font-weight:700">${it.qty}<span style="font-size:9px;color:var(--muted)"> sold</span></div>
+        <div style="font-size:10px;color:var(--muted)">${CUR}${it.revenue.toFixed(0)}</div>
+      </div>
+    </div>`).join('');
 }
 
 function renderReport(orders, from, to) {
