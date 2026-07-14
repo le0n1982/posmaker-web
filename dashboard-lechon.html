@@ -73,6 +73,9 @@
   --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
 }
 body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
+.rpt-date{color-scheme:dark}
+:root[data-theme="light"] .rpt-date{color-scheme:light}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .rpt-date{color-scheme:light}}
 
 /* SIDEBAR */
 .sidebar{width:220px;background:var(--sidebar-bg,var(--s1));border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
@@ -589,32 +592,59 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
-      <div class="tbl-wrap">
-        <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
-          <h3>&#128202; Sales Report</h3>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
-            <button class="btn btn-ghost btn-sm"  id="rptWeekly"  onclick="loadReport('weekly')" >Weekly</button>
-            <button class="btn btn-ghost btn-sm"  id="rptMonthly" onclick="loadReport('monthly')">Monthly</button>
-            <input type="hidden" id="rptFrom">
-            <input type="hidden" id="rptTo">
-            <div class="datepick">
-              <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpRptFrom');event.stopPropagation()"><span id="dpRptFromLabel">From</span> &#9660;</button>
-              <div class="datepick-drop" id="dpRptFromDrop" data-input="rptFrom" data-placeholder="From"></div>
+      <div style="display:flex;gap:16px;align-items:stretch">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+          <div class="tbl-wrap">
+            <div class="tbl-head"><h3 id="candleTitle">&#128200; This Month at a Glance</h3>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-accent btn-sm" id="candleViewMonth" onclick="setCandleView('month')">Month</button>
+                <button class="btn btn-ghost btn-sm" id="candleViewYear" onclick="setCandleView('year')">Year</button>
+              </div>
             </div>
-            <span style="color:var(--muted);font-size:13px">to</span>
-            <div class="datepick">
-              <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpRptTo');event.stopPropagation()"><span id="dpRptToLabel">To</span> &#9660;</button>
-              <div class="datepick-drop" id="dpRptToDrop" data-input="rptTo" data-placeholder="To"></div>
+            <div style="padding:14px;display:flex;gap:0;align-items:stretch">
+              <div style="flex:1;min-width:0;overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
+              <div style="width:1px;background:var(--border);margin:0 16px;flex-shrink:0"></div>
+              <div style="width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;font-size:12px">
+                <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Legend</div>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;flex-shrink:0"></span>Revenue (covered cost)</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;flex-shrink:0"></span>Revenue (below cost)</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b;flex-shrink:0"></span>Cost</span>
+                <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #a78bfa;flex-shrink:0"></span><span id="candleAvgLegendLabel">Average Sales</span></span>
+                <div style="height:1px;background:var(--border);margin:4px 0"></div>
+                <div>
+                  <div id="candleMonthHeading" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sales This Month</div>
+                  <div id="candleMonthLabel" style="font-weight:700;font-size:14px"></div>
+                </div>
+                <div>
+                  <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Profit / Loss</div>
+                  <div id="candleProfitLabel" style="font-weight:700;font-size:14px"></div>
+                </div>
+              </div>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="loadReport('custom')">Go</button>
-            <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
-              <option value="">All Cashiers</option>
-            </select>
-            <button class="btn btn-accent btn-sm" id="rptDownload" onclick="downloadReport()" style="display:none">&#128229; Download Excel</button>
+          </div>
+          <div class="tbl-wrap" style="flex:1">
+            <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
+              <h3>&#128202; Sales Report</h3>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
+                <input type="date" id="rptFrom" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+                <span style="color:var(--muted);font-size:13px">to</span>
+                <input type="date" id="rptTo" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+                <button class="btn btn-ghost btn-sm" onclick="loadReport('custom')">Go</button>
+                <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
+                  <option value="">All Cashiers</option>
+                </select>
+                <button class="btn btn-accent btn-sm" id="rptDownload" onclick="downloadReport()" style="display:none">&#128229; Download Excel</button>
+              </div>
+            </div>
+            <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
           </div>
         </div>
-        <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
+        <div class="tbl-wrap" style="width:250px;flex-shrink:0">
+          <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
+          <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
+          <div id="bestSellerList" style="padding:14px">Loading...</div>
+        </div>
       </div>
     </div>
     <!-- DAILY CHECKLIST + RECIPE/SOP NOTES -->
@@ -678,7 +708,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="section" id="sec-payroll">
       <div class="tbl-wrap">
         <div class="tbl-head">
-          <h3>&#128181; Payroll — This Month</h3>
+          <h3>&#128181; Payroll — Current Period</h3>
           <button class="btn btn-accent btn-sm" id="runPayrollBtn" onclick="runPayroll()">&#9654; Run Payroll</button>
         </div>
         <div id="payrollStaffList" style="padding:16px 20px">
@@ -688,9 +718,38 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div class="tbl-wrap" style="margin-top:16px">
         <div class="tbl-head"><h3>Payroll History</h3></div>
         <table>
-          <thead><tr><th>Date</th><th>Staff</th><th style="text-align:right">Amount</th><th>Notes</th></tr></thead>
-          <tbody id="payrollHistoryTbody"><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Staff</th><th style="text-align:right">C.A.</th><th style="text-align:right">Deduction</th><th style="text-align:right">Amount</th><th>Notes</th></tr></thead>
+          <tbody id="payrollHistoryTbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
+        <div style="padding:8px 20px 4px;font-size:11px;color:var(--muted)">&#128161; Click a row to see that staff's cash advance / deduction breakdown for the month.</div>
+      </div>
+    </div>
+
+    <!-- DEDUCT MODAL -->
+    <div class="modal" id="deductModal">
+      <div class="mbox" style="width:min(380px,100%)">
+        <h3>&#10134; Add Deduction</h3>
+        <p style="font-size:13px;color:var(--muted);margin:4px 0 14px">Charge <strong id="deductStaffName"></strong> for a proven loss (e.g. missing cash/stock). This will be subtracted from their next payroll.</p>
+        <input type="hidden" id="deductStaffId">
+        <div class="field"><label>Amount</label><input id="deductAmt" type="number" min="1" step="0.01" placeholder="e.g. 500"></div>
+        <div class="field"><label>Reason</label><input id="deductReason" type="text" placeholder="e.g. Short cash count, July 10"></div>
+        <div class="m-actions">
+          <button class="btn btn-ghost" onclick="closeModal('deductModal')">Cancel</button>
+          <button class="btn btn-accent" style="background:var(--danger-text)" onclick="saveDeduction()">Add Deduction</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAYROLL BREAKDOWN MODAL -->
+    <div class="modal" id="payrollBreakdownModal">
+      <div class="mbox" style="width:min(560px,100%)">
+        <h3 id="payrollBreakdownTitle">Breakdown</h3>
+        <div id="payrollBreakdownBody" style="margin-top:14px"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 4px">&#128197; Daily Time Record</div>
+        <div id="payrollDtrBody"></div>
+        <div class="m-actions">
+          <button class="btn btn-ghost" onclick="closeModal('payrollBreakdownModal')">Close</button>
+        </div>
       </div>
     </div>
 
@@ -1381,13 +1440,42 @@ input:checked + .slider:before{transform:translateX(18px)}
         <input id="sfJobDesc" type="text" placeholder="e.g. Handles daily cash and sales">
       </div>
     </div>
+    <div class="row2">
+      <div class="field">
+        <label id="sfSalaryLabel">Salary <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills Payroll)</span></label>
+        <input id="sfSalary" type="number" min="0" step="0.01" placeholder="e.g. 15000">
+      </div>
+      <div class="field">
+        <label>Pay Frequency</label>
+        <select id="sfSalaryFreq" onchange="_updateSalaryFreqLabel()">
+          <option value="monthly">Monthly</option>
+          <option value="semimonthly">Every 15 Days</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+    </div>
     <div class="field">
-      <label>Monthly Salary <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills the amount when logging a Salaries expense)</span></label>
-      <input id="sfSalary" type="number" min="0" step="0.01" placeholder="e.g. 15000">
+      <label>Mandatory Contributions <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — deducted from net pay every Payroll run)</span></label>
+      <div id="sfContribList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openContribModal()">&#43; Add Contribution</button>
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('staffModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveStaff()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CONTRIBUTION POPUP (opens on top of the Staff modal) -->
+<div class="modal" id="contribModal">
+  <div class="mbox" style="width:min(340px,100%)">
+    <h3>&#43; Add Contribution</h3>
+    <div class="field"><label>Name</label><input id="cbName" type="text" placeholder="e.g. Insurance"></div>
+    <div class="field"><label>Account Number <span style="color:var(--dim);font-weight:400;font-size:11px">(optional)</span></label><input id="cbAccount" type="text" placeholder="e.g. 03-1234567-8"></div>
+    <div class="field"><label>Deduction per month</label><input id="cbAmount" type="number" min="0" step="0.01" placeholder="e.g. 500"></div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" onclick="closeModal('contribModal')">Cancel</button>
+      <button class="btn btn-accent" onclick="saveContribution()">Add</button>
     </div>
   </div>
 </div>
@@ -1795,7 +1883,7 @@ function nav(id) {
   closeSidebar();
   if (id === 'dashboard') { loadDashboard(); }
   if (id === 'orders')     loadOrders();
-  if (id === 'salesreport') loadReport('daily');
+  if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); loadBestSellers(); }
   if (id === 'inventory')  loadInventory();
   if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
@@ -2120,48 +2208,85 @@ async function deleteExpense(id) {
 // instead of adding them one at a time. Same net-of-cash-advance logic as
 // the single-staff flow in onExpStaffChange().
 let _payrollStaffCache = [];
+
+// Pay-period boundaries per frequency — "already paid" now checks against
+// THIS boundary instead of always the whole calendar month, since a weekly
+// or every-15-days staff member can legitimately be paid more than once a
+// month without that being a duplicate.
+function _payPeriodRange(freq, ref) {
+  const d = ref || new Date();
+  if (freq === 'weekly') {
+    const dayNr = (d.getDay() + 6) % 7; // 0=Mon..6=Sun
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayNr);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  }
+  if (freq === 'semimonthly') {
+    if (d.getDate() <= 15) {
+      return { start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth(), 15).toISOString().slice(0, 10) };
+    }
+    return { start: new Date(d.getFullYear(), d.getMonth(), 16).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10) };
+  }
+  return { start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10) };
+}
+
 async function loadPayroll() {
   const listEl = document.getElementById('payrollStaffList');
   listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>';
 
   const { data: staff } = await _sb.from('store_users')
-    .select('id,username,full_name,role,monthly_salary').eq('store_id', STORE.id).eq('active', true)
-    .not('monthly_salary', 'is', null).order('role').order('username');
+    .select('id,username,full_name,role,monthly_salary,salary_frequency,mandatory_contributions')
+    .eq('store_id', STORE.id).eq('active', true).not('monthly_salary', 'is', null).order('role').order('username');
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-
-  const { data: paidThisMonth } = await _sb.from('expenses')
-    .select('name').eq('store_id', STORE.id).eq('category', 'Salaries')
-    .gte('expense_date', monthStart).lte('expense_date', monthEnd);
-  const paidNames = new Set((paidThisMonth || []).map(e => e.name.replace(/^Salary - /, '')));
+  // Widest possible period is a calendar month, so a 40-day lookback covers
+  // weekly/semimonthly/monthly "already paid this period" checks for all of them.
+  const lookback = new Date(); lookback.setDate(lookback.getDate() - 40);
+  const { data: recentSalaryExp } = await _sb.from('expenses')
+    .select('name,expense_date').eq('store_id', STORE.id).eq('category', 'Salaries')
+    .gte('expense_date', lookback.toISOString().slice(0, 10));
 
   const { data: advances } = await _sb.from('cash_advances')
     .select('staff_id,amount').eq('store_id', STORE.id).in('status', ['approved', 'disbursed']);
   const advByStaff = {};
   (advances || []).forEach(a => { advByStaff[a.staff_id] = (advByStaff[a.staff_id] || 0) + parseFloat(a.amount || 0); });
 
+  const { data: deductions } = await _sb.from('staff_deductions')
+    .select('staff_id,amount').eq('store_id', STORE.id).eq('status', 'pending');
+  const dedByStaff = {};
+  (deductions || []).forEach(d => { dedByStaff[d.staff_id] = (dedByStaff[d.staff_id] || 0) + parseFloat(d.amount || 0); });
+
   _payrollStaffCache = (staff || []).map(s => {
     const name = s.full_name || s.username;
     const base = parseFloat(s.monthly_salary) || 0;
     const advance = advByStaff[s.id] || 0;
-    const net = Math.max(0, base - advance);
-    return { id: s.id, name, role: s.role, base, advance, net, alreadyPaid: paidNames.has(name) };
+    const deduction = dedByStaff[s.id] || 0;
+    const contributions = Array.isArray(s.mandatory_contributions) ? s.mandatory_contributions : [];
+    const contribTotal = contributions.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+    const freq = s.salary_frequency || 'monthly';
+    const period = _payPeriodRange(freq);
+    const alreadyPaid = (recentSalaryExp || []).some(e => e.name === 'Salary - ' + name && e.expense_date >= period.start && e.expense_date <= period.end);
+    const net = Math.max(0, base - advance - deduction - contribTotal);
+    return { id: s.id, name, role: s.role, base, advance, deduction, contributions, contribTotal, freq, net, alreadyPaid };
   });
 
   if (!_payrollStaffCache.length) {
-    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No staff with a monthly salary set yet. Set one in Staff &rarr; Edit.</div>';
+    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No staff with a salary set yet. Set one in Staff &rarr; Edit.</div>';
   } else {
+    const freqLabel = f => f === 'weekly' ? 'Weekly' : f === 'semimonthly' ? 'Every 15 Days' : 'Monthly';
     listEl.innerHTML = _payrollStaffCache.map(s => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
-          <strong>${s.name}</strong> <span style="font-size:10px;color:var(--muted);text-transform:capitalize">${s.role}</span>
+          <strong>${s.name}</strong> <span style="font-size:10px;color:var(--muted);text-transform:capitalize">${s.role}</span> <span style="font-size:10px;color:var(--accent);background:rgba(0,180,216,.12);padding:1px 6px;border-radius:4px">${freqLabel(s.freq)}</span>
           ${s.advance > 0 ? `<div style="font-size:11px;color:var(--warn-text);margin-top:2px">Base ${CUR}${s.base.toFixed(2)} &minus; ${CUR}${s.advance.toFixed(2)} cash advance</div>` : ''}
+          ${s.deduction > 0 ? `<div style="font-size:11px;color:var(--danger-text);margin-top:2px">&minus; ${CUR}${s.deduction.toFixed(2)} deduction</div>` : ''}
+          ${s.contribTotal > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">&minus; ${CUR}${s.contribTotal.toFixed(2)} ${s.contributions.map(c => c.name).join(', ')}</div>` : ''}
         </div>
-        <div style="text-align:right">
-          <div style="font-weight:700">${CUR}${s.net.toFixed(2)}</div>
-          <div style="font-size:10px;color:${s.alreadyPaid ? '#10b981' : 'var(--muted)'}">${s.alreadyPaid ? '&#10003; Paid this month' : 'Pending'}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="openDeductModal('${s.id}','${s.name.replace(/'/g,"\\'")}')">&minus; Deduct</button>
+          <div style="text-align:right">
+            <div style="font-weight:700">${CUR}${s.net.toFixed(2)}</div>
+            <div style="font-size:10px;color:${s.alreadyPaid ? '#10b981' : 'var(--muted)'}">${s.alreadyPaid ? '&#10003; Paid this period' : 'Pending'}</div>
+          </div>
         </div>
       </div>`).join('');
   }
@@ -2169,29 +2294,69 @@ async function loadPayroll() {
   loadPayrollHistory();
 }
 
+function openDeductModal(staffId, staffName) {
+  document.getElementById('deductStaffId').value = staffId;
+  document.getElementById('deductStaffName').textContent = staffName;
+  document.getElementById('deductAmt').value = '';
+  document.getElementById('deductReason').value = '';
+  document.getElementById('deductModal').classList.add('show');
+}
+
+async function saveDeduction() {
+  const staffId = document.getElementById('deductStaffId').value;
+  const staffName = document.getElementById('deductStaffName').textContent;
+  const amt = parseFloat(document.getElementById('deductAmt').value);
+  const reason = document.getElementById('deductReason').value.trim();
+  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
+  if (!reason) { showToast('Enter a reason for this deduction.', true); return; }
+  const { error } = await _sb.from('staff_deductions').insert({
+    store_id: STORE.id, staff_id: staffId, staff_name: staffName, amount: amt, reason, status: 'pending'
+  });
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  closeModal('deductModal');
+  showToast('Deduction added — will be applied on next payroll run.');
+  loadPayroll();
+}
+
 async function runPayroll() {
   const pending = _payrollStaffCache.filter(s => !s.alreadyPaid && s.net > 0);
-  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this month.'); return; }
+  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this period.'); return; }
   const total = pending.reduce((s, x) => s + x.net, 0);
   if (!confirm(`Run payroll for ${pending.length} staff, total ${CUR}${total.toFixed(2)}?`)) return;
 
   const btn = document.getElementById('runPayrollBtn');
   btn.disabled = true; btn.textContent = 'Running...';
   const today = new Date().toISOString().split('T')[0];
+  const nowIso = new Date().toISOString();
   const advanceIdsToSettle = [];
+  const deductionIdsToSettle = [];
 
   for (const s of pending) {
+    const deductedParts = [];
+    if (s.advance > 0) deductedParts.push(`${CUR}${s.advance.toFixed(2)} cash advance`);
+    if (s.deduction > 0) deductedParts.push(`${CUR}${s.deduction.toFixed(2)} deduction`);
+    (s.contributions || []).forEach(c => { if (parseFloat(c.amount) > 0) deductedParts.push(`${CUR}${parseFloat(c.amount).toFixed(2)} ${c.name}`); });
     await _sb.from('expenses').insert({
-      store_id: STORE.id, name: 'Salary - ' + s.name, amount: s.net, billing_cycle: 'monthly',
+      // one-time, not 'monthly' — this row is an actual realized payment for
+      // this specific run, not an ongoing recurring bill like rent, so the
+      // Other Expenses proration in Sales Report shouldn't keep re-counting
+      // it as still-active every period going forward.
+      store_id: STORE.id, name: 'Salary - ' + s.name, amount: s.net, billing_cycle: 'one-time',
       category: 'Salaries', expense_date: today,
-      notes: s.advance > 0 ? `Base ${CUR}${s.base.toFixed(2)} − ${CUR}${s.advance.toFixed(2)} cash advance` : ''
+      notes: deductedParts.length ? `Base ${CUR}${s.base.toFixed(2)} − ${deductedParts.join(' − ')}` : ''
     });
     const { data: advRows } = await _sb.from('cash_advances')
       .select('id').eq('store_id', STORE.id).eq('staff_id', s.id).in('status', ['approved', 'disbursed']);
     (advRows || []).forEach(r => advanceIdsToSettle.push(r.id));
+    const { data: dedRows } = await _sb.from('staff_deductions')
+      .select('id').eq('store_id', STORE.id).eq('staff_id', s.id).eq('status', 'pending');
+    (dedRows || []).forEach(r => deductionIdsToSettle.push(r.id));
   }
   if (advanceIdsToSettle.length) {
-    await _sb.from('cash_advances').update({ status: 'settled', settled_at: new Date().toISOString() }).in('id', advanceIdsToSettle);
+    await _sb.from('cash_advances').update({ status: 'settled', settled_at: nowIso }).in('id', advanceIdsToSettle);
+  }
+  if (deductionIdsToSettle.length) {
+    await _sb.from('staff_deductions').update({ status: 'settled', settled_at: nowIso }).in('id', deductionIdsToSettle);
   }
 
   btn.disabled = false; btn.textContent = '▶ Run Payroll';
@@ -2204,13 +2369,174 @@ async function loadPayrollHistory() {
   const tbody = document.getElementById('payrollHistoryTbody');
   const { data } = await _sb.from('expenses').select('*').eq('store_id', STORE.id).eq('category', 'Salaries')
     .order('expense_date', { ascending: false }).limit(100);
-  if (!data?.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">No payroll history yet.</td></tr>'; return; }
-  tbody.innerHTML = data.map(e => `<tr>
+  if (!data?.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No payroll history yet.</td></tr>'; return; }
+
+  // C.A. / Deduction totals per row — matched by staff name + the exact day
+  // they were settled, since runPayroll() settles both the same moment it
+  // creates the Salary expense, so the dates always line up.
+  const { data: settledAdv } = await _sb.from('cash_advances').select('staff_name,amount,settled_at').eq('store_id', STORE.id).eq('status', 'settled');
+  const { data: settledDed } = await _sb.from('staff_deductions').select('staff_name,amount,settled_at').eq('store_id', STORE.id).eq('status', 'settled');
+  const rowKey = (name, date) => name + '|' + date;
+  const advByKey = {};
+  (settledAdv || []).forEach(a => { if (!a.settled_at) return; const k = rowKey(a.staff_name, a.settled_at.slice(0, 10)); advByKey[k] = (advByKey[k] || 0) + parseFloat(a.amount || 0); });
+  const dedByKey = {};
+  (settledDed || []).forEach(a => { if (!a.settled_at) return; const k = rowKey(a.staff_name, a.settled_at.slice(0, 10)); dedByKey[k] = (dedByKey[k] || 0) + parseFloat(a.amount || 0); });
+
+  tbody.innerHTML = data.map(e => {
+    const staffName = e.name.replace(/^Salary - /, '');
+    const k = rowKey(staffName, e.expense_date);
+    const ca = advByKey[k] || 0;
+    const ded = dedByKey[k] || 0;
+    return `<tr style="cursor:pointer" onclick="viewPayrollBreakdown('${staffName.replace(/'/g, "\\'")}','${e.expense_date}')">
     <td>${e.expense_date}</td>
-    <td>${e.name.replace(/^Salary - /, '')}</td>
+    <td>${staffName}</td>
+    <td style="text-align:right;color:${ca > 0 ? 'var(--warn-text)' : 'var(--muted)'}">${ca > 0 ? CUR + ca.toFixed(2) : '—'}</td>
+    <td style="text-align:right;color:${ded > 0 ? 'var(--danger-text)' : 'var(--muted)'}">${ded > 0 ? CUR + ded.toFixed(2) : '—'}</td>
     <td style="text-align:right;font-weight:700">${CUR}${parseFloat(e.amount).toFixed(2)}</td>
     <td style="color:var(--muted);font-size:12px">${e.notes || ''}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
+}
+
+// Clicking a Payroll History row shows the WHOLE month's cash advance and
+// deduction activity for that staff, by date — not just the amount that
+// happened to be settled on this one payroll run, since the owner asked
+// to see "which date is the C.A. or the Deduction" across the month.
+async function viewPayrollBreakdown(staffName, expenseDate) {
+  const d = new Date(expenseDate + 'T00:00:00');
+  const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const [{ data: advRows }, { data: dedRows }] = await Promise.all([
+    _sb.from('cash_advances').select('amount,created_at').eq('store_id', STORE.id).eq('staff_name', staffName)
+      .gte('created_at', monthStart).lte('created_at', monthEnd + 'T23:59:59'),
+    _sb.from('staff_deductions').select('amount,created_at,reason').eq('store_id', STORE.id).eq('staff_name', staffName)
+      .gte('created_at', monthStart).lte('created_at', monthEnd + 'T23:59:59')
+  ]);
+
+  const rows = [
+    ...(advRows || []).map(a => ({ date: a.created_at, type: 'Cash Advance', amount: parseFloat(a.amount || 0), note: '' })),
+    ...(dedRows || []).map(a => ({ date: a.created_at, type: 'Deduction', amount: parseFloat(a.amount || 0), note: a.reason || '' }))
+  ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const caTotal  = rows.filter(r => r.type === 'Cash Advance').reduce((s, r) => s + r.amount, 0);
+  const dedTotal = rows.filter(r => r.type === 'Deduction').reduce((s, r) => s + r.amount, 0);
+  const monthLabel = d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+
+  document.getElementById('payrollBreakdownTitle').textContent = `${staffName} — ${monthLabel}`;
+  const body = document.getElementById('payrollBreakdownBody');
+  if (!rows.length) {
+    body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No cash advances or deductions this month.</div>';
+  } else {
+    body.innerHTML = `
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted)">Total Cash Advance</div>
+          <div style="font-size:16px;font-weight:800;color:var(--warn-text)">${CUR}${caTotal.toFixed(2)}</div>
+        </div>
+        <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted)">Total Deductions</div>
+          <div style="font-size:16px;font-weight:800;color:var(--danger-text)">${CUR}${dedTotal.toFixed(2)}</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--muted);font-size:10px;text-transform:uppercase">
+          <th style="text-align:left;padding:6px 4px">Date</th>
+          <th style="text-align:left;padding:6px 4px">Type</th>
+          <th style="text-align:left;padding:6px 4px">Note</th>
+          <th style="text-align:right;padding:6px 4px">Amount</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px 4px">${new Date(r.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</td>
+          <td style="padding:6px 4px"><span style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;background:${r.type === 'Cash Advance' ? 'rgba(245,158,11,.15)' : 'rgba(239,68,68,.15)'};color:${r.type === 'Cash Advance' ? 'var(--warn-text)' : 'var(--danger-text)'}">${r.type}</span></td>
+          <td style="padding:6px 4px;color:var(--muted)">${r.note || '—'}</td>
+          <td style="padding:6px 4px;text-align:right;font-weight:700">${CUR}${r.amount.toFixed(2)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  await _renderPayrollDtr(staffName, d, monthStart, monthEnd);
+  document.getElementById('payrollBreakdownModal').classList.add('show');
+}
+
+// Daily Time Record — one row per calendar day of the payroll month (1
+// through the last day), Time In / Time Out pulled the same way the
+// Login History tab does it (staff_logs for login, LOGOUT activity_logs
+// for logout), so a day with no login still shows as a blank/absent row
+// instead of just disappearing.
+async function _resolvePayrollStaffId(staffName) {
+  const cached = (_payrollStaffCache || []).find(s => s.name === staffName);
+  if (cached) return cached.id;
+  const { data } = await _sb.from('store_users').select('id').eq('store_id', STORE.id).eq('full_name', staffName).limit(1);
+  return data && data[0] ? data[0].id : null;
+}
+async function _renderPayrollDtr(staffName, monthDate, monthStart, monthEnd) {
+  const dtrEl = document.getElementById('payrollDtrBody');
+  dtrEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">Loading...</div>';
+  const staffId = await _resolvePayrollStaffId(staffName);
+  if (!staffId) {
+    dtrEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">No login records found for this staff.</div>';
+    return;
+  }
+  const [{ data: logins }, { data: logouts }] = await Promise.all([
+    _sb.from('staff_logs').select('login_at').eq('staff_id', staffId)
+      .gte('login_at', monthStart + 'T00:00:00').lte('login_at', monthEnd + 'T23:59:59').order('login_at', { ascending: true }),
+    _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', staffName).eq('action', 'LOGOUT')
+      .gte('created_at', monthStart + 'T00:00:00').lte('created_at', monthEnd + 'T23:59:59').order('created_at', { ascending: true })
+  ]);
+  const loginsByDay = {};
+  (logins || []).forEach(l => { const k = new Date(l.login_at).toLocaleDateString('en-CA'); (loginsByDay[k] ||= []).push(l.login_at); });
+  const logoutsByDay = {};
+  (logouts || []).forEach(l => { const k = new Date(l.created_at).toLocaleDateString('en-CA'); (logoutsByDay[k] ||= []).push(l.created_at); });
+
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  let rowsHtml = '', totalHours = 0, presentDays = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dayDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
+    const key = dayDate.toLocaleDateString('en-CA');
+    const dayLogins = loginsByDay[key] || [];
+    const dayLogouts = logoutsByDay[key] || [];
+    const timeIn = dayLogins[0];
+    const timeOut = dayLogouts[dayLogouts.length - 1];
+    let hoursLabel = '—';
+    if (timeIn && timeOut && new Date(timeOut) > new Date(timeIn)) {
+      const h = (new Date(timeOut) - new Date(timeIn)) / 3600000;
+      hoursLabel = h.toFixed(1) + 'h';
+      totalHours += h;
+    }
+    if (timeIn) presentDays++;
+    const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+    rowsHtml += `<tr style="${!timeIn ? 'opacity:.4' : ''}${isWeekend ? ';background:rgba(255,255,255,.03)' : ''}">
+      <td style="padding:5px 6px">${day}</td>
+      <td style="padding:5px 6px;color:var(--muted)">${dayDate.toLocaleDateString('en-PH', { weekday: 'short' })}</td>
+      <td style="padding:5px 6px">${timeIn ? new Date(timeIn).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td style="padding:5px 6px">${timeOut ? new Date(timeOut).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td style="padding:5px 6px;text-align:right">${hoursLabel}</td>
+    </tr>`;
+  }
+  dtrEl.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted)">Days Present</div>
+        <div style="font-size:16px;font-weight:800">${presentDays} / ${daysInMonth}</div>
+      </div>
+      <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted)">Total Hours</div>
+        <div style="font-size:16px;font-weight:800">${totalHours.toFixed(1)}h</div>
+      </div>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead style="position:sticky;top:0;background:var(--s2)"><tr style="color:var(--muted);font-size:10px;text-transform:uppercase">
+          <th style="text-align:left;padding:6px">Day</th>
+          <th style="text-align:left;padding:6px"></th>
+          <th style="text-align:left;padding:6px">Time In</th>
+          <th style="text-align:left;padding:6px">Time Out</th>
+          <th style="text-align:right;padding:6px">Hours</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
 }
 
 // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -3071,7 +3397,7 @@ async function loadPerformance() {
 // ── Sales Report ────────────────────────────────────────────────────────────────
 let rptData = [];
 
-let _rptAllData = [], _rptFrom = null, _rptTo = null;
+let _rptAllData = [], _rptFrom = null, _rptTo = null, _rptExpenseTotal = 0, _rptExpenseByDay = {}, _rptItemAgg = {};
 function filterReportByCashier() {
   const cashier = document.getElementById('rptCashier').value;
   rptData = cashier ? _rptAllData.filter(o => o.cashier_name === cashier) : _rptAllData;
@@ -3084,15 +3410,13 @@ async function loadReport(period) {
   if(period === 'daily') {
     from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     to   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  } else if(period === 'weekly') {
-    const day = now.getDay(); // 0=Sun
-    from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
-    to   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - day), 23, 59, 59);
-  } else if(period === 'monthly') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1);
-    to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
   } else {
-    // custom
+    // custom — also covers what used to be the Weekly/Monthly quick buttons.
+    // Those always compared a FULL nominal period's worth of expenses
+    // (e.g. a whole month's rent) against whatever partial revenue existed
+    // so far when the period wasn't finished yet, making "Monthly" look
+    // like a loss for no real reason. Picking an exact, already-complete
+    // date range here avoids that mismatch entirely.
     const f = document.getElementById('rptFrom').value;
     const t = document.getElementById('rptTo').value;
     if(!f || !t) { showToast('Select From and To dates.', true); return; }
@@ -3100,10 +3424,7 @@ async function loadReport(period) {
     to   = new Date(t + 'T23:59:59');
   }
   // highlight active period button
-  ['rptDaily','rptWeekly','rptMonthly'].forEach(id => {
-    document.getElementById(id).className = 'btn btn-ghost btn-sm';
-  });
-  if(period !== 'custom') document.getElementById('rpt' + period.charAt(0).toUpperCase() + period.slice(1)).className = 'btn btn-accent btn-sm';
+  document.getElementById('rptDaily').className = period === 'daily' ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
 
   document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;text-align:center;color:var(--muted)”><div class=”spinner” style=”width:20px;height:20px;border-width:2px;display:inline-block”></div> Loading...</div>';
 
@@ -3115,6 +3436,40 @@ async function loadReport(period) {
     .order('timestamp', {ascending: false});
 
   if(error){ document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;color:var(--danger-text)”>' + error.message + '</div>'; return; }
+
+  // Other Expenses for this exact date range, prorated to the actual number
+  // of days picked here — not a fixed 7/30-day assumption, since the old
+  // Weekly/Monthly quick buttons always compared a full nominal period's
+  // worth of expenses against whatever partial revenue existed so far,
+  // which is exactly why they were removed in favor of an explicit range.
+  const _rptViewDays = Math.max(1, Math.round((to - from) / 86400000));
+  const _rptToDate = to.toISOString().split('T')[0];
+  const _rptFromDate = from.toISOString().split('T')[0];
+  const { data: _rptRawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', _rptToDate);
+  const _RPT_CYCLE_DAYS = { daily: 1, weekly: 7, monthly: 30 };
+  _rptExpenseTotal = (_rptRawExps || []).reduce((s, e) => {
+    const cycle = e.billing_cycle || 'one-time';
+    const base = parseFloat(e.amount) || 0;
+    if (cycle === 'one-time') return (e.expense_date >= _rptFromDate && e.expense_date <= _rptToDate) ? s + base : s;
+    return s + base * (_rptViewDays / (_RPT_CYCLE_DAYS[cycle] || 30));
+  }, 0);
+  // Same totals, but split per calendar day — for the candlestick chart,
+  // each day's "cost" bar needs its own fair share of recurring expenses
+  // rather than the whole range's lump sum.
+  _rptExpenseByDay = {};
+  { let d = new Date(from); d.setHours(0,0,0,0); const endD = new Date(to); endD.setHours(0,0,0,0);
+    while (d <= endD) {
+      const key = d.toLocaleDateString('en-CA');
+      _rptExpenseByDay[key] = (_rptRawExps || []).reduce((s, e) => {
+        const cycle = e.billing_cycle || 'one-time';
+        const base = parseFloat(e.amount) || 0;
+        if (cycle === 'one-time') return e.expense_date === key ? s + base : s;
+        if (e.expense_date > key) return s;
+        return s + base / (_RPT_CYCLE_DAYS[cycle] || 30);
+      }, 0);
+      d.setDate(d.getDate() + 1);
+    }
+  }
 
   _rptAllData = data || [];
   if(_rptAllData.length) {
@@ -3145,6 +3500,51 @@ async function loadReport(period) {
   if(_prev) _cs.value = _prev;
   rptData = _cs.value ? _rptAllData.filter(o => o.cashier_name === _cs.value) : _rptAllData;
   renderReport(rptData, from, to);
+}
+
+// Best Sellers — all-time since the store started, independent of the
+// Daily/Custom period filter above (so it doesn't say "no sales" just
+// because today happens to have none yet).
+async function loadBestSellers() {
+  if (!STORE?.id) return;
+  const el = document.getElementById('bestSellerList');
+  const { data: orders } = await _sb.from('orders').select('id').eq('store_id', STORE.id);
+  const ids = (orders || []).map(o => o.id);
+  _rptItemAgg = {};
+  if (ids.length) {
+    const { data: items } = await _sb.from('order_items').select('order_id,name,qty,price').in('order_id', ids);
+    (items || []).forEach(i => {
+      const key = i.name || 'Unknown';
+      if (!_rptItemAgg[key]) _rptItemAgg[key] = { qty: 0, revenue: 0 };
+      _rptItemAgg[key].qty += (i.qty || 0);
+      _rptItemAgg[key].revenue += (parseFloat(i.price) || 0) * (i.qty || 0);
+    });
+  }
+  renderBestSellers();
+}
+
+function renderBestSellers() {
+  const el = document.getElementById('bestSellerList');
+  if (!el) return;
+  const list = Object.entries(_rptItemAgg).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.qty - a.qty).slice(0, 10);
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">No sales yet.</div>';
+    return;
+  }
+  const maxQty = list[0].qty || 1;
+  const medal = ['#f59e0b', '#c0c0c0', '#cd7f32'];
+  el.innerHTML = list.map((it, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div style="width:18px;flex-shrink:0;font-size:11px;font-weight:800;color:${medal[i] || 'var(--muted)'}">#${i + 1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${it.name}">${it.name}</div>
+        <div style="height:4px;background:var(--bg);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${(it.qty / maxQty * 100).toFixed(0)}%;background:var(--accent);border-radius:2px"></div></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:12px;font-weight:700">${it.qty}<span style="font-size:9px;color:var(--muted)"> sold</span></div>
+        <div style="font-size:10px;color:var(--muted)">${CUR}${it.revenue.toFixed(0)}</div>
+      </div>
+    </div>`).join('');
 }
 
 function renderReport(orders, from, to) {
@@ -3202,7 +3602,7 @@ function renderReport(orders, from, to) {
           <th style=”text-align:right;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>Sub</th>
           <th style=”text-align:right;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>VAT</th>
           <th style=”text-align:right;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>Total</th>
-          <th style=”text-align:center;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>Type</th>
+          ${RESTAURANT_BIZ.has(STORE.business_type) ? `<th style=”text-align:center;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>Type</th>` : ''}
           <th style=”text-align:center;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px”>Method</th>
         </tr></thead>
         <tbody>
@@ -3218,7 +3618,7 @@ function renderReport(orders, from, to) {
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;font-weight:700;color:var(--accent)">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
-            <td style="padding:5px 10px;text-align:center"><span style="background:${otBg};color:${otColor};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${otype}</span></td>
+            ${RESTAURANT_BIZ.has(STORE.business_type) ? `<td style="padding:5px 10px;text-align:center"><span style="background:${otBg};color:${otColor};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${otype}</span></td>` : ''}
             <td style="padding:5px 10px;text-align:center"><span style="background:${payBg(o.payment_method)};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px">${o.payment_method||'Cash'}</span></td>
           </tr>`;}).join('')}
         </tbody>
@@ -3239,9 +3639,16 @@ function renderReport(orders, from, to) {
   const grandSub = orders.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
   const grandVat = orders.reduce((s,o) => s + parseFloat(o.tax||0), 0);
   const grandCapital = orders.reduce((s,o) => s + (o._capital||0), 0);
-  const grandProfit  = grandSub - grandCapital;
-  // Cash vs E-Pay split for the summary panel below.
-  const grandCash = orders.reduce((s,o) => (o.payment_method || 'Cash') === 'Cash' ? s + parseFloat(o.total||0) : s, 0);
+  const grandProfit  = grandSub - grandCapital - _rptExpenseTotal;
+  // Cash vs E-Pay split — a Split sale's cash portion (amount_tendered)
+  // counts as cash, same as the cash-drawer math elsewhere in this file;
+  // everything else (GCash, GoTym, any configured e-wallet) is E-Pay.
+  const grandCash = orders.reduce((s,o) => {
+    const pm = o.payment_method || 'Cash';
+    if (pm === 'Cash') return s + parseFloat(o.total||0);
+    if (pm === 'Split') return s + parseFloat(o.amount_tendered||0);
+    return s;
+  }, 0);
   const grandEpay = grandTotal - grandCash;
 
   // Order type breakdown
@@ -3283,6 +3690,10 @@ function renderReport(orders, from, to) {
         <div style="font-size:14px;font-weight:800;color:var(--warn-text)">${CUR}${grandCapital.toFixed(2)}</div>
       </div>
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Other Expenses</div>
+        <div style="font-size:14px;font-weight:800;color:var(--danger-text)">${CUR}${_rptExpenseTotal.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Net Profit</div>
         <div style="font-size:14px;font-weight:800;color:${grandProfit>=0?'#10b981':'#f87171'}">${CUR}${grandProfit.toFixed(2)}</div>
       </div>
@@ -3306,6 +3717,189 @@ function renderReport(orders, from, to) {
   html += '</div>';
   el.innerHTML = `<div style="display:flex;gap:0;align-items:flex-start"><div style="flex:1;min-width:0">${html}</div><div style="width:1px;background:var(--border);margin:0 18px;align-self:stretch;flex-shrink:0"></div><div style="width:260px;flex-shrink:0;position:sticky;top:16px">${summaryHtml}</div></div>`;
   document.getElementById('rptDownload').style.display = '';
+}
+// "This Month/Year at a Glance" — independent of the Daily/Custom report
+// filter below, so the owner always has a trend visible. Month view: one
+// bar per calendar day (1st through today). Year view: one bar per month
+// (Jan through the current month). Bar height = Revenue (Subtotal ex-VAT),
+// green when it covered that period's Cost (Capital + its Other Expenses
+// share), red when it didn't. Periods with zero orders still get a slot (a
+// flat ₱0 bar) so gaps are visible, not just the periods that had sales.
+let _candleView = 'month';
+function setCandleView(view) {
+  _candleView = view;
+  document.getElementById('candleViewMonth').className = view === 'month' ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('candleViewYear').className  = view === 'year'  ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
+  loadCandleChart();
+}
+async function loadCandleChart() {
+  if (!STORE?.id) return;
+  const now = new Date();
+  const isYear = _candleView === 'year';
+  const rangeStart = isYear ? new Date(now.getFullYear(), 0, 1) : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  document.getElementById('candleTitle').innerHTML = isYear ? '&#128200; This Year at a Glance' : '&#128200; This Month at a Glance';
+  document.getElementById('candleMonthHeading').textContent = isYear ? 'Sales This Year' : 'Sales This Month';
+  document.getElementById('candleAvgLegendLabel').textContent = isYear ? 'Average Monthly Sales' : 'Average Daily Sales';
+  const labelEl = document.getElementById('candleMonthLabel');
+
+  const { data: orders } = await _sb.from('orders')
+    .select('id,timestamp,subtotal,total')
+    .eq('store_id', STORE.id)
+    .gte('timestamp', rangeStart.toISOString())
+    .lte('timestamp', now.toISOString());
+
+  const totalSales = (orders || []).reduce((s,o) => s + parseFloat(o.total||0), 0);
+  if (labelEl) labelEl.textContent = (CUR||'₱') + totalSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Bucket key: 'YYYY-MM-DD' for month view, 'YYYY-MM' for year view
+  const bucketKey = ts => isYear ? new Date(ts).toLocaleDateString('en-CA').slice(0,7) : new Date(ts).toLocaleDateString('en-CA');
+  const byBucket = {};
+  (orders || []).forEach(o => { (byBucket[bucketKey(o.timestamp)] ||= []).push(o); });
+
+  // Capital per order, same product cost_price lookup used elsewhere
+  let capById = {};
+  if (orders && orders.length) {
+    const ids = orders.map(o => o.id);
+    const { data: items } = await _sb.from('order_items').select('order_id,product_id,qty').in('order_id', ids);
+    const pids = [...new Set((items||[]).map(i => i.product_id).filter(Boolean))];
+    let costById = {};
+    if (pids.length) {
+      const { data: prodCosts } = await _sb.from('products').select('id,cost_price').in('id', pids);
+      (prodCosts||[]).forEach(p => { costById[p.id] = parseFloat(p.cost_price) || 0; });
+    }
+    (items||[]).forEach(i => { capById[i.order_id] = (capById[i.order_id]||0) + (costById[i.product_id]||0) * (i.qty||0); });
+  }
+
+  // Other Expenses, prorated to each bucket (day or month) — same logic as the report
+  const rangeEndStr = isYear ? new Date(now.getFullYear(), 11, 31).toLocaleDateString('en-CA') : new Date(now.getFullYear(), now.getMonth()+1, 0).toLocaleDateString('en-CA');
+  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', rangeEndStr);
+  const CYCLE_DAYS_C = { daily: 1, weekly: 7, monthly: 30 };
+  function expenseForBucket(bucketStartStr, bucketEndStr, bucketDays) {
+    return (rawExps || []).reduce((s, e) => {
+      const cycle = e.billing_cycle || 'one-time';
+      const base = parseFloat(e.amount) || 0;
+      if (cycle === 'one-time') return (e.expense_date >= bucketStartStr && e.expense_date <= bucketEndStr) ? s + base : s;
+      if (e.expense_date > bucketEndStr) return s;
+      return s + base * (bucketDays / (CYCLE_DAYS_C[cycle] || 30));
+    }, 0);
+  }
+
+  const points = [];
+  if (isYear) {
+    const lastMonth = now.getMonth(); // 0-based, current month is the last one shown
+    const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (let m = 0; m <= lastMonth; m++) {
+      const key = `${now.getFullYear()}-${String(m+1).padStart(2,'0')}`;
+      const bStart = new Date(now.getFullYear(), m, 1).toLocaleDateString('en-CA');
+      const bEnd = new Date(now.getFullYear(), m+1, 0).toLocaleDateString('en-CA');
+      const bDays = new Date(now.getFullYear(), m+1, 0).getDate();
+      const rows = byBucket[key] || [];
+      const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+      const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
+      const cost = capital + expenseForBucket(bStart, bEnd, bDays);
+      points.push({ label: MN[m], revenue, cost });
+    }
+  } else {
+    for (let dNum = 1; dNum <= now.getDate(); dNum++) {
+      const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
+      const rows = byBucket[key] || [];
+      const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+      const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
+      const cost = capital + expenseForBucket(key, key, 1);
+      points.push({ label: String(dNum), revenue, cost });
+    }
+  }
+
+  const totalProfit = points.reduce((s,p) => s + (p.revenue - p.cost), 0);
+  const profitEl = document.getElementById('candleProfitLabel');
+  if (profitEl) {
+    profitEl.textContent = (totalProfit >= 0 ? 'Profit: ' : 'Loss: ') + (CUR||'₱') + Math.abs(totalProfit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    profitEl.style.color = totalProfit >= 0 ? '#10b981' : '#ef4444';
+  }
+
+  const avgRevenue = points.length ? points.reduce((s,p) => s + p.revenue, 0) / points.length : 0;
+  _drawRptCandles(points, avgRevenue);
+}
+function _drawRptCandles(points, avgRevenue) {
+  const cv = document.getElementById('rptCandleCanvas');
+  if (!cv) return;
+  // Canvas drawing can't use CSS variables directly — read the current
+  // theme's actual colors so the chart doesn't render invisible white
+  // text/gridlines on a light-mode (white) background.
+  const rootStyle = getComputedStyle(document.documentElement);
+  const textColor = (rootStyle.getPropertyValue('--muted').trim()) || '#8888aa';
+  const gridColor = (rootStyle.getPropertyValue('--border').trim()) || '#252540';
+
+  const n = points.length;
+  const PAD_T = 10, PAD_B = 26, PAD_L = 60, PAD_R = 10;
+  const W = Math.max(cv.parentElement.clientWidth || 600, PAD_L + PAD_R + n * 28);
+  const H = 220;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const cx = cv.getContext('2d');
+  cx.scale(dpr, dpr);
+  cx.clearRect(0, 0, W, H);
+
+  const allVals = points.flatMap(p => [p.revenue, p.cost]).concat([0, avgRevenue||0]);
+  const vMin = 0, vMax = Math.max(...allVals, 1);
+  const range = (vMax - vMin) || 1;
+  const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
+
+  // Y-axis gridlines + peso labels (left side)
+  const steps = 4;
+  cx.font = '10px Inter, sans-serif'; cx.textAlign = 'right'; cx.textBaseline = 'middle';
+  for (let i = 0; i <= steps; i++) {
+    const v = vMin + (range * i / steps);
+    const yy = y(v);
+    cx.strokeStyle = gridColor; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(PAD_L, yy); cx.lineTo(W - PAD_R, yy); cx.stroke();
+    cx.fillStyle = textColor;
+    cx.fillText((CUR||'₱') + Math.round(v).toLocaleString(), PAD_L - 8, yy);
+  }
+
+  const slotW = (W - PAD_L - PAD_R) / n;
+  const barW = Math.min(20, slotW * 0.55);
+
+  // Revenue bars — solid, from baseline (₱0) up to that period's revenue.
+  // Green when it covered Cost, red when it didn't. Every period gets a
+  // bar (even ₱0 ones, drawn as a thin sliver) so gaps are visible rather
+  // than just missing.
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    const profit = p.revenue >= p.cost;
+    const color = profit ? '#10b981' : '#ef4444';
+    const yTop = y(p.revenue);
+    cx.fillStyle = color;
+    cx.fillRect(xc - barW/2, yTop, barW, Math.max(2, y(0) - yTop));
+    cx.fillStyle = textColor; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic';
+    cx.fillText(p.label, xc, H - PAD_B + 16);
+  });
+
+  // Cost trend line, overlaid on the same ₱ scale
+  cx.strokeStyle = '#f59e0b'; cx.lineWidth = 2; cx.beginPath();
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    const yy = y(p.cost);
+    if (i === 0) cx.moveTo(xc, yy); else cx.lineTo(xc, yy);
+  });
+  cx.stroke();
+  cx.fillStyle = '#f59e0b';
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    cx.beginPath(); cx.arc(xc, y(p.cost), 2.5, 0, Math.PI*2); cx.fill();
+  });
+
+  // Average Sales reference line — dashed, spans the full chart width
+  if (avgRevenue > 0) {
+    const yy = y(avgRevenue);
+    cx.save();
+    cx.setLineDash([5, 4]);
+    cx.strokeStyle = '#a78bfa'; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.moveTo(PAD_L, yy); cx.lineTo(W - PAD_R, yy); cx.stroke();
+    cx.restore();
+  }
 }
 
 function downloadReport() {
@@ -4266,9 +4860,56 @@ function openStaffModal(s) {
   document.getElementById('sfJobTitle').value = s ? (s.job_title || '') : '';
   document.getElementById('sfJobDesc').value  = s ? (s.job_description || '') : '';
   document.getElementById('sfSalary').value   = s && s.monthly_salary != null ? s.monthly_salary : '';
+  document.getElementById('sfSalaryFreq').value = s && s.salary_frequency ? s.salary_frequency : 'monthly';
+  _sfContributions = (s && Array.isArray(s.mandatory_contributions)) ? JSON.parse(JSON.stringify(s.mandatory_contributions)) : [];
+  renderSfContribList();
+  _updateSalaryFreqLabel();
   document.getElementById('sfUser').disabled = !!s;
   document.getElementById('staffModal').classList.add('show');
   setTimeout(() => document.getElementById(s ? 'sfName' : 'sfUser').focus(), 50);
+}
+function _updateSalaryFreqLabel() {
+  const freq = document.getElementById('sfSalaryFreq').value;
+  const text = freq === 'weekly' ? 'Weekly Salary' : freq === 'semimonthly' ? 'Salary (Every 15 Days)' : 'Monthly Salary';
+  document.getElementById('sfSalaryLabel').innerHTML = `${text} <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills Payroll)</span>`;
+}
+
+// Mandatory contributions — an open-ended list (SSS, PhilHealth, insurance,
+// anything the owner names) staged in memory while the Staff modal is open,
+// then saved as one JSON array on the staff row.
+let _sfContributions = [];
+function renderSfContribList() {
+  const el = document.getElementById('sfContribList');
+  if (!_sfContributions.length) { el.innerHTML = '<div style="font-size:12px;color:var(--dim)">No contributions added yet.</div>'; return; }
+  el.innerHTML = _sfContributions.map((c, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:8px;padding:8px 12px">
+      <span style="font-size:13px">${c.name}${c.accountNumber ? `<br><span style="font-size:11px;color:var(--muted)">Acct # ${c.accountNumber}</span>` : ''}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;font-weight:700">${CUR}${parseFloat(c.amount || 0).toFixed(2)}</span>
+        <button type="button" onclick="removeContribution(${i})" style="background:transparent;border:none;color:var(--danger-text);cursor:pointer;font-size:15px;line-height:1;padding:0">&times;</button>
+      </div>
+    </div>`).join('');
+}
+function openContribModal() {
+  document.getElementById('cbName').value = '';
+  document.getElementById('cbAccount').value = '';
+  document.getElementById('cbAmount').value = '';
+  document.getElementById('contribModal').classList.add('show');
+  setTimeout(() => document.getElementById('cbName').focus(), 50);
+}
+function saveContribution() {
+  const name = document.getElementById('cbName').value.trim();
+  const accountNumber = document.getElementById('cbAccount').value.trim();
+  const amount = parseFloat(document.getElementById('cbAmount').value);
+  if (!name) { showToast('Enter a name for this contribution.', true); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
+  _sfContributions.push({ name, accountNumber: accountNumber || null, amount });
+  renderSfContribList();
+  closeModal('contribModal');
+}
+function removeContribution(i) {
+  _sfContributions.splice(i, 1);
+  renderSfContribList();
 }
 async function saveStaff() {
   const id   = document.getElementById('staffId').value;
@@ -4284,7 +4925,11 @@ async function saveStaff() {
   const jobDesc  = document.getElementById('sfJobDesc').value.trim();
   const salaryVal = document.getElementById('sfSalary').value;
   const salary = salaryVal !== '' ? parseFloat(salaryVal) : null;
-  let payload = { full_name: name, role, active, job_title: jobTitle || null, job_description: jobDesc || null, monthly_salary: salary };
+  const salaryFreq = document.getElementById('sfSalaryFreq').value;
+  let payload = {
+    full_name: name, role, active, job_title: jobTitle || null, job_description: jobDesc || null,
+    monthly_salary: salary, salary_frequency: salaryFreq, mandatory_contributions: _sfContributions
+  };
   if (pw) payload.password_hash = await sha256(pw);
   if (id) {
     await _sb.from('store_users').update(payload).eq('id', id);
