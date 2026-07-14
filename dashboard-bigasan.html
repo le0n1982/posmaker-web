@@ -3180,6 +3180,16 @@ function renderReport(orders, from, to) {
   const grandVat = orders.reduce((s,o) => s + parseFloat(o.tax||0), 0);
   const grandCapital = orders.reduce((s,o) => s + (o._capital||0), 0);
   const grandProfit  = grandSub - grandCapital;
+  // Cash vs E-Pay split — a Split sale's cash portion (amount_tendered)
+  // counts as cash, same as the cash-drawer math elsewhere in this file;
+  // everything else (GCash, GoTym, any configured e-wallet) is E-Pay.
+  const grandCash = orders.reduce((s,o) => {
+    const pm = o.payment_method || 'Cash';
+    if (pm === 'Cash') return s + parseFloat(o.total||0);
+    if (pm === 'Split') return s + parseFloat(o.amount_tendered||0);
+    return s;
+  }, 0);
+  const grandEpay = grandTotal - grandCash;
 
   // Order type breakdown
   const typeGroups = {};
@@ -3222,6 +3232,14 @@ function renderReport(orders, from, to) {
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Net Profit</div>
         <div style="font-size:14px;font-weight:800;color:${grandProfit>=0?'#10b981':'#f87171'}">${CUR}${grandProfit.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--ok-bg);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--ok-text);margin-bottom:3px">&#128181; Cash</div>
+        <div style="font-size:14px;font-weight:800;color:var(--ok-text)">${CUR}${grandCash.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--purple-bg);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--purple-text);margin-bottom:3px">&#128241; E-Pay</div>
+        <div style="font-size:14px;font-weight:800;color:var(--purple-text)">${CUR}${grandEpay.toFixed(2)}</div>
       </div>
       <div style="background:linear-gradient(135deg,#003d4d,#00263a);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;grid-column:1/-1">
         <div style="font-size:10px;color:var(--accent);margin-bottom:3px">GRAND TOTAL</div>
