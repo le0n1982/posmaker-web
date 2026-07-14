@@ -73,6 +73,9 @@
   --page-bg:linear-gradient(160deg,#eef2f9 0%,#f6f8fc 45%,#eef4fa 100%);--sidebar-bg:linear-gradient(180deg,#f7f9fc,#eef1f8);
 }
 body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',sans-serif;display:flex;height:100dvh;overflow:hidden}
+.rpt-date{color-scheme:dark}
+:root[data-theme="light"] .rpt-date{color-scheme:light}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .rpt-date{color-scheme:light}}
 
 /* SIDEBAR */
 .sidebar{width:220px;background:var(--sidebar-bg,var(--s1));border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100dvh;overflow-y:auto}
@@ -597,17 +600,9 @@ input:checked + .slider:before{transform:translateX(18px)}
           <h3>&#128202; Sales Report</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <button class="btn btn-accent btn-sm" id="rptDaily"   onclick="loadReport('daily')"  >Daily</button>
-            <input type="hidden" id="rptFrom">
-            <input type="hidden" id="rptTo">
-            <div class="datepick">
-              <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpRptFrom');event.stopPropagation()"><span id="dpRptFromLabel">From</span> &#9660;</button>
-              <div class="datepick-drop" id="dpRptFromDrop" data-input="rptFrom" data-placeholder="From"></div>
-            </div>
+            <input type="date" id="rptFrom" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
             <span style="color:var(--muted);font-size:13px">to</span>
-            <div class="datepick">
-              <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpRptTo');event.stopPropagation()"><span id="dpRptToLabel">To</span> &#9660;</button>
-              <div class="datepick-drop" id="dpRptToDrop" data-input="rptTo" data-placeholder="To"></div>
-            </div>
+            <input type="date" id="rptTo" class="rpt-date" style="padding:5px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none">
             <button class="btn btn-ghost btn-sm" onclick="loadReport('custom')">Go</button>
             <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
               <option value="">All Cashiers</option>
