@@ -4122,7 +4122,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
     : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
 
-  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }] = await Promise.all([
+  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }, { data: cohData }] = await Promise.all([
     _sb.from('staff_logs').select('login_at').eq('staff_id', staffId).gte('login_at', fromISO).order('login_at', { ascending: true }),
     _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'LOGOUT').gte('created_at', fromISO).order('created_at', { ascending: true }),
     isCashier ? _sb.from('cash_remittances').select('created_at,cash_on_hand').eq('store_id', STORE.id).eq('cashier_name', displayName).gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
@@ -4136,11 +4136,19 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     _sb.from('activity_logs').select('id,action,details,created_at')
       .eq('store_id', STORE.id).eq('target_name', displayName).in('action', ['CASH_ADVANCE_APPROVED', 'CASH_ADVANCE_GIVEN'])
       .gte('created_at', fromISO).order('created_at', { ascending: true }),
+    // Same idea for RECEIVED_COH — it's logged against whichever manager
+    // confirmed it (actor_name), with the cashier as target_name, so a
+    // cashier viewing their OWN log needs this separate lookup to see that
+    // their remittance was actually received, not just that they sent it.
+    isCashier ? _sb.from('activity_logs').select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('target_name', displayName).eq('action', 'RECEIVED_COH')
+      .gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
   ]);
   const remits = remitRes.data || [];
   const loginTimes = (logins || []).map(l => l.login_at);
   const logoutTimes = (logoutData || []).map(l => l.created_at);
-  const actLogs = (actData || []).concat(caData || []);
+  const actLogs = (actData || []).concat(caData || []).concat(cohData || [])
+    .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
 
   // Live running total for an open (still logged-in, not yet logged out)
   // shift — sum of unremitted Cash orders, so the owner sees the current
@@ -4224,13 +4232,21 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
-      let receiptB64 = null;
-      try { if (l.details) receiptB64 = JSON.parse(l.details).receipt_b64 || null; } catch(_) {}
-      if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
-      if (receiptB64) return `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      if (l.action === 'RECEIVED_COH') return `<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      if (l.action === 'REMITTANCE') return `<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
-      return '';
+      const btns = [];
+      let receiptB64 = null, breakdown = null;
+      try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
+      if (receiptB64) {
+        _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
+        btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      }
+      if (!receiptB64 && l.action === 'RECEIVED_COH') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      if (!receiptB64 && l.action === 'REMITTANCE') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+      // A deposit can have BOTH an uploaded photo (deposit slip / GCash
+      // screenshot) AND a structured breakdown of which cashier remittances
+      // made up the amount — show both when both exist, so the owner isn't
+      // stuck with just a lump "Deposit ₱X" and no way to see why.
+      if (l.action === 'MGR_REMIT' && breakdown) btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewMgrDepositBreakdown('${l.id}')" style="font-size:11px;margin-bottom:2px">&#128203; Breakdown</button>`);
+      return btns.join('');
     }).filter(Boolean).join('') || '<span style="color:var(--dim)">—</span>';
 
     return `<tr>
@@ -4706,6 +4722,69 @@ async function viewRemitReceipt(logId) {
     const a = document.createElement('a');
     a.href = png;
     a.download = 'Remit_' + (log.actor_name || 'cashier').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
+    a.click();
+  };
+  img.src = png;
+  document.getElementById('receiptMeta').textContent = '';
+  document.getElementById('receiptModal').classList.add('show');
+}
+// Renders the itemized snapshot captured at deposit time (which cashier
+// remittances + adjustments made up this deposit) as a receipt image —
+// same idea as _cohReceiptToPng, but a variable-length itemized list
+// instead of a handful of fixed fields.
+async function _mgrDepositBreakdownToPng(d, depositedBy, dateStr, amount) {
+  const ln = '─'.repeat(34);
+  const lines = ['DEPOSIT BREAKDOWN', ln, 'Deposited by: ' + depositedBy, 'Date: ' + dateStr, ln, 'CASH FROM CASHIERS'];
+  (d.rows || []).forEach(r => {
+    lines.push(`${r.name} (${r.date || '—'})`);
+    lines.push(`  ${r.amount >= 0 ? '+' : ''}${CUR||'₱'}${parseFloat(r.amount||0).toFixed(2)}`);
+  });
+  if (!d.rows || !d.rows.length) lines.push('(none)');
+  lines.push(ln);
+  if (d.adjTotal) lines.push(`Adjustments (${(d.adjTypesPresent||[]).join('/')}): ${d.adjTotal>=0?'+':''}${CUR||'₱'}${parseFloat(d.adjTotal||0).toFixed(2)}`);
+  if (d.mgrRemitTotal) lines.push(`Previously deposited: ${CUR||'₱'}${parseFloat(d.mgrRemitTotal||0).toFixed(2)}`);
+  lines.push(ln);
+  lines.push(`TOTAL DEPOSITED: ${CUR||'₱'}${parseFloat(amount||0).toFixed(2)}`);
+
+  const FS = 14, LH = 19, PAD = 16, W = 380;
+  const H = PAD * 2 + lines.length * LH;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, W, H);
+  cx.fillStyle = '#000000';
+  cx.font = FS + 'px "Courier New", Courier, monospace';
+  cx.textBaseline = 'top';
+  lines.forEach((l, i) => cx.fillText(l, PAD, PAD + i * LH));
+  return cv.toDataURL('image/png');
+}
+async function viewMgrDepositBreakdown(logId) {
+  const log = _activityLogs.find(l => l.id === logId);
+  if (!log) return;
+  let d = {};
+  try { d = log.details ? JSON.parse(log.details) : {}; } catch(_) { d = {}; }
+  if (!d.breakdown) { showToast('No breakdown recorded for this deposit.', true); return; }
+
+  const dateStr = new Date(log.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const png = await _mgrDepositBreakdownToPng(d.breakdown, log.actor_name || '—', dateStr, d.amount);
+
+  const banner     = document.getElementById('receiptStatusBanner');
+  const imgWrap    = document.getElementById('receiptImgWrap');
+  const img        = document.getElementById('receiptImg');
+  const invalidBtn = document.getElementById('receiptInvalidBtn');
+  const acceptBtn  = document.getElementById('receiptAcceptBtn');
+  const downloadBtn = document.getElementById('receiptDownloadBtn');
+
+  banner.style.display = 'none';
+  imgWrap.style.display = '';
+  invalidBtn.style.display = 'none';
+  acceptBtn.style.display = 'none';
+  downloadBtn.style.display = '';
+  downloadBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = 'DepositBreakdown_' + (log.actor_name || 'manager').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
     a.click();
   };
   img.src = png;
@@ -5548,12 +5627,11 @@ async function saveInvItem(){
   if(!name){showToast('Item name is required.',true);return;}
   if(!cat){showToast('Please select a category.',true);return;}
   if(!sku) sku=genAutoSku(cat, invItems);
-  const piecesPerUnit=parseFloat(document.getElementById('invPiecesPerUnit').value)||0;
-  if(piecesPerUnit>1){
-    stock=stock*piecesPerUnit;
-    cost=cost/piecesPerUnit;
-    unit='pcs';
-  }
+  // "How many pcs in 1 [unit]?" (invPiecesPerUnit) is informational only —
+  // its live preview already shows the pcs-total math. It used to also
+  // silently force Unit to "pcs" and rewrite Stock Qty on save, overriding
+  // whatever unit (e.g. "bag") the owner explicitly chose in the dropdown.
+  // The owner's Unit selection is now always respected as-is.
   const imgData=_invPendingImgs.length>0?JSON.stringify(_invPendingImgs):null;
   const _expiry = document.getElementById('invExpiry').value || null;
   const _onPromo = document.getElementById('invOnPromo').checked;
