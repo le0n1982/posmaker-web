@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="favicon.ico">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>POSMaker — Face Scan</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="js/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/store-plan.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
+@media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4}}
+:root[data-theme="dark"]{--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
+:root[data-theme="light"]{--bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100dvh}
+.logo{font-size:18px;font-weight:800}.logo span{color:var(--accent)}
+.wrap{max-width:480px;margin:0 auto;padding:16px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.btn{padding:10px 18px;border-radius:8px;border:none;font-weight:600;cursor:pointer;font-size:14px;font-family:'Inter',sans-serif;transition:.15s;width:100%;margin-bottom:8px}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-ghost:hover{background:var(--s2)}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;transition:opacity .3s;pointer-events:none;opacity:0}
+.cam-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:70vh}
+.cam-wrap video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+.cam-wrap canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div class="logo">POS<span>Maker</span></div>
+      <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
+    </div>
+    <div id="pageTitle" style="font-weight:800;font-size:16px">Face Scan</div>
+    <div id="pageSub" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
+  </div>
+  <div class="card" id="camCard" style="text-align:center;padding:12px;display:none">
+    <div class="cam-wrap">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div id="scanStatus" style="margin-top:12px;font-size:13px;color:var(--muted)">Loading face recognition&hellip;</div>
+  </div>
+  <div id="mainContent"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+const {createClient} = supabase;
+const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
+
+const _params = new URLSearchParams(location.search);
+const SID   = _params.get('sid');
+const TOKEN = _params.get('token');
+const MODE  = _params.get('mode'); // 'enroll' | 'recognize_in' | 'recognize_out'
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+const MATCH_THRESHOLD = 0.5;
+const STABLE_FRAMES_NEEDED = 8;
+
+let _stream = null, _done = false, _busy = false, _stableCount = 0;
+
+function showError(msg) {
+  document.getElementById('camCard').style.display = 'none';
+  document.getElementById('mainContent').innerHTML = `<div class="card" style="text-align:center;color:#ef4444;font-size:13px">${msg}</div>`;
+}
+
+async function init() {
+  if (!SID || !TOKEN || !MODE) { showError('Invalid link.'); return; }
+  _OPS_STORE_ID = SID;
+  await loadOpsData();
+  const session = _opsData.faceSessions && _opsData.faceSessions[TOKEN];
+  if (!session || Date.now() - session.created > 10 * 60 * 1000) {
+    showError('Expired or invalid link &#8212; ask for a new QR code.');
+    return;
+  }
+  document.getElementById('pageTitle').textContent =
+    MODE === 'enroll' ? 'Register Face' : (MODE === 'recognize_in' ? 'Time In' : 'Time Out');
+  document.getElementById('pageSub').textContent =
+    MODE === 'enroll' ? 'Look at the camera to register your face.' : 'Look at the camera to confirm your identity.';
+  document.getElementById('camCard').style.display = '';
+
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+    ]);
+  } catch (e) {
+    showError('Could not load face recognition. Check your internet connection and try again.');
+    return;
+  }
+
+  try {
+    _stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+  } catch (e) {
+    showError('Camera access is required for face scan. Please allow camera permission and reload.');
+    return;
+  }
+  const video = document.getElementById('video');
+  video.srcObject = _stream;
+  await new Promise(r => { video.onloadedmetadata = r; });
+
+  document.getElementById('scanStatus').textContent = 'Position your face in the frame…';
+  detectLoop();
+}
+
+async function detectLoop() {
+  if (_done) return;
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('overlay');
+  if (video.readyState === 4 && !_busy) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const result = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks().withFaceDescriptor();
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (result) {
+      _stableCount++;
+      faceapi.draw.drawDetections(canvas, [result.detection]);
+      document.getElementById('scanStatus').textContent = 'Face detected — hold still…';
+      if (_stableCount >= STABLE_FRAMES_NEEDED) {
+        _busy = true;
+        await handleCapture(result.descriptor);
+        _busy = false;
+      }
+    } else {
+      _stableCount = 0;
+      document.getElementById('scanStatus').textContent = 'Position your face in the frame…';
+    }
+  }
+  if (!_done) requestAnimationFrame(detectLoop);
+}
+
+async function handleCapture(descriptor) {
+  if (MODE === 'enroll') {
+    await refreshOpsData();
+    if (!_opsData.faceSessions[TOKEN]) return; // token cleared/expired mid-scan
+    _opsData.faceSessions[TOKEN].status = 'done';
+    _opsData.faceSessions[TOKEN].descriptor = Array.from(descriptor);
+    await saveOpsData();
+    finish('&#9989; Face registered! You can close this page.');
+    return;
+  }
+
+  // recognize_in / recognize_out — compare against every enrolled, active
+  // staff member in this store and take the closest match under threshold.
+  const { data: staff } = await _sb.from('store_users')
+    .select('id,username,full_name,role,face_descriptor')
+    .eq('store_id', SID).eq('active', true).not('face_descriptor', 'is', null);
+  let best = null, bestDist = Infinity;
+  (staff || []).forEach(s => {
+    if (!Array.isArray(s.face_descriptor) || !s.face_descriptor.length) return;
+    const dist = faceapi.euclideanDistance(descriptor, new Float32Array(s.face_descriptor));
+    if (dist < bestDist) { bestDist = dist; best = s; }
+  });
+
+  if (best && bestDist < MATCH_THRESHOLD) {
+    await refreshOpsData();
+    if (!_opsData.faceSessions[TOKEN]) return;
+    _opsData.faceSessions[TOKEN].status = 'done';
+    _opsData.faceSessions[TOKEN].matchedStaffId = best.id;
+    _opsData.faceSessions[TOKEN].matchedName = best.full_name || best.username;
+    _opsData.faceSessions[TOKEN].matchedUsername = best.username;
+    _opsData.faceSessions[TOKEN].matchedRole = best.role;
+    _opsData.faceSessions[TOKEN].distance = bestDist;
+    await saveOpsData();
+    finish(`&#9989; Recognized: ${(best.full_name || best.username)}. You can close this page.`);
+  } else {
+    document.getElementById('scanStatus').textContent = "Not recognized — reposition and try again, or ask your manager for help.";
+    _stableCount = 0;
+  }
+}
+
+function finish(msg) {
+  _done = true;
+  if (_stream) _stream.getTracks().forEach(t => t.stop());
+  document.getElementById('camCard').style.display = 'none';
+  document.getElementById('mainContent').innerHTML = `<div class="card" style="text-align:center;color:#10b981;font-size:15px;font-weight:700;padding:24px">${msg}</div>`;
+}
+
+init();
+</script>
+</body>
+</html>

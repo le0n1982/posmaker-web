@@ -122,6 +122,7 @@ async function loadOpsData() {
   if (!_opsData.checklistPhotos) _opsData.checklistPhotos = {};
   if (!_opsData.checklistCaptureTokens) _opsData.checklistCaptureTokens = {};
   if (!_opsData.sopNotes) _opsData.sopNotes = [];
+  if (!_opsData.faceSessions) _opsData.faceSessions = {};
   if (_pruneOldChecklistPhotos()) await saveOpsData();
   return _opsData;
 }
@@ -178,7 +179,39 @@ function _pruneOldChecklistPhotos() {
       }
     }
   }
+  if (_opsData.faceSessions) {
+    const now = Date.now();
+    for (const token of Object.keys(_opsData.faceSessions)) {
+      const s = _opsData.faceSessions[token];
+      // Short expiry (10 min) — face scan is a live, in-person action (staff
+      // physically at the counter scanning a freshly-shown QR), not something
+      // that should still be usable long after the QR was generated.
+      if (!s || now - s.created > 10 * 60 * 1000) {
+        delete _opsData.faceSessions[token];
+        changed = true;
+      }
+    }
+  }
   return changed;
+}
+
+// ── Face scan sessions (register / time in / time out via face-scan.html) ──
+// mode: 'enroll' (staffId set, result is a descriptor to save on that staff)
+//    or 'recognize' (result is whichever enrolled staff matched, if any).
+async function createFaceSessionToken(mode, staffId) {
+  if (!_opsData) await loadOpsData();
+  if (!_opsData.faceSessions) _opsData.faceSessions = {};
+  const token = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+  _opsData.faceSessions[token] = { mode, staffId: staffId || null, status: 'pending', created: Date.now() };
+  await saveOpsData();
+  return token;
+}
+
+async function clearFaceSession(token) {
+  if (_opsData && _opsData.faceSessions && _opsData.faceSessions[token]) {
+    delete _opsData.faceSessions[token];
+    await saveOpsData();
+  }
 }
 
 // â”€â”€ Phone image upload sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

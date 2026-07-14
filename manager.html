@@ -317,6 +317,14 @@ button{cursor:pointer}
   <!-- STAFF (view only for managers — no edit or delete) -->
   <div class="section" id="sec-staff">
     <div class="card">
+      <div class="card-title">&#128247; Time In / Time Out — Face Scan</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Staff scan a QR with their own phone to clock in or out. Their face must already be registered by the owner (Staff &rarr; Edit &rarr; Register Face).</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-accent" style="flex:1;min-width:160px" onclick="openFaceAttendanceQR('recognize_in')">&#9200; Time In</button>
+        <button class="btn btn-ghost" style="flex:1;min-width:160px" onclick="openFaceAttendanceQR('recognize_out')">&#128682; Time Out</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">Staff</div>
       <p style="font-size:12px;color:var(--muted);margin-bottom:14px">See who's online now and check login history. Managers cannot edit or delete staff accounts — contact the owner for that.</p>
       <div style="overflow-x:auto">
@@ -744,6 +752,19 @@ button{cursor:pointer}
   </div>
 </div>
 
+<!-- FACE SCAN TIME IN/OUT -->
+<div class="modal" id="faceAttendanceQRModal">
+  <div class="mbox" style="width:min(360px,100%);text-align:center">
+    <h3 id="faceAttTitle">&#128247; Scan with Phone</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Scan with your own phone camera and look at the screen. This updates automatically once recognized.</p>
+    <img id="faceAttQRImg" style="width:220px;height:220px;border-radius:8px;background:#fff;padding:8px;margin:0 auto 12px;display:block">
+    <div id="faceAttStatus" style="font-size:12px;color:var(--muted);margin-bottom:14px">Waiting for scan&#8230;</div>
+    <div class="m-actions" style="justify-content:center">
+      <button class="btn btn-ghost" onclick="closeFaceAttendanceQR()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" style="opacity:0"></div>
 
 <script>
@@ -1008,6 +1029,55 @@ async function openChecklistQR(kind){
 function closeChecklistQRModal(){
   if (_ckQRPoll) { clearInterval(_ckQRPoll); _ckQRPoll = null; }
   closeModal('checklistQRModal');
+}
+
+// ── Time In / Time Out — Face Scan ───────────────────────────────────────
+// Manager generates a "recognize" token (no staff picked yet — the QR just
+// says "figure out who this is"), staff scans it on their own phone, phone
+// matches their live face against every enrolled staff descriptor for this
+// store. Once matched, THIS session (already anon like the phone page, same
+// permission level) records the actual attendance — log_staff_login for
+// Time In, an activity_logs LOGOUT row for Time Out — using the exact same
+// tables the Daily Time Record in Payroll already reads from.
+let _faceAttPoll = null, _faceAttToken = null, _faceAttMode = null;
+async function openFaceAttendanceQR(mode){
+  _faceAttMode = mode;
+  document.getElementById('faceAttTitle').textContent = (mode === 'recognize_in' ? 'Time In' : 'Time Out') + ' — Scan with Phone';
+  document.getElementById('faceAttStatus').textContent = 'Waiting for scan…';
+  _faceAttToken = await createFaceSessionToken(mode, null);
+  const url = location.href.split('?')[0].replace('manager.html','face-scan.html')
+    + '?sid=' + encodeURIComponent(MGR.store_id) + '&token=' + _faceAttToken + '&mode=' + mode;
+  document.getElementById('faceAttQRImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+  document.getElementById('faceAttendanceQRModal').classList.add('show');
+  if (_faceAttPoll) clearInterval(_faceAttPoll);
+  _faceAttPoll = setInterval(checkFaceAttendanceResult, 3000);
+}
+async function checkFaceAttendanceResult(){
+  if (!_faceAttToken) return;
+  await refreshOpsData();
+  const session = _opsData.faceSessions && _opsData.faceSessions[_faceAttToken];
+  if (!session || session.status !== 'done' || !session.matchedStaffId) return;
+  clearInterval(_faceAttPoll); _faceAttPoll = null;
+  const name = session.matchedName, username = session.matchedUsername, role = session.matchedRole || 'cashier';
+
+  if (_faceAttMode === 'recognize_in') {
+    await _sb.rpc('log_staff_login', { p_store_id: MGR.store_id, p_staff_id: session.matchedStaffId, p_username: username });
+  } else {
+    await _sb.from('activity_logs').insert({
+      store_id: MGR.store_id, actor_name: name, actor_role: role,
+      action: 'LOGOUT', target_name: name, details: JSON.stringify({ device: 'Face Scan' })
+    });
+  }
+  await clearFaceSession(_faceAttToken);
+  _faceAttToken = null;
+  const timeStr = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('faceAttStatus').textContent = `✅ ${name} — ${_faceAttMode === 'recognize_in' ? 'timed in' : 'timed out'} at ${timeStr}`;
+  showToast(`${name} ${_faceAttMode === 'recognize_in' ? 'timed in' : 'timed out'}.`);
+  if (typeof loadMgrStaff === 'function') loadMgrStaff();
+}
+function closeFaceAttendanceQR(){
+  if (_faceAttPoll) { clearInterval(_faceAttPoll); _faceAttPoll = null; }
+  closeModal('faceAttendanceQRModal');
 }
 
 // ── Checklist Photo Proof — QR phone upload ──────────────────────────────

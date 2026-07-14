@@ -378,6 +378,11 @@ ALTER TABLE store_users DROP COLUMN IF EXISTS pagibig_contribution;
 ALTER TABLE store_users ADD COLUMN IF NOT EXISTS mandatory_contributions JSONB DEFAULT '[]';
 ALTER TABLE store_users ADD COLUMN IF NOT EXISTS salary_frequency       TEXT DEFAULT 'monthly'; -- weekly | semimonthly | monthly
 
+-- Face ID for Time In/Out face scan (manager.html) — a face-api.js 128-value
+-- descriptor (numbers only, not a photo), registered once via face-scan.html
+-- from the Add/Edit Staff modal's "Scan QR to Register Face".
+ALTER TABLE store_users ADD COLUMN IF NOT EXISTS face_descriptor JSONB;
+
 -- Ping: update last_seen so dashboard can show Online indicator
 CREATE OR REPLACE FUNCTION ping_staff_online(p_staff_id UUID)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
