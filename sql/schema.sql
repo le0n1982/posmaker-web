@@ -1075,3 +1075,31 @@ CREATE POLICY sh_owner ON stock_history FOR ALL TO authenticated
   WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
 CREATE POLICY sh_anon_rw ON stock_history FOR ALL TO anon
   USING (TRUE) WITH CHECK (TRUE);
+
+-- ============================================================
+--  Staff Deductions — owner charges a staff member for a proven
+--  loss (e.g. missing cash/stock). Sits alongside cash_advances:
+--  both get subtracted from that staff's next payroll run, and
+--  both show up in the Payroll History breakdown by date.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS staff_deductions (
+  id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  store_id    UUID        REFERENCES stores NOT NULL,
+  staff_id    UUID        NOT NULL,
+  staff_name  TEXT        NOT NULL,
+  amount      NUMERIC     NOT NULL,
+  reason      TEXT        DEFAULT '',
+  status      TEXT        DEFAULT 'pending', -- pending | settled
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  settled_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_staff_deductions_store ON staff_deductions(store_id, staff_id);
+ALTER TABLE staff_deductions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS sd_owner   ON staff_deductions;
+DROP POLICY IF EXISTS sd_anon_rw ON staff_deductions;
+CREATE POLICY sd_owner ON staff_deductions FOR ALL TO authenticated
+  USING     (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()))
+  WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
+CREATE POLICY sd_anon_rw ON staff_deductions FOR ALL TO anon
+  USING (TRUE) WITH CHECK (TRUE);
