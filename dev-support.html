@@ -1438,7 +1438,20 @@ function populateBugCheckStoreSel() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">— Select Store —</option>';
-  _allStores.forEach(s => sel.appendChild(new Option(s.name + (s.business_type ? ' (' + s.business_type + ')' : ''), s.id)));
+  const groups = {};
+  _allStores.forEach(s => {
+    const type = s.business_type || 'Other';
+    (groups[type] = groups[type] || []).push(s);
+  });
+  Object.keys(groups).sort().forEach(type => {
+    const og = document.createElement('optgroup');
+    og.label = type;
+    groups[type]
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(s => og.appendChild(new Option(s.name, s.id)));
+    sel.appendChild(og);
+  });
   sel.value = cur;
 }
 const BUG_SEVERITY_STYLE = {
