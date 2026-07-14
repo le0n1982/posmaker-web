@@ -2937,8 +2937,12 @@ async function doPrint() {
           footer:    STORE?.receipt_footer,
           order_id:  d.order_id,
           cashier:   d.cashier,
-          orderType: d.orderType,
-          tableNo:   d.tableNo,
+          // Retail stores never show a Dine In / Take Out / table type on
+          // the on-screen receipt (see buildReceiptText's IS_RETAIL check)
+          // — the printed copy needs to match, so it's omitted here too
+          // instead of always being sent to the native print bridge.
+          orderType: IS_RETAIL ? '' : d.orderType,
+          tableNo:   IS_RETAIL ? '' : d.tableNo,
           items:     d.items,
           sub:       d.sub,
           disc:      d.disc,
