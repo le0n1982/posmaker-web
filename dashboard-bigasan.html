@@ -5578,9 +5578,18 @@ async function saveInvItem(){
   if(!sku) sku=genAutoSku(cat, invItems);
   const piecesPerUnit=parseFloat(document.getElementById('invPiecesPerUnit').value)||0;
   if(piecesPerUnit>1){
-    stock=stock*piecesPerUnit;
-    cost=cost/piecesPerUnit;
-    unit='pcs';
+    // This silently overwrote the owner's chosen Unit (e.g. "bag") with
+    // "pcs" and rewrote Stock Qty — surprising and easy to trigger by
+    // accident just from filling in this optional field. Confirm first so
+    // "bag" (or whatever unit was picked) never gets swapped out silently.
+    const convertedStock = stock*piecesPerUnit;
+    if(!confirm(`This will convert "${name}" from tracking by ${unit} to tracking by individual pcs:\n\n${stock} ${unit} × ${piecesPerUnit} pcs/${unit} = ${convertedStock} pcs\n\nUnit will change to "pcs". Continue?`)){
+      document.getElementById('invPiecesPerUnit').value='';
+    } else {
+      stock=convertedStock;
+      cost=cost/piecesPerUnit;
+      unit='pcs';
+    }
   }
   // Adding a new item (no id yet) whose name matches one already on file is
   // treated as a restock — the qty just entered is a NEW purchase, so it's
