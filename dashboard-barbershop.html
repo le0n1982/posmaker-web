@@ -1527,6 +1527,13 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="sfContribList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
       <button type="button" class="btn btn-ghost btn-sm" onclick="openContribModal()">&#43; Add Contribution</button>
     </div>
+    <div class="field" id="sfFaceField" style="display:none">
+      <label>Face ID <span style="color:var(--dim);font-weight:400;font-size:11px">(for Time In/Out face scan on the Manager side)</span></label>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--s2);border-radius:8px;padding:10px 12px">
+        <span id="sfFaceStatus" style="font-size:13px;color:var(--muted)">Not registered</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openFaceEnrollQR()">&#128247; Scan QR to Register Face</button>
+      </div>
+    </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('staffModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveStaff()">Save</button>
@@ -1544,6 +1551,19 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('contribModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveContribution()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- FACE ENROLL QR (opens on top of the Staff modal) -->
+<div class="modal" id="faceEnrollQRModal">
+  <div class="mbox" style="width:min(360px,100%);text-align:center">
+    <h3>&#128247; Scan QR to Register Face</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Have <strong id="faceEnrollName"></strong> scan this with their own phone camera and look at the screen. This updates automatically once done.</p>
+    <img id="faceEnrollQRImg" style="width:220px;height:220px;border-radius:8px;background:#fff;padding:8px;margin:0 auto 12px;display:block">
+    <div id="faceEnrollStatus" style="font-size:12px;color:var(--muted);margin-bottom:14px">Waiting for scan&#8230;</div>
+    <div class="m-actions" style="justify-content:center">
+      <button class="btn btn-ghost" onclick="closeFaceEnrollQR()">Close</button>
     </div>
   </div>
 </div>
@@ -4752,7 +4772,7 @@ async function loadStaff() {
   }, 8000);
   try {
     const { data, error } = await _sb.from('store_users')
-      .select('id,username,full_name,role,active,last_seen,last_login_at,created_at,job_title,job_description,monthly_salary').eq('store_id', STORE.id).order('role').order('username').abortSignal(_sig());
+      .select('id,username,full_name,role,active,last_seen,last_login_at,created_at,job_title,job_description,monthly_salary,face_descriptor').eq('store_id', STORE.id).order('role').order('username').abortSignal(_sig());
     if (error) throw error;
     allStaff = data || [];
     frozenStaffIds = computeFrozenIds(allStaff, FREE_STAFF_LIMIT, IS_PRO);
@@ -5026,6 +5046,14 @@ function openStaffModal(s) {
   renderSfContribList();
   _updateSalaryFreqLabel();
   document.getElementById('sfUser').disabled = !!s;
+  // Face ID can only be registered for a staff row that already has an id —
+  // a brand-new "Add Staff" hasn't been saved yet, so hide it there; the
+  // owner registers the face after saving, from Edit Staff instead.
+  document.getElementById('sfFaceField').style.display = s ? '' : 'none';
+  if (s) {
+    document.getElementById('sfFaceStatus').textContent = (Array.isArray(s.face_descriptor) && s.face_descriptor.length)
+      ? '✅ Face registered' : 'Not registered';
+  }
   document.getElementById('staffModal').classList.add('show');
   setTimeout(() => document.getElementById(s ? 'sfName' : 'sfUser').focus(), 50);
 }
@@ -5033,6 +5061,47 @@ function _updateSalaryFreqLabel() {
   const freq = document.getElementById('sfSalaryFreq').value;
   const text = freq === 'weekly' ? 'Weekly Salary' : freq === 'semimonthly' ? 'Salary (Every 15 Days)' : 'Monthly Salary';
   document.getElementById('sfSalaryLabel').innerHTML = `${text} <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills Payroll)</span>`;
+}
+
+// ── Face ID enrollment (owner side) ─────────────────────────────────────
+// Generates a short-lived token, shows a QR pointing the staff's own phone
+// to face-scan.html, then polls ops_data (same mechanism as the Checklist
+// Photo QR) until the phone reports a captured descriptor — at which point
+// THIS authenticated session (not the anon phone page) writes it onto the
+// staff row, since only the owner's session can update store_users.
+let _faceEnrollPoll = null, _faceEnrollToken = null;
+async function openFaceEnrollQR() {
+  const staffId = document.getElementById('staffId').value;
+  if (!staffId) return;
+  document.getElementById('faceEnrollName').textContent = document.getElementById('sfName').value || 'this staff member';
+  document.getElementById('faceEnrollStatus').textContent = 'Waiting for scan…';
+  _OPS_STORE_ID = STORE.id;
+  _faceEnrollToken = await createFaceSessionToken('enroll', staffId);
+  const url = location.href.split('?')[0].replace('dashboard-bigasan.html', 'face-scan.html')
+    + '?sid=' + encodeURIComponent(STORE.id) + '&token=' + _faceEnrollToken + '&mode=enroll';
+  document.getElementById('faceEnrollQRImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+  document.getElementById('faceEnrollQRModal').classList.add('show');
+  if (_faceEnrollPoll) clearInterval(_faceEnrollPoll);
+  _faceEnrollPoll = setInterval(checkFaceEnrollResult, 3000);
+}
+async function checkFaceEnrollResult() {
+  if (!_faceEnrollToken) return;
+  await refreshOpsData();
+  const session = _opsData.faceSessions && _opsData.faceSessions[_faceEnrollToken];
+  if (!session || session.status !== 'done' || !Array.isArray(session.descriptor)) return;
+  clearInterval(_faceEnrollPoll); _faceEnrollPoll = null;
+  const staffId = document.getElementById('staffId').value;
+  await _sb.from('store_users').update({ face_descriptor: session.descriptor }).eq('id', staffId);
+  await clearFaceSession(_faceEnrollToken);
+  _faceEnrollToken = null;
+  document.getElementById('faceEnrollStatus').textContent = '✅ Face registered!';
+  document.getElementById('sfFaceStatus').textContent = '✅ Face registered';
+  showToast('Face registered.');
+  setTimeout(() => closeFaceEnrollQR(), 1200);
+}
+function closeFaceEnrollQR() {
+  if (_faceEnrollPoll) { clearInterval(_faceEnrollPoll); _faceEnrollPoll = null; }
+  closeModal('faceEnrollQRModal');
 }
 
 // Mandatory contributions — an open-ended list (SSS, PhilHealth, insurance,
