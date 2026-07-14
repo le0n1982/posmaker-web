@@ -596,7 +596,12 @@ input:checked + .slider:before{transform:translateX(18px)}
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
       <div class="tbl-wrap" style="margin-bottom:16px">
-        <div class="tbl-head"><h3>&#128200; This Month at a Glance</h3></div>
+        <div class="tbl-head"><h3 id="candleTitle">&#128200; This Month at a Glance</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-accent btn-sm" id="candleViewMonth" onclick="setCandleView('month')">Month</button>
+            <button class="btn btn-ghost btn-sm" id="candleViewYear" onclick="setCandleView('year')">Year</button>
+          </div>
+        </div>
         <div style="padding:14px;display:flex;gap:0;align-items:stretch">
           <div style="flex:1;min-width:0;overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
           <div style="width:1px;background:var(--border);margin:0 16px;flex-shrink:0"></div>
@@ -605,9 +610,10 @@ input:checked + .slider:before{transform:translateX(18px)}
             <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;flex-shrink:0"></span>Revenue (covered cost)</span>
             <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;flex-shrink:0"></span>Revenue (below cost)</span>
             <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b;flex-shrink:0"></span>Cost</span>
+            <span style="display:flex;align-items:center;gap:6px;color:var(--muted)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #a78bfa;flex-shrink:0"></span><span id="candleAvgLegendLabel">Average Sales</span></span>
             <div style="height:1px;background:var(--border);margin:4px 0"></div>
             <div>
-              <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sales This Month</div>
+              <div id="candleMonthHeading" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sales This Month</div>
               <div id="candleMonthLabel" style="font-weight:700;font-size:14px"></div>
             </div>
             <div>
@@ -3344,33 +3350,44 @@ function renderReport(orders, from, to) {
   el.innerHTML = `<div style="display:flex;gap:0;align-items:flex-start"><div style="flex:1;min-width:0">${html}</div><div style="width:1px;background:var(--border);margin:0 18px;align-self:stretch;flex-shrink:0"></div><div style="width:260px;flex-shrink:0;position:sticky;top:16px">${summaryHtml}</div></div>`;
   document.getElementById('rptDownload').style.display = '';
 }
-// "This Month at a Glance" — independent of the Daily/Custom report filter
-// above, so the owner always has a full-month trend visible. One candle per
-// calendar day (1st through today): body spans Cost (Capital + that day's
-// share of Other Expenses) to Revenue (Subtotal ex-VAT) — taller candle =
-// higher sales that day; green when Revenue reached Cost, red when it
-// didn't. Days with zero orders still get a slot (a flat line at ₱0) so the
-// month's shape and gaps are visible, not just the days that had sales.
+// "This Month/Year at a Glance" — independent of the Daily/Custom report
+// filter below, so the owner always has a trend visible. Month view: one
+// bar per calendar day (1st through today). Year view: one bar per month
+// (Jan through the current month). Bar height = Revenue (Subtotal ex-VAT),
+// green when it covered that period's Cost (Capital + its Other Expenses
+// share), red when it didn't. Periods with zero orders still get a slot (a
+// flat ₱0 bar) so gaps are visible, not just the periods that had sales.
+let _candleView = 'month';
+function setCandleView(view) {
+  _candleView = view;
+  document.getElementById('candleViewMonth').className = view === 'month' ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('candleViewYear').className  = view === 'year'  ? 'btn btn-accent btn-sm' : 'btn btn-ghost btn-sm';
+  loadCandleChart();
+}
 async function loadCandleChart() {
   if (!STORE?.id) return;
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const isYear = _candleView === 'year';
+  const rangeStart = isYear ? new Date(now.getFullYear(), 0, 1) : new Date(now.getFullYear(), now.getMonth(), 1);
+
+  document.getElementById('candleTitle').innerHTML = isYear ? '&#128200; This Year at a Glance' : '&#128200; This Month at a Glance';
+  document.getElementById('candleMonthHeading').textContent = isYear ? 'Sales This Year' : 'Sales This Month';
+  document.getElementById('candleAvgLegendLabel').textContent = isYear ? 'Average Monthly Sales' : 'Average Daily Sales';
   const labelEl = document.getElementById('candleMonthLabel');
 
   const { data: orders } = await _sb.from('orders')
     .select('id,timestamp,subtotal,total')
     .eq('store_id', STORE.id)
-    .gte('timestamp', monthStart.toISOString())
+    .gte('timestamp', rangeStart.toISOString())
     .lte('timestamp', now.toISOString());
 
-  const monthSales = (orders || []).reduce((s,o) => s + parseFloat(o.total||0), 0);
-  if (labelEl) labelEl.textContent = (CUR||'₱') + monthSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const totalSales = (orders || []).reduce((s,o) => s + parseFloat(o.total||0), 0);
+  if (labelEl) labelEl.textContent = (CUR||'₱') + totalSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  const byDay = {};
-  (orders || []).forEach(o => {
-    const d = new Date(o.timestamp).toLocaleDateString('en-CA');
-    (byDay[d] ||= []).push(o);
-  });
+  // Bucket key: 'YYYY-MM-DD' for month view, 'YYYY-MM' for year view
+  const bucketKey = ts => isYear ? new Date(ts).toLocaleDateString('en-CA').slice(0,7) : new Date(ts).toLocaleDateString('en-CA');
+  const byBucket = {};
+  (orders || []).forEach(o => { (byBucket[bucketKey(o.timestamp)] ||= []).push(o); });
 
   // Capital per order, same product cost_price lookup used elsewhere
   let capById = {};
@@ -3386,45 +3403,66 @@ async function loadCandleChart() {
     (items||[]).forEach(i => { capById[i.order_id] = (capById[i.order_id]||0) + (costById[i.product_id]||0) * (i.qty||0); });
   }
 
-  // Other Expenses, per calendar day of this month (same proration logic as the report)
-  const monthEndStr = new Date(now.getFullYear(), now.getMonth()+1, 0).toLocaleDateString('en-CA');
-  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', monthEndStr);
+  // Other Expenses, prorated to each bucket (day or month) — same logic as the report
+  const rangeEndStr = isYear ? new Date(now.getFullYear(), 11, 31).toLocaleDateString('en-CA') : new Date(now.getFullYear(), now.getMonth()+1, 0).toLocaleDateString('en-CA');
+  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', rangeEndStr);
   const CYCLE_DAYS_C = { daily: 1, weekly: 7, monthly: 30 };
-  const expenseByDay = {};
-  for (let dNum = 1; dNum <= now.getDate(); dNum++) {
-    const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
-    expenseByDay[key] = (rawExps || []).reduce((s, e) => {
+  function expenseForBucket(bucketStartStr, bucketEndStr, bucketDays) {
+    return (rawExps || []).reduce((s, e) => {
       const cycle = e.billing_cycle || 'one-time';
       const base = parseFloat(e.amount) || 0;
-      if (cycle === 'one-time') return e.expense_date === key ? s + base : s;
-      if (e.expense_date > key) return s;
-      return s + base / (CYCLE_DAYS_C[cycle] || 30);
+      if (cycle === 'one-time') return (e.expense_date >= bucketStartStr && e.expense_date <= bucketEndStr) ? s + base : s;
+      if (e.expense_date > bucketEndStr) return s;
+      return s + base * (bucketDays / (CYCLE_DAYS_C[cycle] || 30));
     }, 0);
   }
 
   const points = [];
-  for (let dNum = 1; dNum <= now.getDate(); dNum++) {
-    const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
-    const rows = byDay[key] || [];
-    const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
-    const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
-    const cost = capital + (expenseByDay[key] || 0);
-    const orderTotals = rows.map(o => parseFloat(o.total||0));
-    points.push({ dNum, revenue, cost, lo: Math.min(...orderTotals, revenue, cost, 0), hi: Math.max(...orderTotals, revenue, cost) });
+  if (isYear) {
+    const lastMonth = now.getMonth(); // 0-based, current month is the last one shown
+    const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (let m = 0; m <= lastMonth; m++) {
+      const key = `${now.getFullYear()}-${String(m+1).padStart(2,'0')}`;
+      const bStart = new Date(now.getFullYear(), m, 1).toLocaleDateString('en-CA');
+      const bEnd = new Date(now.getFullYear(), m+1, 0).toLocaleDateString('en-CA');
+      const bDays = new Date(now.getFullYear(), m+1, 0).getDate();
+      const rows = byBucket[key] || [];
+      const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+      const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
+      const cost = capital + expenseForBucket(bStart, bEnd, bDays);
+      points.push({ label: MN[m], revenue, cost });
+    }
+  } else {
+    for (let dNum = 1; dNum <= now.getDate(); dNum++) {
+      const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
+      const rows = byBucket[key] || [];
+      const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+      const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
+      const cost = capital + expenseForBucket(key, key, 1);
+      points.push({ label: String(dNum), revenue, cost });
+    }
   }
 
-  const monthProfit = points.reduce((s,p) => s + (p.revenue - p.cost), 0);
+  const totalProfit = points.reduce((s,p) => s + (p.revenue - p.cost), 0);
   const profitEl = document.getElementById('candleProfitLabel');
   if (profitEl) {
-    profitEl.textContent = (monthProfit >= 0 ? 'Profit: ' : 'Loss: ') + (CUR||'₱') + Math.abs(monthProfit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-    profitEl.style.color = monthProfit >= 0 ? '#10b981' : '#ef4444';
+    profitEl.textContent = (totalProfit >= 0 ? 'Profit: ' : 'Loss: ') + (CUR||'₱') + Math.abs(totalProfit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    profitEl.style.color = totalProfit >= 0 ? '#10b981' : '#ef4444';
   }
 
-  _drawRptCandles(points);
+  const avgRevenue = points.length ? points.reduce((s,p) => s + p.revenue, 0) / points.length : 0;
+  _drawRptCandles(points, avgRevenue);
 }
-function _drawRptCandles(points) {
+function _drawRptCandles(points, avgRevenue) {
   const cv = document.getElementById('rptCandleCanvas');
   if (!cv) return;
+  // Canvas drawing can't use CSS variables directly — read the current
+  // theme's actual colors so the chart doesn't render invisible white
+  // text/gridlines on a light-mode (white) background.
+  const rootStyle = getComputedStyle(document.documentElement);
+  const textColor = (rootStyle.getPropertyValue('--muted').trim()) || '#8888aa';
+  const gridColor = (rootStyle.getPropertyValue('--border').trim()) || '#252540';
+
   const n = points.length;
   const PAD_T = 10, PAD_B = 26, PAD_L = 60, PAD_R = 10;
   const W = Math.max(cv.parentElement.clientWidth || 600, PAD_L + PAD_R + n * 28);
@@ -3436,7 +3474,7 @@ function _drawRptCandles(points) {
   cx.scale(dpr, dpr);
   cx.clearRect(0, 0, W, H);
 
-  const allVals = points.flatMap(p => [p.revenue, p.cost]).concat([0]);
+  const allVals = points.flatMap(p => [p.revenue, p.cost]).concat([0, avgRevenue||0]);
   const vMin = 0, vMax = Math.max(...allVals, 1);
   const range = (vMax - vMin) || 1;
   const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
@@ -3447,19 +3485,19 @@ function _drawRptCandles(points) {
   for (let i = 0; i <= steps; i++) {
     const v = vMin + (range * i / steps);
     const yy = y(v);
-    cx.strokeStyle = 'rgba(255,255,255,.07)'; cx.lineWidth = 1;
+    cx.strokeStyle = gridColor; cx.lineWidth = 1;
     cx.beginPath(); cx.moveTo(PAD_L, yy); cx.lineTo(W - PAD_R, yy); cx.stroke();
-    cx.fillStyle = 'rgba(255,255,255,.5)';
+    cx.fillStyle = textColor;
     cx.fillText((CUR||'₱') + Math.round(v).toLocaleString(), PAD_L - 8, yy);
   }
 
   const slotW = (W - PAD_L - PAD_R) / n;
   const barW = Math.min(20, slotW * 0.55);
 
-  // Revenue bars — solid, from baseline (₱0) up to that day's revenue.
-  // Green when it covered Cost that day, red when it didn't. Every day
-  // gets a bar (even ₱0 ones, drawn as a thin sliver) so gaps in the
-  // month are visible rather than just missing.
+  // Revenue bars — solid, from baseline (₱0) up to that period's revenue.
+  // Green when it covered Cost, red when it didn't. Every period gets a
+  // bar (even ₱0 ones, drawn as a thin sliver) so gaps are visible rather
+  // than just missing.
   points.forEach((p, i) => {
     const xc = PAD_L + slotW * i + slotW / 2;
     const profit = p.revenue >= p.cost;
@@ -3467,8 +3505,8 @@ function _drawRptCandles(points) {
     const yTop = y(p.revenue);
     cx.fillStyle = color;
     cx.fillRect(xc - barW/2, yTop, barW, Math.max(2, y(0) - yTop));
-    cx.fillStyle = 'rgba(255,255,255,.5)'; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic';
-    cx.fillText(String(p.dNum), xc, H - PAD_B + 16);
+    cx.fillStyle = textColor; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic';
+    cx.fillText(p.label, xc, H - PAD_B + 16);
   });
 
   // Cost trend line, overlaid on the same ₱ scale
@@ -3484,6 +3522,16 @@ function _drawRptCandles(points) {
     const xc = PAD_L + slotW * i + slotW / 2;
     cx.beginPath(); cx.arc(xc, y(p.cost), 2.5, 0, Math.PI*2); cx.fill();
   });
+
+  // Average Sales reference line — dashed, spans the full chart width
+  if (avgRevenue > 0) {
+    const yy = y(avgRevenue);
+    cx.save();
+    cx.setLineDash([5, 4]);
+    cx.strokeStyle = '#a78bfa'; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.moveTo(PAD_L, yy); cx.lineTo(W - PAD_R, yy); cx.stroke();
+    cx.restore();
+  }
 }
 
 function downloadReport() {
