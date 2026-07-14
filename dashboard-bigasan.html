@@ -595,6 +595,16 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
+      <div class="tbl-wrap" style="margin-bottom:16px">
+        <div class="tbl-head"><h3>&#128200; This Month at a Glance</h3><span id="candleMonthLabel" style="font-size:12px;color:var(--muted)"></span></div>
+        <div style="padding:14px">
+          <div style="overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
+          <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--muted)">
+            <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px"></span>Revenue covered cost</span>
+            <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px"></span>Cost exceeded revenue</span>
+          </div>
+        </div>
+      </div>
       <div class="tbl-wrap">
         <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
           <h3>&#128202; Sales Report</h3>
@@ -1784,7 +1794,7 @@ function nav(id) {
   closeSidebar();
   if (id === 'dashboard') { loadDashboard(); }
   if (id === 'orders')     loadOrders();
-  if (id === 'salesreport') loadReport('daily');
+  if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); }
   if (id === 'inventory')  loadInventory();
   if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
@@ -3184,19 +3194,6 @@ function renderReport(orders, from, to) {
     <span style=”color:var(--muted)”>${from.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})} &#8212; ${to.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</span>
   </div>`;
 
-  // Revenue vs Cost candlestick — one candle per day, green when that
-  // day's Subtotal covered its Capital + Other Expenses share, red when it
-  // didn't. Actually drawn onto the canvas after el.innerHTML is set below
-  // (a canvas needs to exist in the DOM before it can be drawn on).
-  html += `<div style="background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:14px">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">&#128200; Daily Revenue vs Cost</div>
-    <div style="overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
-    <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--muted)">
-      <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px"></span>Revenue covered cost</span>
-      <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px"></span>Cost exceeded revenue</span>
-    </div>
-  </div>`;
-
   // Per-day tables
   days.forEach(day => {
     const rows = byDay[day];
@@ -3334,19 +3331,83 @@ function renderReport(orders, from, to) {
   html += '</div>';
   el.innerHTML = `<div style="display:flex;gap:0;align-items:flex-start"><div style="flex:1;min-width:0">${html}</div><div style="width:1px;background:var(--border);margin:0 18px;align-self:stretch;flex-shrink:0"></div><div style="width:260px;flex-shrink:0;position:sticky;top:16px">${summaryHtml}</div></div>`;
   document.getElementById('rptDownload').style.display = '';
-  _drawRptCandles(days, byDay);
 }
-// One candle per day: body spans Cost (Capital + that day's share of Other
-// Expenses) to Revenue (Subtotal ex-VAT) — green when Revenue reaches Cost,
-// red when it doesn't. The thin wick shows that day's smallest/largest
-// single order, for a sense of how spread out the day's sales were.
-function _drawRptCandles(days, byDay) {
+// "This Month at a Glance" — independent of the Daily/Custom report filter
+// above, so the owner always has a full-month trend visible. One candle per
+// calendar day (1st through today): body spans Cost (Capital + that day's
+// share of Other Expenses) to Revenue (Subtotal ex-VAT) — taller candle =
+// higher sales that day; green when Revenue reached Cost, red when it
+// didn't. Days with zero orders still get a slot (a flat line at ₱0) so the
+// month's shape and gaps are visible, not just the days that had sales.
+async function loadCandleChart() {
+  if (!STORE?.id) return;
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const labelEl = document.getElementById('candleMonthLabel');
+  if (labelEl) labelEl.textContent = now.toLocaleDateString('en-PH', {month:'long',year:'numeric'});
+
+  const { data: orders } = await _sb.from('orders')
+    .select('id,timestamp,subtotal,total')
+    .eq('store_id', STORE.id)
+    .gte('timestamp', monthStart.toISOString())
+    .lte('timestamp', now.toISOString());
+
+  const byDay = {};
+  (orders || []).forEach(o => {
+    const d = new Date(o.timestamp).toLocaleDateString('en-CA');
+    (byDay[d] ||= []).push(o);
+  });
+
+  // Capital per order, same product cost_price lookup used elsewhere
+  let capById = {};
+  if (orders && orders.length) {
+    const ids = orders.map(o => o.id);
+    const { data: items } = await _sb.from('order_items').select('order_id,product_id,qty').in('order_id', ids);
+    const pids = [...new Set((items||[]).map(i => i.product_id).filter(Boolean))];
+    let costById = {};
+    if (pids.length) {
+      const { data: prodCosts } = await _sb.from('products').select('id,cost_price').in('id', pids);
+      (prodCosts||[]).forEach(p => { costById[p.id] = parseFloat(p.cost_price) || 0; });
+    }
+    (items||[]).forEach(i => { capById[i.order_id] = (capById[i.order_id]||0) + (costById[i.product_id]||0) * (i.qty||0); });
+  }
+
+  // Other Expenses, per calendar day of this month (same proration logic as the report)
+  const monthEndStr = new Date(now.getFullYear(), now.getMonth()+1, 0).toLocaleDateString('en-CA');
+  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', monthEndStr);
+  const CYCLE_DAYS_C = { daily: 1, weekly: 7, monthly: 30 };
+  const expenseByDay = {};
+  for (let dNum = 1; dNum <= now.getDate(); dNum++) {
+    const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
+    expenseByDay[key] = (rawExps || []).reduce((s, e) => {
+      const cycle = e.billing_cycle || 'one-time';
+      const base = parseFloat(e.amount) || 0;
+      if (cycle === 'one-time') return e.expense_date === key ? s + base : s;
+      if (e.expense_date > key) return s;
+      return s + base / (CYCLE_DAYS_C[cycle] || 30);
+    }, 0);
+  }
+
+  const points = [];
+  for (let dNum = 1; dNum <= now.getDate(); dNum++) {
+    const key = new Date(now.getFullYear(), now.getMonth(), dNum).toLocaleDateString('en-CA');
+    const rows = byDay[key] || [];
+    const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
+    const capital = rows.reduce((s,o) => s + (capById[o.id]||0), 0);
+    const cost = capital + (expenseByDay[key] || 0);
+    const orderTotals = rows.map(o => parseFloat(o.total||0));
+    points.push({ dNum, revenue, cost, lo: Math.min(...orderTotals, revenue, cost, 0), hi: Math.max(...orderTotals, revenue, cost) });
+  }
+
+  _drawRptCandles(points);
+}
+function _drawRptCandles(points) {
   const cv = document.getElementById('rptCandleCanvas');
   if (!cv) return;
-  const chronoDays = days.slice().reverse(); // oldest first, left to right
-  const n = chronoDays.length;
-  const W = Math.max(cv.parentElement.clientWidth || 600, n * 46);
-  const H = 200, PAD_T = 10, PAD_B = 34, PAD_L = 8, PAD_R = 8;
+  const n = points.length;
+  const PAD_T = 14, PAD_B = 26, PAD_L = 60, PAD_R = 10;
+  const W = Math.max(cv.parentElement.clientWidth || 600, PAD_L + PAD_R + n * 28);
+  const H = 220;
   const dpr = window.devicePixelRatio || 1;
   cv.width = W * dpr; cv.height = H * dpr;
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
@@ -3354,32 +3415,31 @@ function _drawRptCandles(days, byDay) {
   cx.scale(dpr, dpr);
   cx.clearRect(0, 0, W, H);
 
-  const points = chronoDays.map(day => {
-    const rows = byDay[day];
-    const revenue = rows.reduce((s,o) => s + parseFloat(o.subtotal||0), 0);
-    const capital = rows.reduce((s,o) => s + (o._capital||0), 0);
-    const expShare = _rptExpenseByDay[day] || 0;
-    const cost = capital + expShare;
-    const orderTotals = rows.map(o => parseFloat(o.total||0));
-    return { day, revenue, cost, lo: Math.min(...orderTotals, revenue, cost), hi: Math.max(...orderTotals, revenue, cost) };
-  });
-
   const allVals = points.flatMap(p => [p.lo, p.hi, p.revenue, p.cost]).concat([0]);
   const vMin = Math.min(...allVals), vMax = Math.max(...allVals, 1);
   const range = (vMax - vMin) || 1;
   const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
 
-  const slotW = (W - PAD_L - PAD_R) / n;
-  const bodyW = Math.min(26, slotW * 0.55);
+  // Y-axis gridlines + peso labels (left side)
+  const steps = 4;
+  cx.font = '10px Inter, sans-serif'; cx.textAlign = 'right'; cx.textBaseline = 'middle';
+  for (let i = 0; i <= steps; i++) {
+    const v = vMin + (range * i / steps);
+    const yy = y(v);
+    cx.strokeStyle = 'rgba(255,255,255,.07)'; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(PAD_L, yy); cx.lineTo(W - PAD_R, yy); cx.stroke();
+    cx.fillStyle = 'rgba(255,255,255,.5)';
+    cx.fillText((CUR||'₱') + Math.round(v).toLocaleString(), PAD_L - 8, yy);
+  }
 
-  // Zero/baseline gridline for orientation
-  cx.strokeStyle = 'rgba(255,255,255,.08)'; cx.lineWidth = 1;
-  cx.beginPath(); cx.moveTo(PAD_L, y(0)); cx.lineTo(W - PAD_R, y(0)); cx.stroke();
+  const slotW = (W - PAD_L - PAD_R) / n;
+  const bodyW = Math.min(20, slotW * 0.55);
 
   points.forEach((p, i) => {
     const xc = PAD_L + slotW * i + slotW / 2;
+    const hasSales = p.revenue > 0 || p.cost > 0;
     const profit = p.revenue >= p.cost;
-    const color = profit ? '#10b981' : '#ef4444';
+    const color = !hasSales ? 'rgba(255,255,255,.15)' : profit ? '#10b981' : '#ef4444';
     // Wick
     cx.strokeStyle = color; cx.lineWidth = 1.5;
     cx.beginPath(); cx.moveTo(xc, y(p.hi)); cx.lineTo(xc, y(p.lo)); cx.stroke();
@@ -3387,10 +3447,9 @@ function _drawRptCandles(days, byDay) {
     const yTop = y(Math.max(p.revenue, p.cost)), yBot = y(Math.min(p.revenue, p.cost));
     cx.fillStyle = color;
     cx.fillRect(xc - bodyW/2, yTop, bodyW, Math.max(2, yBot - yTop));
-    // Date label
-    cx.fillStyle = 'rgba(255,255,255,.5)'; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center';
-    const lbl = new Date(p.day + 'T12:00:00').toLocaleDateString('en-PH', {month:'short',day:'numeric'});
-    cx.fillText(lbl, xc, H - PAD_B + 16);
+    // Day-of-month label
+    cx.fillStyle = 'rgba(255,255,255,.5)'; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic';
+    cx.fillText(String(p.dNum), xc, H - PAD_B + 16);
   });
 }
 
