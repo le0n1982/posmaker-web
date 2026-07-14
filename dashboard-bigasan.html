@@ -3188,12 +3188,12 @@ function renderReport(orders, from, to) {
   // day's Subtotal covered its Capital + Other Expenses share, red when it
   // didn't. Actually drawn onto the canvas after el.innerHTML is set below
   // (a canvas needs to exist in the DOM before it can be drawn on).
-  html += `<div style=”background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:14px”>
-    <div style=”font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px”>&#128200; Daily Revenue vs Cost</div>
-    <div style=”overflow-x:auto”><canvas id=”rptCandleCanvas” style=”display:block”></canvas></div>
-    <div style=”display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--muted)”>
-      <span><span style=”display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px”></span>Revenue covered cost</span>
-      <span><span style=”display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px”></span>Cost exceeded revenue</span>
+  html += `<div style="background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">&#128200; Daily Revenue vs Cost</div>
+    <div style="overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
+    <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--muted)">
+      <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px"></span>Revenue covered cost</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px"></span>Cost exceeded revenue</span>
     </div>
   </div>`;
 
