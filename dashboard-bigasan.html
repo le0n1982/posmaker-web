@@ -745,9 +745,11 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- PAYROLL BREAKDOWN MODAL -->
     <div class="modal" id="payrollBreakdownModal">
-      <div class="mbox" style="width:min(480px,100%)">
+      <div class="mbox" style="width:min(560px,100%)">
         <h3 id="payrollBreakdownTitle">Breakdown</h3>
         <div id="payrollBreakdownBody" style="margin-top:14px"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 4px">&#128197; Daily Time Record</div>
+        <div id="payrollDtrBody"></div>
         <div class="m-actions">
           <button class="btn btn-ghost" onclick="closeModal('payrollBreakdownModal')">Close</button>
         </div>
@@ -2448,7 +2450,89 @@ async function viewPayrollBreakdown(staffName, expenseDate) {
         </tr>`).join('')}</tbody>
       </table>`;
   }
+
+  await _renderPayrollDtr(staffName, d, monthStart, monthEnd);
   document.getElementById('payrollBreakdownModal').classList.add('show');
+}
+
+// Daily Time Record — one row per calendar day of the payroll month (1
+// through the last day), Time In / Time Out pulled the same way the
+// Login History tab does it (staff_logs for login, LOGOUT activity_logs
+// for logout), so a day with no login still shows as a blank/absent row
+// instead of just disappearing.
+async function _resolvePayrollStaffId(staffName) {
+  const cached = (_payrollStaffCache || []).find(s => s.name === staffName);
+  if (cached) return cached.id;
+  const { data } = await _sb.from('store_users').select('id').eq('store_id', STORE.id).eq('full_name', staffName).limit(1);
+  return data && data[0] ? data[0].id : null;
+}
+async function _renderPayrollDtr(staffName, monthDate, monthStart, monthEnd) {
+  const dtrEl = document.getElementById('payrollDtrBody');
+  dtrEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">Loading...</div>';
+  const staffId = await _resolvePayrollStaffId(staffName);
+  if (!staffId) {
+    dtrEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">No login records found for this staff.</div>';
+    return;
+  }
+  const [{ data: logins }, { data: logouts }] = await Promise.all([
+    _sb.from('staff_logs').select('login_at').eq('staff_id', staffId)
+      .gte('login_at', monthStart + 'T00:00:00').lte('login_at', monthEnd + 'T23:59:59').order('login_at', { ascending: true }),
+    _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', staffName).eq('action', 'LOGOUT')
+      .gte('created_at', monthStart + 'T00:00:00').lte('created_at', monthEnd + 'T23:59:59').order('created_at', { ascending: true })
+  ]);
+  const loginsByDay = {};
+  (logins || []).forEach(l => { const k = new Date(l.login_at).toLocaleDateString('en-CA'); (loginsByDay[k] ||= []).push(l.login_at); });
+  const logoutsByDay = {};
+  (logouts || []).forEach(l => { const k = new Date(l.created_at).toLocaleDateString('en-CA'); (logoutsByDay[k] ||= []).push(l.created_at); });
+
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  let rowsHtml = '', totalHours = 0, presentDays = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dayDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
+    const key = dayDate.toLocaleDateString('en-CA');
+    const dayLogins = loginsByDay[key] || [];
+    const dayLogouts = logoutsByDay[key] || [];
+    const timeIn = dayLogins[0];
+    const timeOut = dayLogouts[dayLogouts.length - 1];
+    let hoursLabel = '—';
+    if (timeIn && timeOut && new Date(timeOut) > new Date(timeIn)) {
+      const h = (new Date(timeOut) - new Date(timeIn)) / 3600000;
+      hoursLabel = h.toFixed(1) + 'h';
+      totalHours += h;
+    }
+    if (timeIn) presentDays++;
+    const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+    rowsHtml += `<tr style="${!timeIn ? 'opacity:.4' : ''}${isWeekend ? ';background:rgba(255,255,255,.03)' : ''}">
+      <td style="padding:5px 6px">${day}</td>
+      <td style="padding:5px 6px;color:var(--muted)">${dayDate.toLocaleDateString('en-PH', { weekday: 'short' })}</td>
+      <td style="padding:5px 6px">${timeIn ? new Date(timeIn).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td style="padding:5px 6px">${timeOut ? new Date(timeOut).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td style="padding:5px 6px;text-align:right">${hoursLabel}</td>
+    </tr>`;
+  }
+  dtrEl.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted)">Days Present</div>
+        <div style="font-size:16px;font-weight:800">${presentDays} / ${daysInMonth}</div>
+      </div>
+      <div style="flex:1;background:var(--s2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--muted)">Total Hours</div>
+        <div style="font-size:16px;font-weight:800">${totalHours.toFixed(1)}h</div>
+      </div>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead style="position:sticky;top:0;background:var(--s2)"><tr style="color:var(--muted);font-size:10px;text-transform:uppercase">
+          <th style="text-align:left;padding:6px">Day</th>
+          <th style="text-align:left;padding:6px"></th>
+          <th style="text-align:left;padding:6px">Time In</th>
+          <th style="text-align:left;padding:6px">Time Out</th>
+          <th style="text-align:right;padding:6px">Hours</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
 }
 
 // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
