@@ -4029,14 +4029,29 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   const actLogs = (actData || []).concat(caData || []);
 
   // Live running total for an open (still logged-in, not yet logged out)
-  // shift — sum of today's Cash orders since that login, so the owner sees
-  // the current drawer total without listing each sale.
+  // shift — sum of unremitted Cash orders, so the owner sees the current
+  // drawer total without listing each sale.
   let liveTotal = null;
   const lastLogin = loginTimes[loginTimes.length - 1];
   const hasOpenShift = lastLogin && !logoutTimes.some(t => t > lastLogin);
   if (isCashier && hasOpenShift) {
+    // Anchor on the last REMITTANCE, not the last login — a cashier who
+    // logs out and back in mid-day (lunch break, force-logout, etc.)
+    // without remitting in between must still have that earlier cash
+    // counted here, exactly like the cashier's own "Cash on Hand at
+    // Logout" screen (openRemitOnLogout() in cashier-*.html) already does.
+    // Falling back to lastLogin would silently drop that earlier chunk.
+    const { data: lastRemit } = await _sb.from('cash_remittances')
+      .select('created_at').eq('store_id', STORE.id).eq('cashier_name', displayName)
+      .order('created_at', { ascending: false }).limit(1);
+    let liveFrom = lastRemit?.[0]?.created_at;
+    if (!liveFrom) {
+      const { data: firstLogin } = await _sb.from('staff_logs')
+        .select('login_at').eq('staff_id', staffId).order('login_at', { ascending: true }).limit(1);
+      liveFrom = firstLogin?.[0]?.login_at || lastLogin;
+    }
     const { data: ord } = await _sb.from('orders').select('total,payment_method,amount_tendered')
-      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', lastLogin);
+      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', liveFrom);
     // Split sales only put their cash portion (amount_tendered) in the
     // drawer — the rest went out electronically, same as a pure e-pay sale.
     liveTotal = (ord || []).reduce((s,o) => {
