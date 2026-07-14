@@ -596,13 +596,17 @@ input:checked + .slider:before{transform:translateX(18px)}
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
       <div class="tbl-wrap" style="margin-bottom:16px">
-        <div class="tbl-head"><h3>&#128200; This Month at a Glance</h3><span id="candleMonthLabel" style="font-size:12px;color:var(--muted)"></span></div>
+        <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
+          <h3>&#128200; This Month at a Glance</h3>
+          <div style="display:flex;align-items:center;gap:14px;font-size:12px">
+            <span id="candleMonthLabel" style="color:var(--muted)"></span>
+            <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px"></span>Revenue (covered cost)</span>
+            <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px"></span>Revenue (below cost)</span>
+            <span style="display:flex;align-items:center;gap:5px;color:var(--muted)"><span style="display:inline-block;width:12px;height:2px;background:#f59e0b"></span>Cost</span>
+          </div>
+        </div>
         <div style="padding:14px">
           <div style="overflow-x:auto"><canvas id="rptCandleCanvas" style="display:block"></canvas></div>
-          <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--muted)">
-            <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:4px"></span>Revenue covered cost</span>
-            <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:4px"></span>Cost exceeded revenue</span>
-          </div>
         </div>
       </div>
       <div class="tbl-wrap">
@@ -3344,13 +3348,15 @@ async function loadCandleChart() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const labelEl = document.getElementById('candleMonthLabel');
-  if (labelEl) labelEl.textContent = now.toLocaleDateString('en-PH', {month:'long',year:'numeric'});
 
   const { data: orders } = await _sb.from('orders')
     .select('id,timestamp,subtotal,total')
     .eq('store_id', STORE.id)
     .gte('timestamp', monthStart.toISOString())
     .lte('timestamp', now.toISOString());
+
+  const monthSales = (orders || []).reduce((s,o) => s + parseFloat(o.total||0), 0);
+  if (labelEl) labelEl.textContent = now.toLocaleDateString('en-PH', {month:'long',year:'numeric'}) + ' · ' + (CUR||'₱') + monthSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + ' total sales';
 
   const byDay = {};
   (orders || []).forEach(o => {
@@ -3405,7 +3411,7 @@ function _drawRptCandles(points) {
   const cv = document.getElementById('rptCandleCanvas');
   if (!cv) return;
   const n = points.length;
-  const PAD_T = 24, PAD_B = 26, PAD_L = 60, PAD_R = 10;
+  const PAD_T = 10, PAD_B = 26, PAD_L = 60, PAD_R = 10;
   const W = Math.max(cv.parentElement.clientWidth || 600, PAD_L + PAD_R + n * 28);
   const H = 220;
   const dpr = window.devicePixelRatio || 1;
@@ -3419,16 +3425,6 @@ function _drawRptCandles(points) {
   const vMin = 0, vMax = Math.max(...allVals, 1);
   const range = (vMax - vMin) || 1;
   const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
-
-  // Legend
-  cx.textBaseline = 'middle';
-  cx.fillStyle = '#10b981'; cx.fillRect(PAD_L, 2, 10, 10);
-  cx.fillStyle = 'rgba(255,255,255,.7)'; cx.font = '11px Inter, sans-serif'; cx.textAlign = 'left';
-  cx.fillText('Revenue', PAD_L + 15, 7);
-  cx.strokeStyle = '#f59e0b'; cx.lineWidth = 2;
-  cx.beginPath(); cx.moveTo(PAD_L + 90, 7); cx.lineTo(PAD_L + 110, 7); cx.stroke();
-  cx.fillStyle = '#f59e0b'; cx.beginPath(); cx.arc(PAD_L + 100, 7, 3, 0, Math.PI*2); cx.fill();
-  cx.fillStyle = 'rgba(255,255,255,.7)'; cx.fillText('Cost', PAD_L + 116, 7);
 
   // Y-axis gridlines + peso labels (left side)
   const steps = 4;
