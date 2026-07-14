@@ -5381,19 +5381,30 @@ async function saveInvItem(){
     cost=cost/piecesPerUnit;
     unit='pcs';
   }
+  // Adding a new item (no id yet) whose name matches one already on file is
+  // treated as a restock — the qty just entered is a NEW purchase, so it's
+  // added on top of the existing stock instead of silently creating a
+  // duplicate row (the item would then show up twice in Inventory with its
+  // stock split across both).
+  let targetId = id;
+  let restockOf = null;
+  if (!targetId) {
+    restockOf = invItems.find(x => (x.name||'').trim().toLowerCase() === name.toLowerCase());
+    if (restockOf) { targetId = restockOf.id; stock = (parseFloat(restockOf.stock) || 0) + stock; }
+  }
   const imgData=_invPendingImgs.length>0?JSON.stringify(_invPendingImgs):null;
   const _expiry = document.getElementById('invExpiry').value || null;
   const _onPromo = document.getElementById('invOnPromo').checked;
   const _salePrice = _onPromo ? (parseFloat(document.getElementById('invSalePrice').value) || null) : null;
   const payload={name,sku,category:cat,unit,stock,cost_price:cost,low_stock_threshold:lowStock,default_usage_qty:usageQty,...(imgData?{image_b64:imgData}:{}),expiry_date:_expiry,is_on_promo:_onPromo,sale_price:_salePrice};
   let err;
-  if(id){({error:err}=await _sb.from('inventory_items').update(payload).eq('id',id));}
+  if(targetId){({error:err}=await _sb.from('inventory_items').update(payload).eq('id',targetId));}
   else{({error:err}=await _sb.from('inventory_items').insert({store_id:STORE.id,...payload}));}
   // Fallback if optional columns don't exist yet
   let usageNotSaved=false;
   if(err&&err.message&&(err.message.includes('default_usage_qty')||err.message.includes('image_b64')||err.message.includes('column'))){
     const p2={name,sku,category:cat,unit,stock,cost_price:cost,low_stock_threshold:lowStock};
-    if(id){({error:err}=await _sb.from('inventory_items').update(p2).eq('id',id));}
+    if(targetId){({error:err}=await _sb.from('inventory_items').update(p2).eq('id',targetId));}
     else{({error:err}=await _sb.from('inventory_items').insert({store_id:STORE.id,...p2}));}
     usageNotSaved=true;
   }
@@ -5418,6 +5429,8 @@ async function saveInvItem(){
   }
   if(usageNotSaved){
     showToast('Item saved. To save the "I use" value, run this SQL in Supabase: ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS default_usage_qty NUMERIC DEFAULT 1;',true);
+  }else if(restockOf){
+    showToast(`Added to existing "${name}" — now ${stock} ${unit} in stock.`);
   }else{
     showToast('Item saved.');
   }
@@ -5480,7 +5493,8 @@ function renderStockHistoryFiltered() {
 async function deleteInvItem(id){
   const i=invItems.find(x=>x.id===id);if(!i)return;
   if(!confirm(`Delete "${i.name}"?`))return;
-  await _sb.from('inventory_items').delete().eq('id',id);
+  const {error}=await _sb.from('inventory_items').delete().eq('id',id);
+  if(error){showToast(`Could not delete "${i.name}": ${error.message}`,true);return;}
   await loadInventory();showToast(`"${i.name}" deleted.`);
 }
 
