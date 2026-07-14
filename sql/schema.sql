@@ -368,6 +368,16 @@ GRANT EXECUTE ON FUNCTION reset_pos_device(uuid, text) TO anon, authenticated;
 ALTER TABLE store_users ADD COLUMN IF NOT EXISTS last_seen     TIMESTAMPTZ;
 ALTER TABLE store_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 
+-- Payroll: an open-ended list of mandatory deductions (SSS, PhilHealth,
+-- insurance, whatever the owner adds by name) deducted from net pay each
+-- payroll run, plus how often this staff member is actually paid.
+-- mandatory_contributions shape: [{"name":"SSS","amount":500}, ...]
+ALTER TABLE store_users DROP COLUMN IF EXISTS sss_contribution;
+ALTER TABLE store_users DROP COLUMN IF EXISTS philhealth_contribution;
+ALTER TABLE store_users DROP COLUMN IF EXISTS pagibig_contribution;
+ALTER TABLE store_users ADD COLUMN IF NOT EXISTS mandatory_contributions JSONB DEFAULT '[]';
+ALTER TABLE store_users ADD COLUMN IF NOT EXISTS salary_frequency       TEXT DEFAULT 'monthly'; -- weekly | semimonthly | monthly
+
 -- Ping: update last_seen so dashboard can show Online indicator
 CREATE OR REPLACE FUNCTION ping_staff_online(p_staff_id UUID)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$

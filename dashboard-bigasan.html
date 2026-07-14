@@ -711,7 +711,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="section" id="sec-payroll">
       <div class="tbl-wrap">
         <div class="tbl-head">
-          <h3>&#128181; Payroll — This Month</h3>
+          <h3>&#128181; Payroll — Current Period</h3>
           <button class="btn btn-accent btn-sm" id="runPayrollBtn" onclick="runPayroll()">&#9654; Run Payroll</button>
         </div>
         <div id="payrollStaffList" style="padding:16px 20px">
@@ -1441,13 +1441,41 @@ input:checked + .slider:before{transform:translateX(18px)}
         <input id="sfJobDesc" type="text" placeholder="e.g. Handles daily cash and sales">
       </div>
     </div>
+    <div class="row2">
+      <div class="field">
+        <label id="sfSalaryLabel">Salary <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills Payroll)</span></label>
+        <input id="sfSalary" type="number" min="0" step="0.01" placeholder="e.g. 15000">
+      </div>
+      <div class="field">
+        <label>Pay Frequency</label>
+        <select id="sfSalaryFreq" onchange="_updateSalaryFreqLabel()">
+          <option value="monthly">Monthly</option>
+          <option value="semimonthly">Every 15 Days</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+    </div>
     <div class="field">
-      <label>Monthly Salary <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills the amount when logging a Salaries expense)</span></label>
-      <input id="sfSalary" type="number" min="0" step="0.01" placeholder="e.g. 15000">
+      <label>Mandatory Contributions <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — deducted from net pay every Payroll run)</span></label>
+      <div id="sfContribList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openContribModal()">&#43; Add Contribution</button>
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('staffModal')">Cancel</button>
       <button class="btn btn-accent" onclick="saveStaff()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CONTRIBUTION POPUP (opens on top of the Staff modal) -->
+<div class="modal" id="contribModal">
+  <div class="mbox" style="width:min(340px,100%)">
+    <h3>&#43; Add Contribution</h3>
+    <div class="field"><label>Name</label><input id="cbName" type="text" placeholder="e.g. SSS, PhilHealth, Insurance"></div>
+    <div class="field"><label>Deduction per month</label><input id="cbAmount" type="number" min="0" step="0.01" placeholder="e.g. 500"></div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" onclick="closeModal('contribModal')">Cancel</button>
+      <button class="btn btn-accent" onclick="saveContribution()">Add</button>
     </div>
   </div>
 </div>
@@ -2173,22 +2201,42 @@ async function deleteExpense(id) {
 // instead of adding them one at a time. Same net-of-cash-advance logic as
 // the single-staff flow in onExpStaffChange().
 let _payrollStaffCache = [];
+
+// Pay-period boundaries per frequency — "already paid" now checks against
+// THIS boundary instead of always the whole calendar month, since a weekly
+// or every-15-days staff member can legitimately be paid more than once a
+// month without that being a duplicate.
+function _payPeriodRange(freq, ref) {
+  const d = ref || new Date();
+  if (freq === 'weekly') {
+    const dayNr = (d.getDay() + 6) % 7; // 0=Mon..6=Sun
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayNr);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  }
+  if (freq === 'semimonthly') {
+    if (d.getDate() <= 15) {
+      return { start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth(), 15).toISOString().slice(0, 10) };
+    }
+    return { start: new Date(d.getFullYear(), d.getMonth(), 16).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10) };
+  }
+  return { start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10), end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10) };
+}
+
 async function loadPayroll() {
   const listEl = document.getElementById('payrollStaffList');
   listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>';
 
   const { data: staff } = await _sb.from('store_users')
-    .select('id,username,full_name,role,monthly_salary').eq('store_id', STORE.id).eq('active', true)
-    .not('monthly_salary', 'is', null).order('role').order('username');
+    .select('id,username,full_name,role,monthly_salary,salary_frequency,mandatory_contributions')
+    .eq('store_id', STORE.id).eq('active', true).not('monthly_salary', 'is', null).order('role').order('username');
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-
-  const { data: paidThisMonth } = await _sb.from('expenses')
-    .select('name').eq('store_id', STORE.id).eq('category', 'Salaries')
-    .gte('expense_date', monthStart).lte('expense_date', monthEnd);
-  const paidNames = new Set((paidThisMonth || []).map(e => e.name.replace(/^Salary - /, '')));
+  // Widest possible period is a calendar month, so a 40-day lookback covers
+  // weekly/semimonthly/monthly "already paid this period" checks for all of them.
+  const lookback = new Date(); lookback.setDate(lookback.getDate() - 40);
+  const { data: recentSalaryExp } = await _sb.from('expenses')
+    .select('name,expense_date').eq('store_id', STORE.id).eq('category', 'Salaries')
+    .gte('expense_date', lookback.toISOString().slice(0, 10));
 
   const { data: advances } = await _sb.from('cash_advances')
     .select('staff_id,amount').eq('store_id', STORE.id).in('status', ['approved', 'disbursed']);
@@ -2205,25 +2253,32 @@ async function loadPayroll() {
     const base = parseFloat(s.monthly_salary) || 0;
     const advance = advByStaff[s.id] || 0;
     const deduction = dedByStaff[s.id] || 0;
-    const net = Math.max(0, base - advance - deduction);
-    return { id: s.id, name, role: s.role, base, advance, deduction, net, alreadyPaid: paidNames.has(name) };
+    const contributions = Array.isArray(s.mandatory_contributions) ? s.mandatory_contributions : [];
+    const contribTotal = contributions.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+    const freq = s.salary_frequency || 'monthly';
+    const period = _payPeriodRange(freq);
+    const alreadyPaid = (recentSalaryExp || []).some(e => e.name === 'Salary - ' + name && e.expense_date >= period.start && e.expense_date <= period.end);
+    const net = Math.max(0, base - advance - deduction - contribTotal);
+    return { id: s.id, name, role: s.role, base, advance, deduction, contributions, contribTotal, freq, net, alreadyPaid };
   });
 
   if (!_payrollStaffCache.length) {
-    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No staff with a monthly salary set yet. Set one in Staff &rarr; Edit.</div>';
+    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No staff with a salary set yet. Set one in Staff &rarr; Edit.</div>';
   } else {
+    const freqLabel = f => f === 'weekly' ? 'Weekly' : f === 'semimonthly' ? 'Every 15 Days' : 'Monthly';
     listEl.innerHTML = _payrollStaffCache.map(s => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
-          <strong>${s.name}</strong> <span style="font-size:10px;color:var(--muted);text-transform:capitalize">${s.role}</span>
+          <strong>${s.name}</strong> <span style="font-size:10px;color:var(--muted);text-transform:capitalize">${s.role}</span> <span style="font-size:10px;color:var(--accent);background:rgba(0,180,216,.12);padding:1px 6px;border-radius:4px">${freqLabel(s.freq)}</span>
           ${s.advance > 0 ? `<div style="font-size:11px;color:var(--warn-text);margin-top:2px">Base ${CUR}${s.base.toFixed(2)} &minus; ${CUR}${s.advance.toFixed(2)} cash advance</div>` : ''}
           ${s.deduction > 0 ? `<div style="font-size:11px;color:var(--danger-text);margin-top:2px">&minus; ${CUR}${s.deduction.toFixed(2)} deduction</div>` : ''}
+          ${s.contribTotal > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">&minus; ${CUR}${s.contribTotal.toFixed(2)} ${s.contributions.map(c => c.name).join(', ')}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="openDeductModal('${s.id}','${s.name.replace(/'/g,"\\'")}')">&minus; Deduct</button>
           <div style="text-align:right">
             <div style="font-weight:700">${CUR}${s.net.toFixed(2)}</div>
-            <div style="font-size:10px;color:${s.alreadyPaid ? '#10b981' : 'var(--muted)'}">${s.alreadyPaid ? '&#10003; Paid this month' : 'Pending'}</div>
+            <div style="font-size:10px;color:${s.alreadyPaid ? '#10b981' : 'var(--muted)'}">${s.alreadyPaid ? '&#10003; Paid this period' : 'Pending'}</div>
           </div>
         </div>
       </div>`).join('');
@@ -2258,7 +2313,7 @@ async function saveDeduction() {
 
 async function runPayroll() {
   const pending = _payrollStaffCache.filter(s => !s.alreadyPaid && s.net > 0);
-  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this month.'); return; }
+  if (!pending.length) { showToast('No pending payroll to run — everyone is already paid this period.'); return; }
   const total = pending.reduce((s, x) => s + x.net, 0);
   if (!confirm(`Run payroll for ${pending.length} staff, total ${CUR}${total.toFixed(2)}?`)) return;
 
@@ -2273,8 +2328,13 @@ async function runPayroll() {
     const deductedParts = [];
     if (s.advance > 0) deductedParts.push(`${CUR}${s.advance.toFixed(2)} cash advance`);
     if (s.deduction > 0) deductedParts.push(`${CUR}${s.deduction.toFixed(2)} deduction`);
+    (s.contributions || []).forEach(c => { if (parseFloat(c.amount) > 0) deductedParts.push(`${CUR}${parseFloat(c.amount).toFixed(2)} ${c.name}`); });
     await _sb.from('expenses').insert({
-      store_id: STORE.id, name: 'Salary - ' + s.name, amount: s.net, billing_cycle: 'monthly',
+      // one-time, not 'monthly' — this row is an actual realized payment for
+      // this specific run, not an ongoing recurring bill like rent, so the
+      // Other Expenses proration in Sales Report shouldn't keep re-counting
+      // it as still-active every period going forward.
+      store_id: STORE.id, name: 'Salary - ' + s.name, amount: s.net, billing_cycle: 'one-time',
       category: 'Salaries', expense_date: today,
       notes: deductedParts.length ? `Base ${CUR}${s.base.toFixed(2)} − ${deductedParts.join(' − ')}` : ''
     });
@@ -4718,9 +4778,54 @@ function openStaffModal(s) {
   document.getElementById('sfJobTitle').value = s ? (s.job_title || '') : '';
   document.getElementById('sfJobDesc').value  = s ? (s.job_description || '') : '';
   document.getElementById('sfSalary').value   = s && s.monthly_salary != null ? s.monthly_salary : '';
+  document.getElementById('sfSalaryFreq').value = s && s.salary_frequency ? s.salary_frequency : 'monthly';
+  _sfContributions = (s && Array.isArray(s.mandatory_contributions)) ? JSON.parse(JSON.stringify(s.mandatory_contributions)) : [];
+  renderSfContribList();
+  _updateSalaryFreqLabel();
   document.getElementById('sfUser').disabled = !!s;
   document.getElementById('staffModal').classList.add('show');
   setTimeout(() => document.getElementById(s ? 'sfName' : 'sfUser').focus(), 50);
+}
+function _updateSalaryFreqLabel() {
+  const freq = document.getElementById('sfSalaryFreq').value;
+  const text = freq === 'weekly' ? 'Weekly Salary' : freq === 'semimonthly' ? 'Salary (Every 15 Days)' : 'Monthly Salary';
+  document.getElementById('sfSalaryLabel').innerHTML = `${text} <span style="color:var(--dim);font-weight:400;font-size:11px">(optional — prefills Payroll)</span>`;
+}
+
+// Mandatory contributions — an open-ended list (SSS, PhilHealth, insurance,
+// anything the owner names) staged in memory while the Staff modal is open,
+// then saved as one JSON array on the staff row.
+let _sfContributions = [];
+function renderSfContribList() {
+  const el = document.getElementById('sfContribList');
+  if (!_sfContributions.length) { el.innerHTML = '<div style="font-size:12px;color:var(--dim)">No contributions added yet.</div>'; return; }
+  el.innerHTML = _sfContributions.map((c, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:8px;padding:8px 12px">
+      <span style="font-size:13px">${c.name}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;font-weight:700">${CUR}${parseFloat(c.amount || 0).toFixed(2)}</span>
+        <button type="button" onclick="removeContribution(${i})" style="background:transparent;border:none;color:var(--danger-text);cursor:pointer;font-size:15px;line-height:1;padding:0">&times;</button>
+      </div>
+    </div>`).join('');
+}
+function openContribModal() {
+  document.getElementById('cbName').value = '';
+  document.getElementById('cbAmount').value = '';
+  document.getElementById('contribModal').classList.add('show');
+  setTimeout(() => document.getElementById('cbName').focus(), 50);
+}
+function saveContribution() {
+  const name = document.getElementById('cbName').value.trim();
+  const amount = parseFloat(document.getElementById('cbAmount').value);
+  if (!name) { showToast('Enter a name for this contribution.', true); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
+  _sfContributions.push({ name, amount });
+  renderSfContribList();
+  closeModal('contribModal');
+}
+function removeContribution(i) {
+  _sfContributions.splice(i, 1);
+  renderSfContribList();
 }
 async function saveStaff() {
   const id   = document.getElementById('staffId').value;
@@ -4736,7 +4841,11 @@ async function saveStaff() {
   const jobDesc  = document.getElementById('sfJobDesc').value.trim();
   const salaryVal = document.getElementById('sfSalary').value;
   const salary = salaryVal !== '' ? parseFloat(salaryVal) : null;
-  let payload = { full_name: name, role, active, job_title: jobTitle || null, job_description: jobDesc || null, monthly_salary: salary };
+  const salaryFreq = document.getElementById('sfSalaryFreq').value;
+  let payload = {
+    full_name: name, role, active, job_title: jobTitle || null, job_description: jobDesc || null,
+    monthly_salary: salary, salary_frequency: salaryFreq, mandatory_contributions: _sfContributions
+  };
   if (pw) payload.password_hash = await sha256(pw);
   if (id) {
     await _sb.from('store_users').update(payload).eq('id', id);
