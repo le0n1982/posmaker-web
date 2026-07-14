@@ -181,6 +181,7 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
       <button class="snav" id="tabSupport"  onclick="showTab('support')">&#128139; Support</button>
       <button class="snav" id="tabPlans"    onclick="showTab('plans')">&#128202; Plan Limits</button>
       <button class="snav" id="tabVisitors" onclick="showTab('visitors')">&#127757; Visitors</button>
+      <button class="snav" id="tabBugs"     onclick="showTab('bugs')">&#129704; Bug Checker</button>
     </div>
     <!-- Main Panel -->
     <div class="main-panel">
@@ -439,6 +440,21 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
             <tbody id="visitorsTbody"><tr class="empty-row"><td colspan="3">Loading…</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- BUG CHECKER -->
+    <div id="secBugs" style="display:none">
+      <div class="card">
+        <div class="card-title">&#129704; Bug Checker</div>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 14px">Scans a store for the kinds of bugs found by hand this session — duplicate records a race condition let through, links pointing at deleted rows, and columns/tables a feature depends on that were never migrated on this Supabase project.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select class="filter-sel" id="bugCheckStoreSel" style="min-width:220px">
+            <option value="">— Select Store —</option>
+          </select>
+          <button class="btn btn-accent btn-sm" id="bugCheckBtn" onclick="runBugCheck()">&#128269; Run Check</button>
+        </div>
+        <div id="bugCheckResults" style="margin-top:18px"></div>
       </div>
     </div>
 
@@ -1130,6 +1146,116 @@ CREATE OR REPLACE FUNCTION ping_staff_online(p_staff_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   UPDATE store_users SET last_seen = now() WHERE id = p_staff_id;
+END; $$;
+
+-- Bug Checker (Dev Support → Bug Checker) — scans one store for the classes
+-- of bug this project has actually hit: duplicate rows a check-then-insert
+-- race let through, links pointing at deleted rows, and schema drift where
+-- a feature's column/table was never migrated on this Supabase project.
+CREATE OR REPLACE FUNCTION dev_check_store_bugs(p_token text, p_store_id uuid)
+RETURNS TABLE(category text, severity text, message text, details text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+
+  -- Duplicate products (same name, case/whitespace-insensitive)
+  RETURN QUERY
+    SELECT 'Duplicate Products'::text, 'warning'::text,
+           'Product "' || min(p.name) || '" appears ' || count(*) || ' times',
+           string_agg(p.id::text, ', ')
+    FROM products p
+    WHERE p.store_id = p_store_id
+    GROUP BY lower(trim(p.name))
+    HAVING count(*) > 1;
+
+  -- Duplicate inventory items
+  RETURN QUERY
+    SELECT 'Duplicate Inventory Items'::text, 'warning'::text,
+           'Inventory item "' || min(i.name) || '" appears ' || count(*) || ' times',
+           string_agg(i.id::text, ', ')
+    FROM inventory_items i
+    WHERE i.store_id = p_store_id
+    GROUP BY lower(trim(i.name))
+    HAVING count(*) > 1;
+
+  -- Duplicate store rows sharing this store's owner (the "Golden K88" bug)
+  RETURN QUERY
+    SELECT 'Duplicate Store Accounts'::text, 'critical'::text,
+           'This owner has ' || count(*) || ' store accounts (should be 1)',
+           string_agg(s2.name || ' (' || s2.id::text || ')', ', ')
+    FROM stores s1
+    JOIN stores s2 ON s2.owner_id = s1.owner_id
+    WHERE s1.id = p_store_id
+    GROUP BY s1.owner_id
+    HAVING count(*) > 1;
+
+  -- Products whose inv_links point at a since-deleted inventory item —
+  -- silently breaks that product's auto-deduction on sale
+  RETURN QUERY
+    SELECT 'Broken Inventory Link'::text, 'critical'::text,
+           'Product "' || p.name || '" links to a deleted inventory item',
+           'product id: ' || p.id::text
+    FROM products p,
+         LATERAL jsonb_array_elements(
+           CASE WHEN p.inv_links IS NULL OR p.inv_links = '' THEN '[]'::jsonb ELSE p.inv_links::jsonb END
+         ) AS link
+    WHERE p.store_id = p_store_id
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_items ii
+        WHERE ii.id = (CASE WHEN jsonb_typeof(link) = 'string' THEN trim(both '"' from link::text)::uuid ELSE (link->>'id')::uuid END)
+      );
+
+  -- Duplicate staff usernames within this store (should be impossible under
+  -- the UNIQUE(store_id, username) constraint — confirms it's actually live)
+  RETURN QUERY
+    SELECT 'Duplicate Staff Username'::text, 'critical'::text,
+           'Username "' || min(su.username) || '" is used by ' || count(*) || ' staff accounts',
+           string_agg(su.id::text, ', ')
+    FROM store_users su
+    WHERE su.store_id = p_store_id
+    GROUP BY lower(su.username)
+    HAVING count(*) > 1;
+
+  -- Products with a missing/negative price
+  RETURN QUERY
+    SELECT 'Invalid Price'::text, 'warning'::text,
+           'Product "' || p.name || '" has an invalid price (' || COALESCE(p.price::text, 'null') || ')',
+           'product id: ' || p.id::text
+    FROM products p
+    WHERE p.store_id = p_store_id AND (p.price IS NULL OR p.price < 0);
+
+  -- Schema drift: columns this session found guarded by "column does not
+  -- exist" fallbacks in the app code — missing here means that feature is
+  -- silently degraded for every store on this Supabase project, not just
+  -- this one, but it's surfaced from whichever store you're checking.
+  RETURN QUERY
+    SELECT 'Missing Column'::text, 'info'::text,
+           'Column "' || want.col || '" is missing on table "' || want.tbl || '"',
+           'A feature depending on this silently falls back to reduced functionality.'
+    FROM (VALUES
+      ('inventory_items','default_usage_qty'),
+      ('products','inv_links'),
+      ('products','embeddings'),
+      ('products','cost_price'),
+      ('stores','gcash_qr_b64'),
+      ('cash_remittances','owner_confirmed')
+    ) AS want(tbl, col)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.table_name = want.tbl AND c.column_name = want.col
+    );
+
+  -- Schema drift: whole tables that specific features depend on
+  RETURN QUERY
+    SELECT 'Missing Table'::text, 'info'::text,
+           'Table "' || want.tbl || '" does not exist',
+           'A whole feature area depends on this table and will fail if used.'
+    FROM (VALUES ('cash_advances'),('payment_methods'),('void_refund_requests'),('draft_orders'),('stock_history')) AS want(tbl)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM information_schema.tables t
+      WHERE t.table_schema = 'public' AND t.table_name = want.tbl
+    );
 END; $$;`;
 
 function showSqlSetup() {
@@ -1214,6 +1340,67 @@ function populateStoreFilter(selId) {
   sel.innerHTML = '<option value="">All Stores</option>';
   _allStores.forEach(s => sel.appendChild(new Option(s.name, s.id)));
   sel.value = cur;
+}
+
+// ── Bug Checker ──────────────────────────────────────────────────────────────
+function populateBugCheckStoreSel() {
+  const sel = document.getElementById('bugCheckStoreSel');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Select Store —</option>';
+  _allStores.forEach(s => sel.appendChild(new Option(s.name + (s.business_type ? ' (' + s.business_type + ')' : ''), s.id)));
+  sel.value = cur;
+}
+const BUG_SEVERITY_STYLE = {
+  critical: 'border-left:3px solid var(--danger);background:rgba(239,68,68,.06)',
+  warning:  'border-left:3px solid var(--warn);background:rgba(245,158,11,.06)',
+  info:     'border-left:3px solid var(--accent);background:rgba(0,180,216,.06)',
+};
+const BUG_SEVERITY_BADGE = {
+  critical: 'background:rgba(239,68,68,.15);color:var(--danger)',
+  warning:  'background:rgba(245,158,11,.15);color:var(--warn)',
+  info:     'background:rgba(0,180,216,.15);color:var(--accent)',
+};
+async function runBugCheck() {
+  const storeId = document.getElementById('bugCheckStoreSel').value;
+  const resultsEl = document.getElementById('bugCheckResults');
+  if (!storeId) { showToast('Select a store first.', true); return; }
+  const btn = document.getElementById('bugCheckBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Checking…';
+  resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Running checks…</p>';
+  const { data, error } = await _sb.rpc('dev_check_store_bugs', { p_token: _devToken, p_store_id: storeId });
+  btn.disabled = false; btn.innerHTML = '&#128269; Run Check';
+  if (error) {
+    if (error.message && error.message.includes('does not exist')) {
+      resultsEl.innerHTML = '<p style="color:var(--danger);font-size:13px">The dev_check_store_bugs function isn\'t set up in Supabase yet. Run the latest setup SQL (Settings → re-copy setup SQL) in the SQL Editor, then try again.</p>';
+    } else {
+      handleAuthError(error);
+      resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">Error: ${esc(error.message)}</p>`;
+    }
+    return;
+  }
+  const findings = data || [];
+  if (!findings.length) {
+    resultsEl.innerHTML = '<p style="color:var(--success);font-size:14px;font-weight:600">&#10003; No issues found.</p>';
+    return;
+  }
+  const byCat = {};
+  findings.forEach(f => { (byCat[f.category] ||= []).push(f); });
+  resultsEl.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:12px">${findings.length} issue${findings.length > 1 ? 's' : ''} found.</p>` +
+    Object.entries(byCat).map(([cat, items]) => `
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">${esc(cat)}</div>
+        ${items.map(f => `
+          <div style="${BUG_SEVERITY_STYLE[f.severity] || BUG_SEVERITY_STYLE.info};border-radius:8px;padding:10px 14px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+              <span class="badge" style="${BUG_SEVERITY_BADGE[f.severity] || BUG_SEVERITY_BADGE.info};font-size:10px;text-transform:uppercase">${esc(f.severity)}</span>
+              <span style="font-size:13px;font-weight:600">${esc(f.message)}</span>
+            </div>
+            ${f.details ? `<div style="font-size:11px;color:var(--muted);font-family:monospace">${esc(f.details)}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
 }
 
 // ── Render Stores ────────────────────────────────────────────────────────────
@@ -2070,7 +2257,7 @@ async function doGrantReferral() {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function showTab(tab) {
-  const map = {stores:'Stores',staff:'Staff',accounts:'Accounts',orders:'Orders',subs:'Subs',agents:'Agents',referrals:'Referrals',support:'Support',plans:'Plans',visitors:'Visitors'};
+  const map = {stores:'Stores',staff:'Staff',accounts:'Accounts',orders:'Orders',subs:'Subs',agents:'Agents',referrals:'Referrals',support:'Support',plans:'Plans',visitors:'Visitors',bugs:'Bugs'};
   Object.keys(map).forEach(t => {
     document.getElementById('sec' + map[t]).style.display = t === tab ? '' : 'none';
     document.getElementById('tab' + map[t]).classList.toggle('active', t === tab);
@@ -2086,6 +2273,7 @@ function showTab(tab) {
   if (tab === 'accounts') renderAccounts();
   if (tab === 'plans' && !_planLimits.length) loadPlanLimits();
   if (tab === 'visitors' && !_allVisits.length) loadVisitors();
+  if (tab === 'bugs') populateBugCheckStoreSel();
 }
 
 // ── Website Visitors ────────────────────────────────────────────────────────────

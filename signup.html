@@ -395,7 +395,26 @@ async function _finishStoreSetup(session) {
       .select().single());
   }
 
-  if (storeErr) { return { error: storeErr }; }
+  if (storeErr) {
+    // The "check existing, then insert" above isn't atomic — the background
+    // email-confirm poll, the confirmation-link tab, and a direct signup
+    // session can all reach this point for the SAME owner within moments of
+    // each other, each seeing "no store yet" before any of them commit.
+    // Whichever one the DB's unique constraint on owner_id rejects isn't a
+    // real failure — someone else (another tab/device) already won and
+    // created the store first. Look that up and continue normally instead
+    // of surfacing a raw "duplicate key" error.
+    const isDupOwner = storeErr.code === '23505' || (storeErr.message && /duplicate key|unique constraint/i.test(storeErr.message));
+    if (isDupOwner) {
+      const { data: winner } = await _sb.from('stores').select('id').eq('owner_id', userId).single();
+      if (winner) {
+        localStorage.setItem('pm_store_id', winner.id);
+        await _sb.auth.signOut();
+        location.href = 'login.html'; return;
+      }
+    }
+    return { error: storeErr };
+  }
 
   // Best-effort: store hours columns may not exist yet if the SQL migration
   // hasn't been run — don't let that block account/store creation.
