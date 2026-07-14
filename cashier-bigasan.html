@@ -2734,10 +2734,17 @@ async function _doConfirmOrder() {
   // receipt/proof photos are (activity_logs.details.receipt_b64), so it
   // shows up automatically in the Staff Logs "View" button.
   if (_epayProofB64) {
+    // For a Split sale only PART of the total went through e-pay — the rest
+    // is cash sitting in the drawer. Logging the full order total here made
+    // the owner's Login History show e.g. "G-Cash ₱1120.00" for a sale that
+    // was actually Cash ₱X + G-Cash ₱Y, overstating how much left the
+    // drawer electronically and understating expected cash on hand.
+    const epayAmount = payMeth === 'Split' ? (total - (_splitCashAmt || 0)) : total;
+    const epayMethodLabel = payMeth === 'Split' ? `${_epayChosenLabel} (Split)` : _epayChosenLabel;
     _sb.from('activity_logs').insert({
       store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
       action: 'EPAY_PROOF', target_name: `Order #${ord.id}`,
-      details: JSON.stringify({ method: _epayChosenLabel, amount: total, receipt_b64: 'data:image/jpeg;base64,' + _epayProofB64 })
+      details: JSON.stringify({ method: epayMethodLabel, amount: epayAmount, receipt_b64: 'data:image/jpeg;base64,' + _epayProofB64 })
     }).then(() => {});
     _epayProofB64 = null;
   }
