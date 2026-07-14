@@ -91,8 +91,23 @@ nav{
   font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;
 }
 .btn-cta:hover{opacity:.9}
+.nav-ham{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0}
 @media(max-width:840px){.nav-dl{display:none!important}}
-@media(max-width:640px){.nav-links{display:none}}
+/* Below this width the logo + 6 links + toggle + Log in/Get Started no
+   longer fit on one line — collapse the links into a hamburger dropdown
+   instead of letting them wrap and get clipped by nav's fixed height. */
+@media(max-width:900px){
+  .nav-ham{display:flex}
+  .nav-links{
+    display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:flex-start;gap:2px;
+    background:var(--s1);border-bottom:1px solid var(--border);
+    padding:10px 5vw 16px;box-shadow:0 16px 32px rgba(0,0,0,.18);
+  }
+  .nav-links.open{display:flex}
+  .nav-links a{padding:9px 0;width:100%}
+}
+@media(max-width:480px){.nav-btns .btn-ghost{display:none}}
 
 /* ── HERO ── */
 .hero{
@@ -487,7 +502,8 @@ footer{background:var(--s1);border-top:1px solid var(--border);padding:44px 5vw 
 <!-- NAV -->
 <nav>
   <div class="nav-logo">POS<span class="c">Maker</span></div>
-  <div class="nav-links">
+  <button id="navHam" class="nav-ham" onclick="toggleNavMenu()" aria-label="Menu" aria-expanded="false">&#9776;</button>
+  <div class="nav-links" id="navLinks">
     <a href="#about">About</a>
     <a href="#features">Features</a>
     <a href="#how">How it Works</a>
@@ -828,6 +844,27 @@ function toggleTheme() {
   _updateThemeIcon();
 }
 _updateThemeIcon();
+
+function toggleNavMenu() {
+  const links = document.getElementById('navLinks');
+  const ham = document.getElementById('navHam');
+  const open = links.classList.toggle('open');
+  ham.setAttribute('aria-expanded', open ? 'true' : 'false');
+  ham.innerHTML = open ? '&#10005;' : '&#9776;';
+}
+// Closing the dropdown after picking a link (they're same-page anchors or
+// navigations, either way the open panel shouldn't linger) and on resize
+// past the breakpoint (avoids it staying stuck open if the window widens).
+document.addEventListener('click', e => {
+  const links = document.getElementById('navLinks');
+  if (links && links.classList.contains('open') && e.target.closest('#navLinks a')) {
+    toggleNavMenu();
+  }
+});
+window.addEventListener('resize', () => {
+  const links = document.getElementById('navLinks');
+  if (links && window.innerWidth > 900 && links.classList.contains('open')) toggleNavMenu();
+});
 
 (function() {
   const ref = new URLSearchParams(location.search).get('ref');
