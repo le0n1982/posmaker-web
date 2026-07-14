@@ -2638,6 +2638,12 @@ async function savePrinterSetting() {
 }
 
 function newOrder() {
+  // Close the receipt modal FIRST, before any of the cleanup below — if a
+  // later step throws (a missing element, an unexpected cart/discount
+  // state), the cashier must never be left stuck staring at a receipt they
+  // can't get past. Everything after this is best-effort cleanup.
+  document.getElementById('mConfirm').style.display = 'none';
+  try {
   cart = {}; payMeth = 'Cash';
   discPct = 0; discAmt = 0;
   document.getElementById('tendered').value = '';
@@ -2651,7 +2657,7 @@ function newOrder() {
   document.getElementById('btnKOT').classList.remove('on');
   document.getElementById('btnKOT').textContent = '\u{1F468}‍\u{1F373} KOT';
   redrawCart();
-  document.getElementById('mConfirm').style.display = 'none';
+  } catch (e) { console.error('newOrder cleanup failed:', e); }
 }
 
 function closeM(id) { document.getElementById(id).classList.remove('show'); }

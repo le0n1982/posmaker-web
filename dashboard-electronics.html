@@ -3124,6 +3124,9 @@ function renderReport(orders, from, to) {
   const grandVat = orders.reduce((s,o) => s + parseFloat(o.tax||0), 0);
   const grandCapital = orders.reduce((s,o) => s + (o._capital||0), 0);
   const grandProfit  = grandSub - grandCapital;
+  // Cash vs E-Pay split for the summary panel below.
+  const grandCash = orders.reduce((s,o) => (o.payment_method || 'Cash') === 'Cash' ? s + parseFloat(o.total||0) : s, 0);
+  const grandEpay = grandTotal - grandCash;
 
   // Order type breakdown
   const typeGroups = {};
@@ -3166,6 +3169,14 @@ function renderReport(orders, from, to) {
       <div style="background:var(--s1);border-radius:8px;padding:10px 12px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Net Profit</div>
         <div style="font-size:14px;font-weight:800;color:${grandProfit>=0?'#10b981':'#f87171'}">${CUR}${grandProfit.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--ok-bg);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--ok-text);margin-bottom:3px">&#128181; Cash</div>
+        <div style="font-size:14px;font-weight:800;color:var(--ok-text)">${CUR}${grandCash.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--purple-bg);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--purple-text);margin-bottom:3px">&#128241; E-Pay</div>
+        <div style="font-size:14px;font-weight:800;color:var(--purple-text)">${CUR}${grandEpay.toFixed(2)}</div>
       </div>
       <div style="background:linear-gradient(135deg,#003d4d,#00263a);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;grid-column:1/-1">
         <div style="font-size:10px;color:var(--accent);margin-bottom:3px">GRAND TOTAL</div>
@@ -3966,14 +3977,29 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   const actLogs = (actData || []).concat(caData || []);
 
   // Live running total for an open (still logged-in, not yet logged out)
-  // shift — sum of today's Cash orders since that login, so the owner sees
-  // the current drawer total without listing each sale.
+  // shift — sum of unremitted Cash orders, so the owner sees the current
+  // drawer total without listing each sale.
   let liveTotal = null;
   const lastLogin = loginTimes[loginTimes.length - 1];
   const hasOpenShift = lastLogin && !logoutTimes.some(t => t > lastLogin);
   if (isCashier && hasOpenShift) {
+    // Anchor on the last REMITTANCE, not the last login — a cashier who
+    // logs out and back in mid-day (lunch break, force-logout, etc.)
+    // without remitting in between must still have that earlier cash
+    // counted here, exactly like the cashier's own "Cash on Hand at
+    // Logout" screen (openRemitOnLogout() in cashier-*.html) already does.
+    // Falling back to lastLogin would silently drop that earlier chunk.
+    const { data: lastRemit } = await _sb.from('cash_remittances')
+      .select('created_at').eq('store_id', STORE.id).eq('cashier_name', displayName)
+      .order('created_at', { ascending: false }).limit(1);
+    let liveFrom = lastRemit?.[0]?.created_at;
+    if (!liveFrom) {
+      const { data: firstLogin } = await _sb.from('staff_logs')
+        .select('login_at').eq('staff_id', staffId).order('login_at', { ascending: true }).limit(1);
+      liveFrom = firstLogin?.[0]?.login_at || lastLogin;
+    }
     const { data: ord } = await _sb.from('orders').select('total,payment_method')
-      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', lastLogin);
+      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', liveFrom);
     liveTotal = (ord || []).filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o) => s + (parseFloat(o.total)||0), 0);
   }
 
@@ -4037,6 +4063,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       if (receiptB64) _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
       if (receiptB64) return `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
       if (l.action === 'RECEIVED_COH') return `<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
+      if (l.action === 'REMITTANCE') return `<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`;
       return '';
     }).filter(Boolean).join('') || '<span style="color:var(--dim)">—</span>';
 
@@ -4467,6 +4494,52 @@ async function viewCohReceipt(logId) {
     const a = document.createElement('a');
     a.href = png;
     a.download = 'COH_' + (log.target_name || 'cashier').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
+    a.click();
+  };
+  img.src = png;
+  document.getElementById('receiptMeta').textContent = '';
+  document.getElementById('receiptModal').classList.add('show');
+}
+// A cashier's own REMITTANCE log has no photo attached (it's just a number
+// the cashier typed in at logout) — build the same kind of receipt image
+// used for RECEIVED_COH instead, from the matching cash_remittances row
+// (the log's plain-text details don't carry pos_sales/online_sales/etc, so
+// the source row has to be looked up by cashier + closest timestamp).
+async function viewRemitReceipt(logId) {
+  const log = _activityLogs.find(l => l.id === logId);
+  if (!log) return;
+  const { data: remitRows } = await _sb.from('cash_remittances')
+    .select('pos_sales,cash_on_hand,difference,online_sales,created_at')
+    .eq('store_id', STORE.id).eq('cashier_name', log.actor_name);
+  const logTime = new Date(log.created_at).getTime();
+  const remit = (remitRows || [])
+    .map(r => ({ r, dist: Math.abs(new Date(r.created_at).getTime() - logTime) }))
+    .filter(x => x.dist <= 15000)
+    .sort((a,b) => a.dist - b.dist)[0]?.r;
+  if (!remit) { showToast('Remittance details not found.', true); return; }
+
+  const diff = parseFloat(remit.difference) || 0;
+  const status = diff < 0 ? `Short -${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : diff > 0 ? `Over +${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : 'Balanced';
+  const d = { cash_sales: remit.pos_sales, non_cash_sales: remit.online_sales, cash_on_hand: remit.cash_on_hand, result: status };
+  const dateStr = new Date(log.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const png = await _cohReceiptToPng(d, log.actor_name || '—', dateStr, null);
+
+  const banner     = document.getElementById('receiptStatusBanner');
+  const imgWrap    = document.getElementById('receiptImgWrap');
+  const img        = document.getElementById('receiptImg');
+  const invalidBtn = document.getElementById('receiptInvalidBtn');
+  const acceptBtn  = document.getElementById('receiptAcceptBtn');
+  const downloadBtn = document.getElementById('receiptDownloadBtn');
+
+  banner.style.display = 'none';
+  imgWrap.style.display = '';
+  invalidBtn.style.display = 'none';
+  acceptBtn.style.display = 'none';
+  downloadBtn.style.display = '';
+  downloadBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = 'Remit_' + (log.actor_name || 'cashier').replace(/\s+/g, '_') + '_' + (log.created_at || '').slice(0, 10) + '.png';
     a.click();
   };
   img.src = png;

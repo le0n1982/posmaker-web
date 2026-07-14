@@ -4026,7 +4026,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'EPAY_PROOF']
     : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
 
-  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }] = await Promise.all([
+  const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }, { data: cohData }] = await Promise.all([
     _sb.from('staff_logs').select('login_at').eq('staff_id', staffId).gte('login_at', fromISO).order('login_at', { ascending: true }),
     _sb.from('activity_logs').select('created_at').eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'LOGOUT').gte('created_at', fromISO).order('created_at', { ascending: true }),
     isCashier ? _sb.from('cash_remittances').select('created_at,cash_on_hand').eq('store_id', STORE.id).eq('cashier_name', displayName).gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
@@ -4040,11 +4040,19 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     _sb.from('activity_logs').select('id,action,details,created_at')
       .eq('store_id', STORE.id).eq('target_name', displayName).in('action', ['CASH_ADVANCE_APPROVED', 'CASH_ADVANCE_GIVEN'])
       .gte('created_at', fromISO).order('created_at', { ascending: true }),
+    // Same idea for RECEIVED_COH — it's logged against whichever manager
+    // confirmed it (actor_name), with the cashier as target_name, so a
+    // cashier viewing their OWN log needs this separate lookup to see that
+    // their remittance was actually received, not just that they sent it.
+    isCashier ? _sb.from('activity_logs').select('id,action,details,created_at')
+      .eq('store_id', STORE.id).eq('target_name', displayName).eq('action', 'RECEIVED_COH')
+      .gte('created_at', fromISO).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
   ]);
   const remits = remitRes.data || [];
   const loginTimes = (logins || []).map(l => l.login_at);
   const logoutTimes = (logoutData || []).map(l => l.created_at);
-  const actLogs = (actData || []).concat(caData || []);
+  const actLogs = (actData || []).concat(caData || []).concat(cohData || [])
+    .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
 
   // Live running total for an open (still logged-in, not yet logged out)
   // shift — sum of unremitted Cash orders, so the owner sees the current
