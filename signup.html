@@ -5,45 +5,53 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Create Your Store</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#09090f;color:#f0f0f8;font-family:'Inter',sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+:root{--bg:#09090f;--s1:#111120;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;--danger:#ef4444}
+@media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;--danger:#c0392b}}
+:root[data-theme="dark"]{--bg:#09090f;--s1:#111120;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;--danger:#ef4444}
+:root[data-theme="light"]{--bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;--danger:#c0392b}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
 .wrap{width:min(460px,100%)}
 .logo{text-align:center;font-size:22px;font-weight:800;margin-bottom:32px}
-.logo span{color:#00b4d8}
-.card{background:#111120;border:1px solid #252540;border-radius:16px;padding:36px}
+.logo span{color:var(--accent)}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:36px}
 h1{font-size:22px;font-weight:800;margin-bottom:4px}
-.sub{font-size:14px;color:#8888aa;margin-bottom:28px}
+.sub{font-size:14px;color:var(--muted);margin-bottom:28px}
 .field{margin-bottom:16px}
-label{display:block;font-size:13px;font-weight:600;color:#aaa;margin-bottom:6px}
-input,select{width:100%;padding:11px 14px;background:#09090f;border:1.5px solid #252540;border-radius:8px;color:#f0f0f8;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
-input:focus,select:focus{border-color:#00b4d8}
-input::placeholder{color:#44445a}
-select option{background:#111120;color:#f0f0f8}
-select optgroup{background:#0a0a18;color:#8888aa;font-style:normal;font-size:11px}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+input,select{width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--dim)}
+select option{background:var(--s1);color:var(--text)}
+select optgroup{background:var(--bg);color:var(--muted);font-style:normal;font-size:11px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .closed-days{display:flex;flex-wrap:wrap;gap:10px}
-.closed-days label{display:flex;align-items:center;gap:5px;width:auto;margin:0;font-size:13px;font-weight:500;color:#f0f0f8}
+.closed-days label{display:flex;align-items:center;gap:5px;width:auto;margin:0;font-size:13px;font-weight:500;color:var(--text)}
 .closed-days input{width:auto;padding:0}
-.btn{width:100%;padding:13px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;font-family:'Inter',sans-serif;transition:opacity .15s}
+.btn{width:100%;padding:13px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;font-family:'Inter',sans-serif;transition:opacity .15s}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.err{color:#ef4444;font-size:13px;min-height:18px;margin-bottom:10px;text-align:center}
-.login-link{text-align:center;font-size:13px;color:#8888aa;margin-top:18px}
-.login-link a{color:#00b4d8;font-weight:600}
-.divider{border:none;border-top:1px solid #252540;margin:20px 0}
+.err{color:var(--danger);font-size:13px;min-height:18px;margin-bottom:10px;text-align:center}
+.login-link{text-align:center;font-size:13px;color:var(--muted);margin-top:18px}
+.login-link a{color:var(--accent);font-weight:600}
+.divider{border:none;border-top:1px solid var(--border);margin:20px 0}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pw-wrap{position:relative}
 .pw-wrap input{padding-right:42px}
-.pw-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8888aa;font-size:17px;padding:0;line-height:1}
+.pw-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:17px;padding:0;line-height:1}
 </style>
 </head>
 <body>
-<a href="index.html" style="position:fixed;top:16px;left:16px;color:#8888aa;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px;z-index:99">&#8592; Back to Home</a>
+<a href="index.html" style="position:fixed;top:16px;left:16px;color:var(--muted);font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px;z-index:99">&#8592; Back to Home</a>
+<button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="position:fixed;top:16px;right:16px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer;z-index:99">&#127769;</button>
 <div class="wrap">
   <div class="logo">POS<span>Maker</span></div>
   <div class="card">
@@ -169,7 +177,7 @@ select optgroup{background:#0a0a18;color:#8888aa;font-style:normal;font-size:11p
     <div id="stepConfirm" style="display:none;text-align:center;padding:8px 0">
       <div style="font-size:44px;margin-bottom:14px">📧</div>
       <h1 id="confirmTitle" style="margin-bottom:8px">Check your email</h1>
-      <p class="sub">We sent a confirmation link to <strong id="confirmEmail" style="color:#f0f0f8"></strong>. Open it on this device or any other (like your phone) — this page will continue automatically once confirmed.</p>
+      <p class="sub">We sent a confirmation link to <strong id="confirmEmail" style="color:var(--text)"></strong>. Open it on this device or any other (like your phone) — this page will continue automatically once confirmed.</p>
       <div style="margin-top:18px">
         <button id="btnResend" class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:13px;padding:8px 18px;width:auto" onclick="resendConfirmation()">Didn't receive it? Resend email</button>
         <div id="resendMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
@@ -499,7 +507,7 @@ async function doSignup() {
     _signupSubmitting = false;
     btn.disabled = false; btn.textContent = 'Create Account & Store →';
     const emailField = document.getElementById('email');
-    emailField.style.borderColor = '#ef4444';
+    emailField.style.borderColor = 'var(--danger)';
     emailField.focus();
     emailField.addEventListener('input', () => { emailField.style.borderColor = ''; }, { once: true });
     errEl.innerHTML = 'This email has already been registered. Try another email, or <a href="login.html" style="color:var(--accent)">log in instead &rarr;</a>';
@@ -702,6 +710,22 @@ async function finishStoreOnly() {
   _soBtn.disabled = false;
   _soBtn.textContent = 'Create My Store →';
 })();
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 </script>
 </body>
 </html>

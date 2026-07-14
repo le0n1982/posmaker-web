@@ -5,12 +5,30 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Pricing & Plans</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--success:#10b981;--warn:#f59e0b;--danger:#ef4444}
+:root{
+  --accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--success:#10b981;--warn:#f59e0b;--danger:#ef4444;
+  --hero-glow:#0d1a2e;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;
+  --success:#0a7a42;--warn:#b7791f;--danger:#c0392b;--hero-glow:#e6f7fb;
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;
+  --success:#10b981;--warn:#f59e0b;--danger:#ef4444;--hero-glow:#0d1a2e;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;
+  --success:#0a7a42;--warn:#b7791f;--danger:#c0392b;--hero-glow:#e6f7fb;
+}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
 
 /* ── NAV ── */
@@ -20,8 +38,8 @@ nav{background:var(--s1);border-bottom:1px solid var(--border);padding:0 24px;he
 .nav-link{color:var(--muted);font-size:13px;font-weight:500;text-decoration:none;transition:color .15s}.nav-link:hover{color:var(--text)}
 
 /* ── HERO ── */
-.hero{text-align:center;padding:72px 20px 56px;background:radial-gradient(ellipse at 50% 0%,#0d1a2e 0%,var(--bg) 65%)}
-.hero-badge{display:inline-block;background:#0d1a2e;border:1px solid #00b4d855;color:var(--accent);font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;margin-bottom:20px;letter-spacing:.4px}
+.hero{text-align:center;padding:72px 20px 56px;background:radial-gradient(ellipse at 50% 0%,var(--hero-glow) 0%,var(--bg) 65%)}
+.hero-badge{display:inline-block;background:var(--hero-glow);border:1px solid #00b4d855;color:var(--accent);font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;margin-bottom:20px;letter-spacing:.4px}
 .hero h1{font-size:clamp(32px,6vw,56px);font-weight:900;line-height:1.1;margin-bottom:16px}
 .hero h1 span{color:var(--accent)}
 .hero p{font-size:16px;color:var(--muted);max-width:520px;margin:0 auto 12px;line-height:1.6}
@@ -98,6 +116,7 @@ input:focus{border-color:var(--accent)}
 <nav>
   <span class="nav-logo">POS<span>Maker</span></span>
   <div class="nav-links">
+    <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
     <a class="nav-link" href="cashier.html">Cashier</a>
     <a class="nav-link" href="dashboard.html">Dashboard</a>
   </div>
@@ -209,6 +228,23 @@ input:focus{border-color:var(--accent)}
 <script>
 const {createClient} = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 
 let _selectedPlan = '', _selectedPrice = '', _selectedEmail = '';
 let _paypalLoaded = null; // null=pending, true=ok, false=error

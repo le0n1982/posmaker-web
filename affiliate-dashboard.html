@@ -5,53 +5,72 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Affiliate Dashboard</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#09090f;color:#f0f0f8;font-family:'Inter',sans-serif;min-height:100dvh}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #252540}
+:root{
+  --bg:#09090f;--s1:#111120;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;
+  --ok-text:#10b981;--warn-text:#f59e0b;--danger-text:#ef4444;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;
+  --ok-text:#0a7a42;--warn-text:#b7791f;--danger-text:#c0392b;
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--border:#252540;--text:#f0f0f8;--muted:#8888aa;
+  --ok-text:#10b981;--warn-text:#f59e0b;--danger-text:#ef4444;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;
+  --ok-text:#0a7a42;--warn-text:#b7791f;--danger-text:#c0392b;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100dvh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border)}
 .logo{font-size:20px;font-weight:800}
-.logo span{color:#00b4d8}
+.logo span{color:var(--accent)}
 .topbar-right{display:flex;align-items:center;gap:14px}
-.user-email{font-size:13px;color:#8888aa}
-.btn{padding:10px 18px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .15s}
+.user-email{font-size:13px;color:var(--muted)}
+.btn{padding:10px 18px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .15s}
 .btn:hover{opacity:.88}
-.btn-ghost{background:transparent;border:1.5px solid #252540;color:#ccccdd}
+.btn-ghost{background:transparent;border:1.5px solid var(--border);color:var(--text)}
 .wrap{max-width:760px;margin:0 auto;padding:32px 24px}
-.card{background:#111120;border:1px solid #252540;border-radius:16px;padding:28px;margin-bottom:20px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:20px}
 h1{font-size:20px;font-weight:800;margin-bottom:4px}
 h2{font-size:16px;font-weight:700;margin-bottom:12px}
-.sub{font-size:13px;color:#8888aa;margin-bottom:18px}
+.sub{font-size:13px;color:var(--muted);margin-bottom:18px}
 .badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700}
-.badge-warn{background:rgba(245,158,11,.15);color:#f59e0b}
-.badge-ok{background:rgba(16,185,129,.15);color:#10b981}
-.badge-danger{background:rgba(239,68,68,.15);color:#ef4444}
-.link-box{display:flex;gap:10px;align-items:center;background:#09090f;border:1.5px solid #252540;border-radius:8px;padding:12px 14px;margin-top:12px}
-.link-box span{flex:1;font-size:13px;color:#00b4d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-warn{background:rgba(245,158,11,.15);color:var(--warn-text)}
+.badge-ok{background:rgba(16,185,129,.15);color:var(--ok-text)}
+.badge-danger{background:rgba(239,68,68,.15);color:var(--danger-text)}
+.link-box{display:flex;gap:10px;align-items:center;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:12px}
+.link-box span{flex:1;font-size:13px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{text-align:left;padding:10px 8px;font-size:13px;border-bottom:1px solid #252540}
-th{color:#8888aa;font-size:11px;text-transform:uppercase;font-weight:700}
-.empty-row{color:#8888aa;font-size:13px;text-align:center;padding:20px}
-.loading{display:flex;align-items:center;justify-content:center;min-height:60vh;color:#8888aa;font-size:14px}
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#00b4d8;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
+th,td{text-align:left;padding:10px 8px;font-size:13px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;font-weight:700}
+.empty-row{color:var(--muted);font-size:13px;text-align:center;padding:20px}
+.loading{display:flex;align-items:center;justify-content:center;min-height:60vh;color:var(--muted);font-size:14px}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .err-box{text-align:center}
-.err-box a{color:#00b4d8;font-weight:600}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;border:1px solid #252540;color:#f0f0f8;padding:12px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:999}
+.err-box a{color:var(--accent);font-weight:600}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:999}
 .toast.show{opacity:1}
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
-.stat-box{background:#09090f;border:1px solid #252540;border-radius:10px;padding:14px;text-align:center}
-.stat-num{font-size:22px;font-weight:800;color:#f0f0f8}
-.stat-box.accent .stat-num{color:#10b981}
-.stat-label{font-size:11px;color:#8888aa;text-transform:uppercase;font-weight:700;margin-top:4px}
+.stat-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat-num{font-size:22px;font-weight:800;color:var(--text)}
+.stat-box.accent .stat-num{color:var(--ok-text)}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-top:4px}
 @media (max-width:560px){.stats-row{grid-template-columns:repeat(2,1fr)}}
 .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.bar-label{flex:0 0 130px;font-size:12px;color:#ccccdd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{flex:1;background:#09090f;border-radius:6px;height:18px;overflow:hidden;border:1px solid #252540}
-.bar-fill{height:100%;background:linear-gradient(90deg,#00b4d8,#10b981);border-radius:6px}
-.bar-value{flex:0 0 70px;text-align:right;font-size:12px;font-weight:700;color:#10b981}
+.bar-label{flex:0 0 130px;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;background:var(--bg);border-radius:6px;height:18px;overflow:hidden;border:1px solid var(--border)}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--ok-text));border-radius:6px}
+.bar-value{flex:0 0 70px;text-align:right;font-size:12px;font-weight:700;color:var(--ok-text)}
 </style>
 </head>
 <body>
@@ -59,8 +78,9 @@ th{color:#8888aa;font-size:11px;text-transform:uppercase;font-weight:700}
 
 <div id="appWrap" style="display:none">
   <div class="topbar">
-    <div class="logo">POS<span>Maker</span> <span style="color:#8888aa;font-size:13px;font-weight:600">Affiliate</span></div>
+    <div class="logo">POS<span>Maker</span> <span style="color:var(--muted);font-size:13px;font-weight:600">Affiliate</span></div>
     <div class="topbar-right">
+      <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
       <span class="user-email" id="userEmail"></span>
       <button class="btn btn-ghost" onclick="doLogout()">Log Out</button>
     </div>
@@ -79,7 +99,7 @@ th{color:#8888aa;font-size:11px;text-transform:uppercase;font-weight:700}
       <h1 id="affName">—</h1>
       <p class="sub" id="affEmail">—</p>
       <span class="badge" id="affBadge"></span>
-      <div id="statusMsg" style="margin-top:14px;font-size:13px;color:#bbbbcc;line-height:1.6"></div>
+      <div id="statusMsg" style="margin-top:14px;font-size:13px;color:var(--muted);line-height:1.6"></div>
 
       <div class="stats-row" id="statsRow" style="display:none">
         <div class="stat-box">
@@ -222,7 +242,7 @@ async function loadReferrals() {
     total += commission;
     const commissionCell = commission > 0
       ? `&#8369;${commission.toFixed(2)}`
-      : '<span style="color:#8888aa">—</span>';
+      : '<span style="color:var(--muted)">—</span>';
     return `<tr><td>${esc(r.store_name)}</td><td>${esc(r.business_type)}</td><td>${_refStatusLabel(r.status)}</td><td>${dt}</td><td>${commissionCell}</td></tr>`;
   }).join('');
   document.getElementById('statReferrals').textContent = String(data.length);
@@ -239,7 +259,7 @@ let _userId = null;
     const res = await Promise.race([_sb.auth.getSession(), _tout(15000, 'Connection timed out. Check your internet.')]);
     session = res.data.session;
   } catch(e) {
-    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:#ef4444;margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" class="btn">Retry</button></div>`;
+    document.getElementById('loadingPage').innerHTML = `<div style="text-align:center"><div style="color:var(--danger-text);margin-bottom:12px">&#9888; ${e.message}</div><button onclick="location.reload()" class="btn">Retry</button></div>`;
     return;
   }
   if (!session) { location.href = 'affiliate-login.html'; return; }
@@ -275,6 +295,22 @@ let _userId = null;
     loadReferrals();
   }
 })();
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 </script>
 </body>
 </html>

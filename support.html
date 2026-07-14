@@ -5,25 +5,31 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Support — POSMaker</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <script src="js/config.js"></script>
 <script src="js/supabase.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#0d0d1a;--s1:#13132a;--s2:#1a1a35;--accent:#00c8ff;--dim:#555580;--muted:#8888aa;--text:#e8e8f8;--danger:#ff4466}
+  :root{--bg:#0d0d1a;--s1:#13132a;--s2:#1a1a35;--accent:#00c8ff;--dim:#555580;--muted:#8888aa;--text:#e8e8f8;--danger:#ff4466;--hairline:#ffffff0d;--hairline-soft:#ffffff0a;--hairline-input:#ffffff12}
+  @media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--dim:#a0b0c4;--muted:#5a6e88;--text:#0d1a2e;--danger:#c0392b;--hairline:#0000000f;--hairline-soft:#0000000a;--hairline-input:#0000001a}}
+  :root[data-theme="dark"]{--bg:#0d0d1a;--s1:#13132a;--s2:#1a1a35;--dim:#555580;--muted:#8888aa;--text:#e8e8f8;--danger:#ff4466;--hairline:#ffffff0d;--hairline-soft:#ffffff0a;--hairline-input:#ffffff12}
+  :root[data-theme="light"]{--bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--dim:#a0b0c4;--muted:#5a6e88;--text:#0d1a2e;--danger:#c0392b;--hairline:#0000000f;--hairline-soft:#0000000a;--hairline-input:#0000001a}
   body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
   a{color:var(--accent);text-decoration:none}
-  nav{background:var(--s1);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff0d}
+  nav{background:var(--s1);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--hairline)}
   .logo{font-size:20px;font-weight:800;letter-spacing:-0.5px}
   .logo span{color:var(--accent)}
   .nav-links{display:flex;gap:20px;font-size:13px;color:var(--muted)}
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 16px}
-  .card{background:var(--s1);border:1px solid #ffffff0a;border-radius:16px;padding:36px 32px;width:100%;max-width:560px}
+  .card{background:var(--s1);border:1px solid var(--hairline-soft);border-radius:16px;padding:36px 32px;width:100%;max-width:560px}
   .card-title{font-size:22px;font-weight:800;margin-bottom:6px}
   .card-sub{font-size:13px;color:var(--muted);margin-bottom:28px;line-height:1.5}
   .field{margin-bottom:16px}
   label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
-  input,textarea,select{width:100%;background:var(--s2);border:1px solid #ffffff12;border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:.15s}
-  input:focus,textarea:focus,select:focus{border-color:var(--accent);background:#1e1e3a}
+  input,textarea,select{width:100%;background:var(--s2);border:1px solid var(--hairline-input);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:.15s}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent);background:var(--s2)}
   textarea{resize:vertical;min-height:120px}
   .btn{padding:11px 20px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:14px;transition:.15s}
   .btn-accent{background:var(--accent);color:#0d0d1a;width:100%}
@@ -42,7 +48,8 @@
 
 <nav>
   <div class="logo">POS<span>Maker</span></div>
-  <div class="nav-links">
+  <div class="nav-links" style="align-items:center">
+    <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--hairline-input);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
     <a href="index.html">Home</a>
   </div>
 </nav>
@@ -127,6 +134,22 @@ async function submitTicket() {
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('successCard').style.display = '';
 }
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 </script>
 </body>
 </html>

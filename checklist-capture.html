@@ -5,19 +5,37 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Checklist Photo</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <script src="js/store-plan.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
+:root{
+  --accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100dvh}
 .logo{font-size:18px;font-weight:800}.logo span{color:var(--accent)}
 .wrap{max-width:480px;margin:0 auto;padding:16px}
 .card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0}
-.badge-ok{background:#0d2e1f;color:#10b981}
+.badge-ok{background:var(--ok-bg);color:var(--ok-text)}
 .btn{padding:8px 16px;border-radius:8px;border:none;font-weight:600;cursor:pointer;font-size:13px;font-family:'Inter',sans-serif;transition:.15s}
 .btn-accent{background:var(--accent);color:#fff}.btn-accent:hover{opacity:.88}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-ghost:hover{background:var(--s2)}
@@ -36,7 +54,10 @@ button{cursor:pointer}
 <body>
 <div class="wrap">
   <div class="card">
-    <div class="logo" style="margin-bottom:6px">POS<span>Maker</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div class="logo">POS<span>Maker</span></div>
+      <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
+    </div>
     <div id="pageTitle" style="font-weight:800;font-size:16px"></div>
     <div id="pageSub" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
   </div>
@@ -64,6 +85,23 @@ button{cursor:pointer}
 <script>
 const {createClient} = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 
 const _params = new URLSearchParams(location.search);
 const SID   = _params.get('sid');

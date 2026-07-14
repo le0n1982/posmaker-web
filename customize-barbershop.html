@@ -5,12 +5,42 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker &#8212; Customize POS</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Lato:wght@400;700&family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;600;700&family=Raleway:wght@400;600;700;800&family=Oswald:wght@400;500;600;700&family=Ubuntu:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Dancing+Script:wght@400;600;700&family=Bebas+Neue&family=Titillium+Web:wght@400;600;700&display=swap">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a}
+:root{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --preview-stripe-a:#0d0d1a;--preview-stripe-b:#111120;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --preview-stripe-a:#eef1f6;--preview-stripe-b:#e3e9f3;
+}}
+:root[data-theme="dark"]{
+  --bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;
+  --ok-bg:#0d2e1f;--ok-text:#10b981;
+  --danger-bg:#2a0a0a;--danger-text:#ef4444;
+  --warn-bg:#2a1a00;--warn-text:#f59e0b;
+  --preview-stripe-a:#0d0d1a;--preview-stripe-b:#111120;
+}
+:root[data-theme="light"]{
+  --bg:#f4f7fc;--s1:#fff;--s2:#edf1f8;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;
+  --ok-bg:#e6f9ef;--ok-text:#0a7a42;
+  --danger-bg:#fdecec;--danger-text:#c0392b;
+  --warn-bg:#fff6e0;--warn-text:#b7791f;
+  --preview-stripe-a:#eef1f6;--preview-stripe-b:#e3e9f3;
+}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 
 /* TOP BAR */
@@ -86,7 +116,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
 .btn:hover{opacity:.85}
 .btn-accent{background:var(--accent);color:#fff}
 .btn-ghost{background:var(--s2);border:1px solid var(--border);color:var(--text)}
-.btn-pos{background:linear-gradient(135deg,#065f46,#0a4a2a);border:1px solid #10b981;color:#10b981}
+.btn-pos{background:linear-gradient(135deg,#065f46,#0a4a2a);border:1px solid #10b981;color:var(--ok-text)}
 .btn-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0;line-height:1;transition:color .15s}
 .btn-back:hover{color:var(--text)}
 .btn-xs{padding:4px 10px;font-size:11px}
@@ -94,7 +124,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
 /* PREVIEW AREA */
 .cz-preview{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .cz-preview-bar{padding:8px 16px;font-size:10px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.7px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.cz-preview-canvas{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:repeating-linear-gradient(45deg,#0d0d1a 0,#0d0d1a 10px,#111120 10px,#111120 20px)}
+.cz-preview-canvas{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:repeating-linear-gradient(45deg,var(--preview-stripe-a) 0,var(--preview-stripe-a) 10px,var(--preview-stripe-b) 10px,var(--preview-stripe-b) 20px)}
 
 /* ── POS MOCK ───────────────────────────────────────────────────── */
 .pos-mock{
@@ -290,18 +320,18 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
 .pm-chair-card.ins.active-chair{border-color:rgba(239,68,68,.8);box-shadow:0 0 0 2px rgba(239,68,68,.25)}
 .pm-chair-ico{font-size:13px;margin-bottom:2px}
 .pm-chair-lbl{font-size:11px;font-weight:800;color:var(--pm-text,#f0f0f8)}
-.pm-chair-sub{font-size:7px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:2px 0}
+.pm-chair-sub{font-size:7px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:2px 0}
 .pm-chair-badge{font-size:7px;font-weight:800;letter-spacing:.4px;border-radius:3px;padding:1px 5px;display:inline-block}
-.pm-chair-badge.ins{background:rgba(239,68,68,.2);color:#ef4444}
-.pm-chair-badge.av{background:rgba(16,185,129,.15);color:#10b981}
-.pm-chair-status-bar{margin:0 7px 0;padding:6px 10px;border-radius:7px;font-size:10px;font-weight:700;display:flex;justify-content:space-between;align-items:center;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;flex-shrink:0}
+.pm-chair-badge.ins{background:rgba(239,68,68,.2);color:var(--danger-text)}
+.pm-chair-badge.av{background:rgba(16,185,129,.15);color:var(--ok-text)}
+.pm-chair-status-bar{margin:0 7px 0;padding:6px 10px;border-radius:7px;font-size:10px;font-weight:700;display:flex;justify-content:space-between;align-items:center;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--danger-text);flex-shrink:0}
 
 /* CONTRAST WARNING + RESET */
-.contrast-warn{margin-top:8px;padding:8px 10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-size:11px;font-weight:600;border-radius:7px;line-height:1.4}
+.contrast-warn{margin-top:8px;padding:8px 10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:var(--warn-text);font-size:11px;font-weight:600;border-radius:7px;line-height:1.4}
 /* TOAST */
-.toast{position:fixed;bottom:20px;right:20px;background:#1a3a2a;border:1px solid #10b981;color:#10b981;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ok-bg);border:1px solid #10b981;color:var(--ok-text);padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:500;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateY(0)}
-.toast.err{background:#2a0a0a;border-color:#ef4444;color:#ef4444}
+.toast.err{background:var(--danger-bg);border-color:var(--danger-text);color:var(--danger-text)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
 </style>
@@ -316,6 +346,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
     <span class="cz-bar-store" id="czStoreName"></span>
   </div>
   <div class="cz-bar-actions">
+    <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" class="btn btn-ghost" style="padding:7px 10px">&#127769;</button>
     <button class="btn btn-ghost" onclick="resetTheme()">&#9851; Reset</button>
     <button class="btn btn-accent" id="saveBtn" onclick="saveTheme()">&#128190; Save</button>
     <a class="btn btn-pos" id="openPosBtn" href="#" target="_blank">&#128085; My POS &#8594;</a>
@@ -515,6 +546,25 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
 const { createClient } = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 let STORE = null, bgImgData = '', bgScale = 'cover', btnStyle = 'default';
+
+// Dashboard-chrome light/dark theme (separate from the POS's own custom
+// accent/background theming below, which is per-store and unrelated).
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 
 // ── Per-business-type cashier routing (matches dashboard.html) ────────────────
 const BIZ_FILE_MAP = {

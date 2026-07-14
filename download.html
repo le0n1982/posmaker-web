@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>POSMaker Delivery — Download Apps</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <style>
 /* ── Tokens ─────────────────────────────────────────── */
 :root {
@@ -293,7 +296,10 @@ footer {
     <div class="nav-logo-mark">🛵</div>
     POSMaker Delivery
   </div>
-  <span class="nav-badge">Android APK</span>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer">&#127769;</button>
+    <span class="nav-badge">Android APK</span>
+  </div>
 </nav>
 
 <!-- Hero -->
@@ -410,5 +416,23 @@ footer {
   <span class="footer-note">Powered by POSMaker · For store partners only</span>
 </footer>
 
+<script>
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
+</script>
 </body>
 </html>

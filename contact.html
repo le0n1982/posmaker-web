@@ -5,28 +5,35 @@
 <link rel="icon" href="favicon.ico">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>POSMaker — Contact Support</title>
+<script>
+(function(){ try { var t = localStorage.getItem('pm_theme') || 'light'; document.documentElement.setAttribute('data-theme', t); } catch(_) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="js/supabase.js"></script>
 <script src="js/config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#09090f;color:#f0f0f8;font-family:'Inter',sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+:root{--bg:#09090f;--s1:#111120;--border:#252540;--accent:#00b4d8;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;--danger:#ef4444}
+@media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;--danger:#c0392b}}
+:root[data-theme="dark"]{--bg:#09090f;--s1:#111120;--border:#252540;--text:#f0f0f8;--muted:#8888aa;--dim:#44445a;--danger:#ef4444}
+:root[data-theme="light"]{--bg:#f4f7fc;--s1:#fff;--border:#d2daea;--text:#0d1a2e;--muted:#5a6e88;--dim:#a0b0c4;--danger:#c0392b}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
 .wrap{width:min(460px,100%)}
 .logo{text-align:center;font-size:22px;font-weight:800;margin-bottom:32px}
-.logo span{color:#00b4d8}
-.card{background:#111120;border:1px solid #252540;border-radius:16px;padding:36px}
+.logo span{color:var(--accent)}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:36px}
 h1{font-size:22px;font-weight:800;margin-bottom:4px}
-.sub{font-size:14px;color:#8888aa;margin-bottom:28px;line-height:1.6}
+.sub{font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.6}
 .field{margin-bottom:16px}
-label{display:block;font-size:13px;font-weight:600;color:#aaa;margin-bottom:6px}
-input,textarea{width:100%;padding:11px 14px;background:#09090f;border:1.5px solid #252540;border-radius:8px;color:#f0f0f8;font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+input,textarea{width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s}
 textarea{resize:vertical;min-height:110px}
-input:focus,textarea:focus{border-color:#00b4d8}
-input::placeholder,textarea::placeholder{color:#44445a}
-.btn{width:100%;padding:13px;background:#00b4d8;border:none;color:#fff;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;font-family:'Inter',sans-serif;transition:opacity .15s}
+input:focus,textarea:focus{border-color:var(--accent)}
+input::placeholder,textarea::placeholder{color:var(--dim)}
+.btn{width:100%;padding:13px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;font-family:'Inter',sans-serif;transition:opacity .15s}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.err{color:#ef4444;font-size:13px;min-height:18px;margin-bottom:10px;text-align:center}
+.err{color:var(--danger);font-size:13px;min-height:18px;margin-bottom:10px;text-align:center}
 .success{text-align:center;padding:20px 0}
 .success .ic{font-size:44px;margin-bottom:12px}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
@@ -34,7 +41,8 @@ input::placeholder,textarea::placeholder{color:#44445a}
 </style>
 </head>
 <body>
-<a href="index.html" style="position:fixed;top:16px;left:16px;color:#8888aa;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px;z-index:99">&#8592; Back to Home</a>
+<a href="index.html" style="position:fixed;top:16px;left:16px;color:var(--muted);font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px;z-index:99">&#8592; Back to Home</a>
+<button id="themeToggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme" style="position:fixed;top:16px;right:16px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer;z-index:99">&#127769;</button>
 <div class="wrap">
   <div class="logo">POS<span>Maker</span></div>
   <div class="card" id="formCard">
@@ -49,7 +57,7 @@ input::placeholder,textarea::placeholder{color:#44445a}
       <input id="cEmail" type="email" placeholder="you@example.com">
     </div>
     <div class="field">
-      <label>Store Name <span style="color:#555;font-weight:400">(optional)</span></label>
+      <label>Store Name <span style="color:var(--dim);font-weight:400">(optional)</span></label>
       <input id="cStore" type="text" placeholder="e.g. Fried Chiks">
     </div>
     <div class="field">
@@ -111,6 +119,22 @@ async function submitContact() {
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('successCard').style.display = '';
 }
+function _currentTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function _updateThemeIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = _currentTheme() === 'light' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const next = _currentTheme() === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pm_theme', next); } catch(_) {}
+  _updateThemeIcon();
+}
+_updateThemeIcon();
 </script>
 </body>
 </html>
