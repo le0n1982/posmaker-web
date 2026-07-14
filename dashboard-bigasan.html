@@ -3405,7 +3405,7 @@ function _drawRptCandles(points) {
   const cv = document.getElementById('rptCandleCanvas');
   if (!cv) return;
   const n = points.length;
-  const PAD_T = 14, PAD_B = 26, PAD_L = 60, PAD_R = 10;
+  const PAD_T = 24, PAD_B = 26, PAD_L = 60, PAD_R = 10;
   const W = Math.max(cv.parentElement.clientWidth || 600, PAD_L + PAD_R + n * 28);
   const H = 220;
   const dpr = window.devicePixelRatio || 1;
@@ -3415,10 +3415,20 @@ function _drawRptCandles(points) {
   cx.scale(dpr, dpr);
   cx.clearRect(0, 0, W, H);
 
-  const allVals = points.flatMap(p => [p.lo, p.hi, p.revenue, p.cost]).concat([0]);
-  const vMin = Math.min(...allVals), vMax = Math.max(...allVals, 1);
+  const allVals = points.flatMap(p => [p.revenue, p.cost]).concat([0]);
+  const vMin = 0, vMax = Math.max(...allVals, 1);
   const range = (vMax - vMin) || 1;
   const y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - vMin) / range);
+
+  // Legend
+  cx.textBaseline = 'middle';
+  cx.fillStyle = '#10b981'; cx.fillRect(PAD_L, 2, 10, 10);
+  cx.fillStyle = 'rgba(255,255,255,.7)'; cx.font = '11px Inter, sans-serif'; cx.textAlign = 'left';
+  cx.fillText('Revenue', PAD_L + 15, 7);
+  cx.strokeStyle = '#f59e0b'; cx.lineWidth = 2;
+  cx.beginPath(); cx.moveTo(PAD_L + 90, 7); cx.lineTo(PAD_L + 110, 7); cx.stroke();
+  cx.fillStyle = '#f59e0b'; cx.beginPath(); cx.arc(PAD_L + 100, 7, 3, 0, Math.PI*2); cx.fill();
+  cx.fillStyle = 'rgba(255,255,255,.7)'; cx.fillText('Cost', PAD_L + 116, 7);
 
   // Y-axis gridlines + peso labels (left side)
   const steps = 4;
@@ -3433,23 +3443,35 @@ function _drawRptCandles(points) {
   }
 
   const slotW = (W - PAD_L - PAD_R) / n;
-  const bodyW = Math.min(20, slotW * 0.55);
+  const barW = Math.min(20, slotW * 0.55);
 
+  // Revenue bars — solid, from baseline (₱0) up to that day's revenue.
+  // Green when it covered Cost that day, red when it didn't. Every day
+  // gets a bar (even ₱0 ones, drawn as a thin sliver) so gaps in the
+  // month are visible rather than just missing.
   points.forEach((p, i) => {
     const xc = PAD_L + slotW * i + slotW / 2;
-    const hasSales = p.revenue > 0 || p.cost > 0;
     const profit = p.revenue >= p.cost;
-    const color = !hasSales ? 'rgba(255,255,255,.15)' : profit ? '#10b981' : '#ef4444';
-    // Wick
-    cx.strokeStyle = color; cx.lineWidth = 1.5;
-    cx.beginPath(); cx.moveTo(xc, y(p.hi)); cx.lineTo(xc, y(p.lo)); cx.stroke();
-    // Body (Cost -> Revenue)
-    const yTop = y(Math.max(p.revenue, p.cost)), yBot = y(Math.min(p.revenue, p.cost));
+    const color = profit ? '#10b981' : '#ef4444';
+    const yTop = y(p.revenue);
     cx.fillStyle = color;
-    cx.fillRect(xc - bodyW/2, yTop, bodyW, Math.max(2, yBot - yTop));
-    // Day-of-month label
+    cx.fillRect(xc - barW/2, yTop, barW, Math.max(2, y(0) - yTop));
     cx.fillStyle = 'rgba(255,255,255,.5)'; cx.font = '10px Inter, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'alphabetic';
     cx.fillText(String(p.dNum), xc, H - PAD_B + 16);
+  });
+
+  // Cost trend line, overlaid on the same ₱ scale
+  cx.strokeStyle = '#f59e0b'; cx.lineWidth = 2; cx.beginPath();
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    const yy = y(p.cost);
+    if (i === 0) cx.moveTo(xc, yy); else cx.lineTo(xc, yy);
+  });
+  cx.stroke();
+  cx.fillStyle = '#f59e0b';
+  points.forEach((p, i) => {
+    const xc = PAD_L + slotW * i + slotW / 2;
+    cx.beginPath(); cx.arc(xc, y(p.cost), 2.5, 0, Math.PI*2); cx.fill();
   });
 }
 
