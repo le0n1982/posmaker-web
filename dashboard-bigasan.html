@@ -423,18 +423,15 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- CATEGORIES -->
     <div class="section" id="sec-categories">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button class="btn btn-accent btn-sm" id="catTabProd" onclick="switchCatTab('prod')">ðŸ·ï¸ Product Categories</button>
-        <button class="btn btn-ghost btn-sm" id="catTabInv"  onclick="switchCatTab('inv')">ðŸ“¦ Inventory Categories</button>
-      </div>
       <div class="tbl-wrap">
         <div class="tbl-head">
-          <h3 id="catTabTitle">Product Categories</h3>
+          <h3>Categories</h3>
           <button class="btn btn-accent btn-sm" onclick="openCatModal()">+ Add Category</button>
         </div>
+        <p style="padding:0 18px;margin-top:-4px;font-size:12px;color:var(--muted)">Shared between Products and Inventory &mdash; one category list, used everywhere.</p>
         <table>
-          <thead><tr><th>Category Name</th><th>Items</th><th>Details</th><th></th></tr></thead>
-          <tbody id="catTbody"><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
+          <thead><tr><th>Category Name</th><th>Items</th><th></th></tr></thead>
+          <tbody id="catTbody"><tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1713,7 +1710,7 @@ let PAY_METHODS = [];
 let pendingProdImg = null;
 let _prodPendingImgs = [];
 let pInvLinks = []; // array of {id, qty} — qty = amount used per 1 order
-let dbCats = [], dbInvCats = [], catTab = 'prod'; // loaded from categories table
+let dbCats = [], dbInvCats = []; // loaded from categories table — one shared list, dbInvCats is an alias of dbCats
 let invItems = [];
 
 const FREE_PROD_LIMIT  = 999999; // unlimited — products are always free, no tier limit
@@ -1920,7 +1917,7 @@ function nav(id) {
   if (id === 'inventory')  loadInventory();
   if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
   if (id === 'messages')     loadMessages();
-  if (id === 'categories') { loadDbCategories().then(() => loadProducts().then(loadCategories)); switchCatTab(catTab); }
+  if (id === 'categories') { loadDbCategories().then(() => Promise.all([loadProducts(), loadInventory()]).then(loadCategories)); }
   if (id === 'checklist')  loadChecklist();
   if (id === 'expenses')   loadExpenses('monthly');
   if (id === 'payroll')    loadPayroll();
@@ -4006,8 +4003,11 @@ async function loadDbCategories(){
   try{
     const{data,error}=await _sb.from('categories').select('name,type').eq('store_id',STORE.id).order('name').abortSignal(_sig());
     if(error)return; // table may not exist yet — fail silently
-    dbCats=(data||[]).filter(r=>r.type==='prod').map(r=>r.name);
-    dbInvCats=(data||[]).filter(r=>r.type==='inv').map(r=>r.name);
+    // Categories are shared between Products and Inventory — merge both
+    // legacy 'prod'/'inv' rows into one deduped list instead of keeping
+    // two separate category systems.
+    dbCats=[...new Set((data||[]).map(r=>r.name))].sort();
+    dbInvCats=dbCats;
   }catch(e){/* categories table not yet created */}
 }
 function getCategoryList() {
@@ -6424,42 +6424,36 @@ async function deleteInvItem(id){
 }
 
 // â”€â”€ Categories (two tabs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function switchCatTab(tab){
-  catTab=tab;
-  document.getElementById('catTabProd').className=tab==='prod'?'btn btn-accent btn-sm':'btn btn-ghost btn-sm';
-  document.getElementById('catTabInv').className=tab==='inv'?'btn btn-accent btn-sm':'btn btn-ghost btn-sm';
-  document.getElementById('catTabTitle').textContent=tab==='prod'?'Product Categories':'Inventory Categories';
-  loadCategories();
-}
+// One shared category list used by both Products and Inventory — each row's
+// count is a combined "N products, M inventory items" so an owner can see
+// everywhere a category is used from a single table, instead of switching
+// between two parallel category systems.
 function loadCategories(){
-  if(catTab==='prod'){
-    const cats={};
-    allProds.forEach(p=>{const c=p.category||'(none)';if(!cats[c])cats[c]={total:0,avail:0};cats[c].total++;if(p.available)cats[c].avail++;});
-    dbCats.forEach(c=>{if(!cats[c])cats[c]={total:0,avail:0};});
-    renderCats(cats,'prod');
-  }else{
-    const cats={};
-    invItems.forEach(i=>{const c=i.category||'(none)';if(!cats[c])cats[c]={total:0};cats[c].total++;});
-    dbInvCats.forEach(c=>{if(!cats[c])cats[c]={total:0};});
-    renderCats(cats,'inv');
-  }
+  const cats={};
+  allProds.forEach(p=>{const c=p.category||'(none)';if(!cats[c])cats[c]={prod:0,inv:0};cats[c].prod++;});
+  invItems.forEach(i=>{const c=i.category||'(none)';if(!cats[c])cats[c]={prod:0,inv:0};cats[c].inv++;});
+  dbCats.forEach(c=>{if(!cats[c])cats[c]={prod:0,inv:0};});
+  renderCats(cats);
 }
-function renderCats(cats,tab){
+function renderCats(cats){
   const tbody=document.getElementById('catTbody');
   const keys=Object.keys(cats).sort();
-  const noun=tab==='prod'?'product(s)':'item(s)';
-  if(!keys.length){tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">No categories yet.</td></tr>`;return;}
-  tbody.innerHTML=keys.map(c=>`<tr>
+  if(!keys.length){tbody.innerHTML=`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">No categories yet.</td></tr>`;return;}
+  tbody.innerHTML=keys.map(c=>{
+    const parts=[];
+    if(cats[c].prod) parts.push(`${cats[c].prod} product${cats[c].prod>1?'s':''}`);
+    if(cats[c].inv) parts.push(`${cats[c].inv} inventory item${cats[c].inv>1?'s':''}`);
+    return `<tr>
     <td style="font-weight:600">${c}</td>
-    <td style="color:var(--muted)">${cats[c].total} ${noun}</td>
-    <td style="color:var(--muted)">${tab==='prod'?((cats[c].avail||0)+' available'):'&#8212;'}</td>
+    <td style="color:var(--muted)">${parts.length?parts.join(', '):'0 items'}</td>
     <td style="white-space:nowrap">
       <button class="btn btn-ghost btn-sm" onclick="openCatModal('${c.replace(/'/g,String.fromCharCode(92,39))}')">Rename</button>
       <button class="btn btn-danger btn-sm" onclick="deleteCat('${c.replace(/'/g,String.fromCharCode(92,39))}')">Delete</button>
-    </td></tr>`).join('');
+    </td></tr>`;
+  }).join('');
 }
 function openCatModal(existing){
-  document.getElementById('catModalTitle').textContent=existing?'Rename Category':(catTab==='prod'?'Add Product Category':'Add Inventory Category');
+  document.getElementById('catModalTitle').textContent=existing?'Rename Category':'Add Category';
   document.getElementById('catOldName').value=existing||'';
   document.getElementById('catName').value=existing||'';
   document.getElementById('catModal').classList.add('show');
@@ -6468,40 +6462,32 @@ function openCatModal(existing){
 async function saveCat(){
   const oldName=document.getElementById('catOldName').value.trim();
   const newName=document.getElementById('catName').value.trim();
-  const type=catTab;
   if(!newName){showToast('Category name is required.',true);return;}
   if(oldName&&oldName!==newName){
-    // rename: update categories table + all items that use the old name
-    await _sb.from('categories').update({name:newName}).eq('store_id',STORE.id).eq('name',oldName).eq('type',type);
-    if(type==='prod'){
-      await _sb.from('products').update({category:newName}).eq('store_id',STORE.id).eq('category',oldName);
-      await loadProducts();
-    }else{
-      await _sb.from('inventory_items').update({category:newName}).eq('store_id',STORE.id).eq('category',oldName);
-      await loadInventory();
-    }
+    // rename: update the categories table (both legacy types, if present)
+    // plus every product/inventory item using the old name — a category is
+    // shared now, so a rename applies everywhere it's used.
+    await _sb.from('categories').update({name:newName}).eq('store_id',STORE.id).eq('name',oldName);
+    await _sb.from('products').update({category:newName}).eq('store_id',STORE.id).eq('category',oldName);
+    await _sb.from('inventory_items').update({category:newName}).eq('store_id',STORE.id).eq('category',oldName);
+    await Promise.all([loadProducts(),loadInventory()]);
     await loadDbCategories();
     closeModal('catModal');loadCategories();showToast(`Renamed "${oldName}" to "${newName}"`);
   }else if(!oldName){
     // add new category to DB (ignore if already exists)
-    await _sb.from('categories').upsert({store_id:STORE.id,name:newName,type},{onConflict:'store_id,name,type',ignoreDuplicates:true});
+    await _sb.from('categories').upsert({store_id:STORE.id,name:newName,type:'prod'},{onConflict:'store_id,name,type',ignoreDuplicates:true});
     await loadDbCategories();
-    if(type==='prod'&&document.getElementById('prodModal').classList.contains('show'))populateCatSelect(newName);
-    if(type==='inv'&&document.getElementById('invModal').classList.contains('show'))populateInvCatSelect(document.getElementById('invCat'),newName);
+    if(document.getElementById('prodModal').classList.contains('show'))populateCatSelect(newName);
+    if(document.getElementById('invModal').classList.contains('show'))populateInvCatSelect(document.getElementById('invCat'),newName);
     closeModal('catModal');loadCategories();showToast(`Category "${newName}" added.`);
   }else{closeModal('catModal');}
 }
 async function deleteCat(catName){
-  if(!confirm(`Delete category "${catName}"?\nItems in this category will be uncategorized.`))return;
-  const type=catTab;
-  await _sb.from('categories').delete().eq('store_id',STORE.id).eq('name',catName).eq('type',type);
-  if(type==='prod'){
-    await _sb.from('products').update({category:''}).eq('store_id',STORE.id).eq('category',catName);
-    await loadProducts();
-  }else{
-    await _sb.from('inventory_items').update({category:''}).eq('store_id',STORE.id).eq('category',catName);
-    await loadInventory();
-  }
+  if(!confirm(`Delete category "${catName}"?\nProducts and inventory items in this category will be uncategorized.`))return;
+  await _sb.from('categories').delete().eq('store_id',STORE.id).eq('name',catName);
+  await _sb.from('products').update({category:''}).eq('store_id',STORE.id).eq('category',catName);
+  await _sb.from('inventory_items').update({category:''}).eq('store_id',STORE.id).eq('category',catName);
+  await Promise.all([loadProducts(),loadInventory()]);
   await loadDbCategories();
   loadCategories();showToast(`Category "${catName}" deleted.`);
 }
