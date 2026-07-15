@@ -1959,7 +1959,7 @@ function viewVoidRefundProof(id) {
 // For retail stores, a refund puts the physical item back on the shelf, so
 // stock is restored. For restaurant/food types the stock was already
 // cooked/consumed and can't be un-made, so only the money is reversed.
-async function restoreStockForOrder(orderId) {
+async function restoreStockForOrder(orderId, changeType) {
   if (RESTAURANT_BIZ.has(_storeBizType)) return;
   const { data: orderItems } = await _sb.from('order_items').select('product_id,qty').eq('order_id', orderId);
   if (!orderItems || !orderItems.length) return;
@@ -1987,7 +1987,7 @@ async function restoreStockForOrder(orderId) {
     const cur = stockMap[invId];
     if (cur == null) return Promise.resolve();
     const newStock = (cur || 0) + restores[invId];
-    _sb.from('stock_history').insert({ store_id: MGR.store_id, inventory_item_id: invId, change_type: 'REFUND_RESTOCK', qty_change: restores[invId] }).then(() => {});
+    _sb.from('stock_history').insert({ store_id: MGR.store_id, inventory_item_id: invId, change_type: changeType || 'REFUND_RESTOCK', qty_change: restores[invId] }).then(() => {});
     return _sb.from('inventory_items').update({ stock: newStock }).eq('id', invId);
   }));
 }
@@ -2018,7 +2018,11 @@ async function approveVoidRefund(id) {
     table_no: `Order #${r.order_id}`,
   });
 
-  if (r.type === 'refund') await restoreStockForOrder(r.order_id);
+  // A void means the sale is being erased as if it never happened — the
+  // stock deducted at sale time must come back just as much as (arguably
+  // more than) a refund, where the goods may have already left with the
+  // customer. Both restore stock; only the stock_history label differs.
+  await restoreStockForOrder(r.order_id, r.type === 'void' ? 'VOID_RESTOCK' : 'REFUND_RESTOCK');
 
   // Cash-on-hand deduction: only the cash actually collected ever hit a
   // physical drawer, so pure e-pay originals don't move anyone's COH — the
