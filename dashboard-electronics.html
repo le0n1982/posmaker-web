@@ -783,6 +783,14 @@ input:checked + .slider:before{transform:translateX(18px)}
         <button class="btn btn-accent" onclick="openAddPayMethod()">+ Add Payment Method</button>
       </div>
       <div class="info-card">
+        <h3>POS Permissions</h3>
+        <div class="field" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="sShowSalesToCashier" style="width:auto">
+          <label for="sShowSalesToCashier" style="margin:0">Let cashiers view their own sales <span style="color:var(--dim);font-weight:400;font-size:11px">(adds a "View Sales" button in the POS, showing only that cashier's own sales for the day)</span></label>
+        </div>
+        <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
+      </div>
+      <div class="info-card">
         <h3>Store Information</h3>
         <div class="row2" style="margin-top:14px">
           <div class="field"><label>Store Name</label><input id="sName" type="text"></div>
@@ -1818,6 +1826,7 @@ function _sig(ms = 25000) {
   for (let d = 0; d < 7; d++) document.getElementById('sClosedDay'+d).checked = _closedDays.includes(String(d));
   document.getElementById('sFooter').value   = store.receipt_footer || '';
   document.getElementById('sShowCalc').checked = store.show_calculator !== false;
+  document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
   applyCalcVisibility(store.show_calculator !== false);
   document.getElementById('sWarranty').value    = store.policy_warranty || '';
   document.getElementById('sReturnDays').value  = store.policy_return_days ?? '';
@@ -5684,6 +5693,7 @@ async function saveSettings() {
     closed_days:    [0,1,2,3,4,5,6].filter(d => document.getElementById('sClosedDay'+d).checked).join(','),
     receipt_footer: document.getElementById('sFooter').value.trim(),
     show_calculator: document.getElementById('sShowCalc').checked,
+    show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
     policy_warranty: document.getElementById('sWarranty').value.trim(),
     policy_return_days: document.getElementById('sReturnDays').value === '' ? null : parseInt(document.getElementById('sReturnDays').value, 10),
     policy_damage_accepted: document.getElementById('sDamageAccepted').value === 'true',

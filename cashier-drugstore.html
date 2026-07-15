@@ -291,6 +291,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnSync" onclick="syncProds()" title="Refresh products" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Refresh products">&#128260;</button>
   <button id="btnPrinterSettings" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Printer settings">&#128424;</button>
   <button id="btnWebPrinter" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Install thermal printer">&#128424;</button>
+  <button id="btnMySales" onclick="openMySales()" title="View My Sales Today" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="View my sales today">&#128200;</button>
   <button onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Request void or refund">&#8630;</button>
   <button onclick="openCashierInbox()" title="Messages" style="position:relative;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Messages">
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
@@ -468,6 +469,22 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 </div>
 
 <!-- ── RECEIPT MODAL ── -->
+<!-- ── MY SALES TODAY ── -->
+<div class="modal" id="mMySales">
+  <div class="mbox" style="max-width:380px">
+    <div class="mtitle">&#128200; My Sales Today</div>
+    <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total Sales</div>
+      <div style="font-size:28px;font-weight:800;color:var(--accent)" id="mySalesTotal">&#8212;</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px" id="mySalesCount"></div>
+    </div>
+    <div id="mySalesList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeM('mMySales')">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="mConfirm" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:500">
   <div class="mbox" style="box-shadow:0 10px 40px rgba(0,0,0,.7)">
     <div class="mtitle">&#10004; Order Confirmed</div>
@@ -964,6 +981,7 @@ function setStoreUI() {
   }
   adaptCashierMode(STORE.business_type);
   applyPosTheme(STORE);
+  document.getElementById('btnMySales').style.display = STORE.show_sales_to_cashier ? '' : 'none';
 }
 
 function adaptCashierMode(bizType) {
@@ -3010,6 +3028,35 @@ async function deleteDraft(id) {
 }
 
 // ── Void / Refund requests (cashier submits with proof, manager approves) ─
+// ── My Sales Today (owner-toggled, Settings → "Let Cashiers View Sales") ──
+// Scoped to THIS cashier's own orders only — never store-wide totals or
+// other cashiers' sales, since this button is visible to cashiers, not
+// managers/owners.
+async function openMySales() {
+  document.getElementById('mySalesList').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Loading...</div>';
+  document.getElementById('mMySales').classList.add('show');
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const { data: orders, error } = await _sb.from('orders')
+    .select('id,timestamp,total,payment_method')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+    .gte('timestamp', dayStart).order('timestamp', { ascending: false });
+  if (error) {
+    document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
+    return;
+  }
+  const rows = orders || [];
+  const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
+  document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
+  document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + ' today';
+  document.getElementById('mySalesList').innerHTML = rows.length
+    ? rows.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font-size:13px">
+        <span style="color:var(--muted)">#${o.id} &middot; ${new Date(o.timestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span style="font-weight:700">${CUR}${parseFloat(o.total).toFixed(2)}</span>
+      </div>`).join('')
+    : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No sales yet today.</div>';
+}
+
 let _vrOrder = null, _vrType = null;
 function openVoidRefundModal() {
   _vrOrder = null; _vrType = null;
