@@ -338,11 +338,16 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 
   <!-- Discount floating widget — opens near the Discount trigger button -->
-  <div id="discPanel" style="display:none;position:fixed;z-index:600;background:var(--s1);border:1px solid var(--border);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:12px;width:200px">
+  <div id="discPanel" style="display:none;position:fixed;z-index:600;background:var(--s1);border:1px solid var(--border);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:12px;width:220px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <strong style="font-size:12px;color:var(--muted)">Discount</strong>
       <span style="cursor:pointer;color:var(--muted);font-size:14px" onclick="toggleDiscPanel()">&#10005;</span>
     </div>
+    <div style="display:flex;gap:4px;margin-bottom:8px">
+      <button type="button" id="discScopeAllBtn" onclick="setDiscScope('all')" style="flex:1;padding:6px 4px;border-radius:7px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:11px;font-weight:600;cursor:pointer">All Purchases</button>
+      <button type="button" id="discScopeSpecificBtn" onclick="setDiscScope('specific')" style="flex:1;padding:6px 4px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer">Specific Items</button>
+    </div>
+    <div id="discItemPicker" style="display:none;max-height:140px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
     <div class="disc-inputs">
       <input class="disc-inp" id="discPct" type="number" placeholder="%" min="0" max="100" step="0.5" oninput="onDiscPct()">
       <input class="disc-inp" id="discAmt" type="number" placeholder="Amount" min="0" step="0.01" oninput="onDiscAmt()">
@@ -748,7 +753,7 @@ let IS_PRO = false;
 let prods = [], cart = {}, payMeth = 'Cash', _splitCashAmt = null;
 let storeInvItems = [], invById = {}, invByName = {};
 let orderType = 'Dine In', tableNo = '', isKOT = false;
-let discPct = 0, discAmt = 0;
+let discPct = 0, discAmt = 0, discScope = 'all', discSelectedKeys = new Set();
 
 // ── Web device lock ───────────────────────────────────────────────────────
 function getBrowserDevId() {
@@ -2035,7 +2040,14 @@ function adjQty(id, d) {
 function getCartTotals() {
   const items = Object.values(cart);
   const raw = parseFloat(items.reduce((s, i) => s + i.price * i.qty, 0).toFixed(2));
-  const disc = discAmt > 0 ? parseFloat(Math.min(discAmt, raw).toFixed(2)) : parseFloat((raw * discPct / 100).toFixed(2));
+  // "Specific Items" scope: the %/amount only ever applies against the
+  // subtotal of the checked items, not the whole cart — a stray key left
+  // over from a removed item is harmless since it just won't match anything
+  // in the current cart.
+  const discBase = discScope === 'specific'
+    ? parseFloat(items.filter(i => discSelectedKeys.has(i._key || i.id)).reduce((s, i) => s + i.price * i.qty, 0).toFixed(2))
+    : raw;
+  const disc = discAmt > 0 ? parseFloat(Math.min(discAmt, discBase).toFixed(2)) : parseFloat((discBase * discPct / 100).toFixed(2));
   const total = parseFloat((raw - disc).toFixed(2));
   const tax   = parseFloat((total * TAX / (100 + TAX)).toFixed(2));
   const sub   = parseFloat((total - tax).toFixed(2));
@@ -2045,6 +2057,8 @@ function getCartTotals() {
 function redrawCart() {
   const { items, raw, disc, total, tax, sub } = getCartTotals();
   const hasItems = items.length > 0;
+  const _discPanelEl = document.getElementById('discPanel');
+  if (_discPanelEl && _discPanelEl.style.display === 'block') renderDiscItemPicker();
 
   document.getElementById('cartList').innerHTML = hasItems
     ? items.map(i => `<div class="ci">
@@ -2105,24 +2119,64 @@ function toggleDiscPanel() {
   const panel = document.getElementById('discPanel');
   const opening = panel.style.display !== 'block';
   panel.style.display = opening ? 'block' : 'none';
-  if (opening) { positionDiscPanel(); setTimeout(() => document.getElementById('discPct').focus(), 50); }
+  if (opening) {
+    renderDiscItemPicker();
+    positionDiscPanel();
+    setTimeout(() => document.getElementById('discPct').focus(), 50);
+  }
 }
 function positionDiscPanel() {
   const btn = document.getElementById('discTrigger');
   const panel = document.getElementById('discPanel');
   const r = btn.getBoundingClientRect();
-  const pw = panel.offsetWidth || 200;
+  const pw = panel.offsetWidth || 220;
   const ph = panel.offsetHeight || 120;
   let top = r.top - ph - 8;
   if (top < 8) top = Math.min(r.bottom + 8, window.innerHeight - ph - 8);
   panel.style.top  = Math.max(8, top) + 'px';
   panel.style.left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left)) + 'px';
 }
+// "All Purchases" (default) applies the %/amount to the whole cart, same as
+// before. "Specific Items" scopes it to only whichever cart lines the
+// cashier checks — e.g. a senior-citizen discount that legally only covers
+// that person's own order, not the whole table's bill.
+function setDiscScope(scope) {
+  discScope = scope;
+  document.getElementById('discScopeAllBtn').style.background = scope === 'all' ? 'var(--accent)' : 'transparent';
+  document.getElementById('discScopeAllBtn').style.color = scope === 'all' ? '#fff' : 'var(--muted)';
+  document.getElementById('discScopeSpecificBtn').style.background = scope === 'specific' ? 'var(--accent)' : 'transparent';
+  document.getElementById('discScopeSpecificBtn').style.color = scope === 'specific' ? '#fff' : 'var(--muted)';
+  document.getElementById('discItemPicker').style.display = scope === 'specific' ? '' : 'none';
+  if (scope === 'specific') renderDiscItemPicker();
+  updateDiscTriggerLabel();
+  redrawCart();
+}
+function renderDiscItemPicker() {
+  const el = document.getElementById('discItemPicker');
+  if (!el || discScope !== 'specific') return;
+  const items = Object.values(cart);
+  if (!items.length) { el.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0">Cart is empty.</div>'; return; }
+  el.innerHTML = items.map(i => {
+    const key = i._key || i.id;
+    const checked = discSelectedKeys.has(key);
+    return `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleDiscItem('${key}',this.checked)" style="width:auto">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.name}</span>
+      <span style="color:var(--muted)">${CUR}${(i.price * i.qty).toFixed(2)}</span>
+    </label>`;
+  }).join('');
+}
+function toggleDiscItem(key, checked) {
+  if (checked) discSelectedKeys.add(key); else discSelectedKeys.delete(key);
+  updateDiscTriggerLabel();
+  redrawCart();
+}
 function updateDiscTriggerLabel() {
   const label = document.getElementById('discTriggerLabel');
   const btn   = document.getElementById('discTrigger');
-  if (discPct > 0)      label.textContent = 'Discount: ' + discPct + '%';
-  else if (discAmt > 0) label.textContent = 'Discount: ' + CUR + discAmt.toFixed(2);
+  const scopeNote = discScope === 'specific' ? ` (${discSelectedKeys.size} item${discSelectedKeys.size === 1 ? '' : 's'})` : '';
+  if (discPct > 0)      label.textContent = 'Discount: ' + discPct + '%' + scopeNote;
+  else if (discAmt > 0) label.textContent = 'Discount: ' + CUR + discAmt.toFixed(2) + scopeNote;
   else                   label.textContent = 'Discount';
   btn.classList.toggle('active', discPct > 0 || discAmt > 0);
 }
@@ -2925,12 +2979,13 @@ function newOrder() {
   try {
   cart = {}; payMeth = 'Cash';
   _splitCashAmt = null; _epaySplitCashAmt = null; _epayChosenLabel = null; _epayProofB64 = null;
-  discPct = 0; discAmt = 0;
+  discPct = 0; discAmt = 0; discScope = 'all'; discSelectedKeys = new Set();
   document.getElementById('tendered').value = '';
   document.getElementById('chgDisp').textContent = '';
   document.getElementById('discPct').value = '';
   document.getElementById('discAmt').value = '';
   document.getElementById('discPanel').style.display = 'none';
+  setDiscScope('all');
   updateDiscTriggerLabel();
   document.querySelectorAll('.m-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
   isKOT = false;
