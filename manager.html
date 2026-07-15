@@ -1593,15 +1593,12 @@ function doLogout(){
   localStorage.removeItem('pm_mgr');
   goLogin();
 }
-// ── Auto-logout after 5 min idle ───────────────────────────────────────────
-let _idleTimer = null;
-function _resetIdleTimer() {
-  clearTimeout(_idleTimer);
-  _idleTimer = setTimeout(() => { doLogout(); }, 60 * 60 * 1000);
-}
-['mousemove','mousedown','keydown','touchstart','scroll'].forEach(evt =>
-  document.addEventListener(evt, _resetIdleTimer, { passive: true }));
-_resetIdleTimer();
+// Idle auto-logout intentionally removed for manager.html — a manager's
+// Time In/Time Out is now tracked via the face-scan DTR (staff_logs /
+// activity_logs LOGOUT), and an idle-triggered doLogout() would insert a
+// LOGOUT row while they're still actually on duty (e.g. away from the
+// screen helping a customer), making the DTR wrongly show them as timed
+// out. Logging out is manual only now (sidebar "Log out" button).
 
 
 // ── Manager Inbox ────────────────────────────────────────────────────────────
