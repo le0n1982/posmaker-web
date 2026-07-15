@@ -72,13 +72,13 @@ nav{
 .btn-ghost{
   padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;
   background:transparent;color:var(--muted);border:1px solid var(--border);transition:all .15s;
-  font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;
+  font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;white-space:nowrap;
 }
 .btn-ghost:hover{color:var(--text);border-color:var(--border2)}
 .btn-cta{
   padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;
   background:var(--cta);color:var(--cta-text);border:none;transition:opacity .15s;
-  font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;
+  font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;white-space:nowrap;
 }
 .btn-cta:hover{opacity:.9}
 .nav-ham{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0}
@@ -98,6 +98,16 @@ nav{
   .nav-links a{padding:9px 0;width:100%}
 }
 @media(max-width:480px){.nav-btns .btn-ghost{display:none}}
+/* Very narrow phones (~360-400px): logo + hamburger + theme toggle + CTA
+   button no longer fit at full size on one line — shrink them instead of
+   letting the CTA's text wrap and poke out of the fixed-height nav bar. */
+@media(max-width:400px){
+  nav{padding:0 3vw;gap:8px}
+  .nav-logo{font-size:16px}
+  .btn-cta{padding:7px 12px;font-size:12px}
+  #themeToggle{width:30px;height:30px;font-size:14px}
+  .nav-ham{width:30px;height:30px}
+}
 
 /* ── HERO ── */
 .hero{
