@@ -566,12 +566,34 @@ footer{background:var(--s1);border-top:1px solid var(--border);padding:44px 5vw 
       <a href="signup.html" class="slide-cta">Accept Online Payments →</a>
     </div>
   </div>
+  <div class="slide" id="slide-4">
+    <div class="slide-media"><img src="Images/11.jpg" alt="Easy Inventory Tracking"></div>
+    <div class="slide-scrim"></div>
+    <div class="slide-left">
+      <div class="slide-tag">Inventory</div>
+      <div class="slide-h1">STOP LOSING TRACK<br>OF YOUR STOCK.<br><span class="cy">EASY INVENTORY TRACKING.</span></div>
+      <div class="slide-desc">Track stock levels and cost per item automatically — know exactly what's running low, in real time.</div>
+      <a href="signup.html" class="slide-cta">Track Your Stock →</a>
+    </div>
+  </div>
+  <div class="slide" id="slide-5">
+    <div class="slide-media"><img src="Images/12.jpg" alt="Add a Task with Photo Proof"></div>
+    <div class="slide-scrim"></div>
+    <div class="slide-left">
+      <div class="slide-tag">Accountability</div>
+      <div class="slide-h1">SAY GOODBYE TO<br>SKIPPED TASKS.<br><span class="cy">ADD A TASK WITH PROOF.</span></div>
+      <div class="slide-desc">Assign daily tasks to staff — a photo is required before it can be marked done, so nothing gets skipped.</div>
+      <a href="signup.html" class="slide-cta">Assign a Task →</a>
+    </div>
+  </div>
   <div class="slides-nav">
     <div class="slides-dots">
       <button class="dot active" onclick="goSlide(0)"></button>
       <button class="dot" onclick="goSlide(1)"></button>
       <button class="dot" onclick="goSlide(2)"></button>
       <button class="dot" onclick="goSlide(3)"></button>
+      <button class="dot" onclick="goSlide(4)"></button>
+      <button class="dot" onclick="goSlide(5)"></button>
     </div>
     <div class="slide-arrows">
       <button class="slide-arr" onclick="goSlide(_slideIdx-1)">&#8249;</button>
@@ -933,7 +955,7 @@ function openDemo() {
 }
 
 let _slideIdx = 0, _slideTimer;
-const _SLIDES = 4;
+const _SLIDES = 6;
 function goSlide(n) {
   document.getElementById('slide-' + _slideIdx).classList.remove('active');
   document.querySelectorAll('.dot')[_slideIdx].classList.remove('active');
