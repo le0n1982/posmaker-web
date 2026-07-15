@@ -383,6 +383,11 @@ ALTER TABLE store_users ADD COLUMN IF NOT EXISTS salary_frequency       TEXT DEF
 -- from the Add/Edit Staff modal's "Scan QR to Register Face".
 ALTER TABLE store_users ADD COLUMN IF NOT EXISTS face_descriptor JSONB;
 
+-- Owner toggle (Settings → POS Permissions): shows/hides a "View Sales"
+-- button in the cashier POS. Scoped to that cashier's own sales only when
+-- enabled — never store-wide totals.
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS show_sales_to_cashier BOOLEAN DEFAULT false;
+
 -- Ping: update last_seen so dashboard can show Online indicator
 CREATE OR REPLACE FUNCTION ping_staff_online(p_staff_id UUID)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
