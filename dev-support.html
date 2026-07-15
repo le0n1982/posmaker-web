@@ -2470,6 +2470,15 @@ function show(id) {
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
+// Click the dark backdrop (not the box itself) to close whichever modal is
+// open — e.target is the .modal overlay only when the click didn't land on
+// .mbox or anything inside it, so clicks inside the form never close it.
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal') && e.target.classList.contains('show')) {
+    closeModal(e.target.id);
+  }
+});
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
