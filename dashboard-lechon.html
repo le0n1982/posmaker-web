@@ -1013,7 +1013,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     </div>
     <!-- Product image upload -->
     <div class="field" style="margin-bottom:14px">
-      <label>Product Photos <span style="color:var(--dim);font-weight:400">(optional, up to 4)</span></label>
+      <label>Product Photos <span style="color:var(--dim);font-weight:400">(optional)</span></label>
       <div style="display:flex;gap:6px;margin-bottom:6px">
         <button type="button" id="prodLiveCamBtn" class="btn btn-accent btn-sm" style="flex:1;font-size:12px" onclick="openDashCam('prodPhoto','pSku')">&#128247; Live Camera</button>
         <button type="button" id="prodCamBtn" class="btn btn-ghost btn-sm" style="flex:1;font-size:12px" onclick="openImgUploadQR('product',1)">&#128248; Scan QR</button>
@@ -4920,7 +4920,7 @@ async function openFaceEnrollQR() {
   document.getElementById('faceEnrollStatus').textContent = 'Waiting for scan…';
   _OPS_STORE_ID = STORE.id;
   _faceEnrollToken = await createFaceSessionToken('enroll', staffId);
-  const url = location.href.split('?')[0].replace('dashboard-bigasan.html', 'face-scan.html')
+  const url = 'https://posmaker.ggff.net/face-scan.html'
     + '?sid=' + encodeURIComponent(STORE.id) + '&token=' + _faceEnrollToken + '&mode=enroll';
   document.getElementById('faceEnrollQRImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
   document.getElementById('faceEnrollQRModal').classList.add('show');

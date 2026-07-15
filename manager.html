@@ -1045,7 +1045,7 @@ async function openFaceAttendanceQR(mode){
   document.getElementById('faceAttTitle').textContent = (mode === 'recognize_in' ? 'Time In' : 'Time Out') + ' — Scan with Phone';
   document.getElementById('faceAttStatus').textContent = 'Waiting for scan…';
   _faceAttToken = await createFaceSessionToken(mode, null);
-  const url = location.href.split('?')[0].replace('manager.html','face-scan.html')
+  const url = 'https://posmaker.ggff.net/face-scan.html'
     + '?sid=' + encodeURIComponent(MGR.store_id) + '&token=' + _faceAttToken + '&mode=' + mode;
   document.getElementById('faceAttQRImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
   document.getElementById('faceAttendanceQRModal').classList.add('show');
