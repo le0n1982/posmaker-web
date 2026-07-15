@@ -33,11 +33,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 #loginErr{color:#ef4444;font-size:12px;min-height:16px;margin-bottom:6px;text-align:center}
 
 /* ── HEADER ────────────────────────────────────────────── */
-.hdr{background:var(--accent);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hdr{background:var(--accent);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .hdr-logo{height:28px;width:auto;border-radius:4px;object-fit:contain;display:none}
-.hdr-title{font-size:calc(15px * var(--font-scale,1));font-weight:700;flex:1}
-.hdr-cashier{font-size:calc(11px * var(--font-scale,1));opacity:.85;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btn-logout{background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:11px;flex-shrink:0}
+.hdr-title{font-size:calc(15px * var(--font-scale,1));font-weight:700;flex:1;color:var(--hdr-text,#fff)}
+.hdr-cashier{font-size:calc(12px * var(--font-scale,1));opacity:.9;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--hdr-text,#fff)}
+.btn-logout{background:rgba(255,255,255,.2);border:none;color:var(--hdr-text,#fff);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0}
 
 /* ── ORDER TYPE TABS ────────────────────────────────────── */
 .ot-bar{background:var(--s1);display:flex;border-bottom:2px solid var(--border);flex-shrink:0}
@@ -287,14 +287,14 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <span id="netStatus" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(0,0,0,.3);margin-left:8px;letter-spacing:.3px"></span>
   <span class="hdr-cashier" id="hdrCashier"></span>
   <div id="hdrActions" style="display:contents">
-  <button id="btnCam" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Camera scanner">&#128247;</button>
-  <button id="btnDualScreen" onclick="openDualScreen()" title="Open Customer Display (2nd window — drag to your second monitor)" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Open customer display">&#128421;</button>
-  <button id="btnSync" onclick="syncProds()" title="Refresh products" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Refresh products">&#128260;</button>
-  <button id="btnPrinterSettings" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Printer settings">&#128424;</button>
-  <button id="btnWebPrinter" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Install thermal printer">&#128424;</button>
-  <button id="btnMySales" onclick="openMySales()" title="View My Sales Today" style="display:none;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="View my sales today">&#128200;</button>
-  <button onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Request void or refund">&#8630;</button>
-  <button onclick="openCashierInbox()" title="Messages" style="position:relative;background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:15px;opacity:.75;margin-right:3px" aria-label="Messages">
+  <button id="btnCam" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Camera scanner">&#128247;</button>
+  <button id="btnDualScreen" onclick="openDualScreen()" title="Open Customer Display (2nd window — drag to your second monitor)" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Open customer display">&#128421;</button>
+  <button id="btnSync" onclick="syncProds()" title="Refresh products" style="background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Refresh products">&#128260;</button>
+  <button id="btnPrinterSettings" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Printer settings">&#128424;</button>
+  <button id="btnWebPrinter" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Install thermal printer">&#128424;</button>
+  <button id="btnMySales" onclick="openMySales()" title="View My Sales Today" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="View my sales today">&#128200;</button>
+  <button onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Request void or refund">&#8630;</button>
+  <button onclick="openCashierInbox()" title="Messages" style="position:relative;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Messages">
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
   </button>
   <button class="btn-logout" onclick="doLogout()">Logout</button>
@@ -1082,6 +1082,13 @@ function applyPosTheme(s) {
   if (s.pos_accent) r.style.setProperty('--accent', s.pos_accent);
   if (s.pos_bg)     r.style.setProperty('--bg', s.pos_bg);
   if (s.pos_card)   { r.style.setProperty('--s1', s.pos_card); r.style.setProperty('--s2', s.pos_card + 'cc'); }
+
+  // The top header bar (.hdr) sits on --accent, not --bg — its own text
+  // (store name, cashier name, Logout, icon buttons) needs contrast picked
+  // against THAT color specifically, since a light custom accent color can
+  // make the usual white header text invisible even when the rest of the
+  // page's dark-background contrast is fine.
+  r.style.setProperty('--hdr-text', _autoTextColor(s.pos_accent || '#00b4d8') || '#fff');
 
   // Resolve the effective text color FIRST (explicit pos_text, or an
   // auto-contrast pick against pos_bg) so every derived label/muted color
