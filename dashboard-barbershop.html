@@ -106,6 +106,19 @@ body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',s
   .sb-toggle{display:block}
   .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199}
   .sb-overlay.show{display:block}
+  /* Owners often only carry a phone/tablet — these rules keep every table,
+     form, and modal usable at a ~360-400px viewport instead of just
+     shrinking the desktop layout in place. */
+  .topbar{padding:0 12px}
+  .topbar-title{font-size:14px}
+  .content{padding:12px}
+  .stat-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+  .stat-card{padding:14px}
+  .sc-val{font-size:21px}
+  .mbox{padding:16px;width:100%}
+  .row2{grid-template-columns:1fr}
+  .search{width:100%}
+  .info-card{padding:16px}
 }
 
 /* SECTION */
@@ -120,8 +133,8 @@ body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',s
 .sc-sub{font-size:12px;color:var(--dim);margin-top:4px}
 
 /* TABLE */
-.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--card-shadow,none)}
-.tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tbl-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow-x:auto;box-shadow:var(--card-shadow,none)}
+.tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .tbl-head h3{font-size:14px;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{background:var(--s2);color:var(--muted);padding:10px 14px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
@@ -156,7 +169,7 @@ tr:hover td{background:var(--s2)}
 /* MODAL */
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;align-items:center;justify-content:center;padding:16px}
 .modal.show{display:flex}
-.mbox{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:26px;width:min(480px,100%);max-height:90dvh;overflow-y:auto}
+.mbox{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:26px;width:min(480px,100%);max-height:90dvh;overflow-y:auto;overflow-x:auto}
 .mbox h3{font-size:17px;font-weight:700;margin-bottom:20px}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
