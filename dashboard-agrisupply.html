@@ -767,6 +767,12 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
       <div class="info-card">
+        <h3>Payment Methods</h3>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px">Add your bank/e-wallet QR codes (GCash, BDO, BPI, Maya, etc.) — whichever you add here shows up as an option in the POS's E-Pay widget, with the exact amount to pay.</p>
+        <div id="payMethodList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+        <button class="btn btn-accent" onclick="openAddPayMethod()">+ Add Payment Method</button>
+      </div>
+      <div class="info-card">
         <h3>Store Information</h3>
         <div class="row2" style="margin-top:14px">
           <div class="field"><label>Store Name</label><input id="sName" type="text"></div>
@@ -1369,6 +1375,27 @@ input:checked + .slider:before{transform:translateX(18px)}
   </div>
 </div>
 
+<!-- ADD PAYMENT METHOD MODAL -->
+<div class="modal" id="mAddPayMethod">
+  <div class="mbox">
+    <h3>Add Payment Method</h3>
+    <div class="field"><label>Label</label><input id="pmLabel" type="text" placeholder="e.g. GCash, BDO, Maya"></div>
+    <div class="logo-drop" id="pmQrDrop" onclick="document.getElementById('pmQrInput').click()">
+      <img id="pmQrPreview" style="display:none">
+      <p id="pmQrHint">Click to upload QR (PNG or JPG)</p>
+    </div>
+    <input type="file" id="pmQrInput" accept="image/*" style="display:none" onchange="handleAddPayMethodQr(event)">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button type="button" class="btn btn-ghost" style="flex:1" onclick="openDashCam('paymethod')">&#128247; PC Camera</button>
+      <button type="button" class="btn btn-ghost" style="flex:1" onclick="openImgUploadQR('paymethod',1)">&#128241; Scan QR w/ Phone</button>
+    </div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeModal('mAddPayMethod')">Cancel</button>
+      <button class="btn-confirm" onclick="savePaymentMethod()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- STAFF MODAL -->
 <div class="modal" id="staffModal">
   <div class="mbox">
@@ -1657,6 +1684,9 @@ let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
 let pendingLogob64 = null;
+let pendingPmQrb64 = null;
+let pendingPmQrPayload = null;
+let PAY_METHODS = [];
 let pendingProdImg = null;
 let _prodPendingImgs = [];
 let pInvLinks = []; // array of {id, qty} — qty = amount used per 1 order
@@ -1778,6 +1808,7 @@ function _sig(ms = 25000) {
     document.getElementById('logoDrop').classList.add('has-img');
     document.getElementById('removeLogoBtn').style.display = 'inline-flex';
   }
+  loadPaymentMethods();
 
   loadDashboard();
   await Promise.race([loadDbCategories(), new Promise(r => setTimeout(r, 8000))]);
@@ -5518,6 +5549,95 @@ async function removeLogo() {
   pendingLogob64 = null;
   showToast('Logo removed.');
 }
+let _jsQrReady = false;
+function _loadJsQr() {
+  if (_jsQrReady) return Promise.resolve();
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s.onload = () => { _jsQrReady = true; res(); };
+    s.onerror = () => res();
+    document.head.appendChild(s);
+  });
+}
+async function _decodeQrPayload(dataUrl) {
+  await _loadJsQr();
+  if (typeof jsQR === 'undefined') return null;
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      cv.getContext('2d').drawImage(img, 0, 0);
+      const id = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height);
+      const code = jsQR(id.data, id.width, id.height);
+      res(code ? code.data : null);
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
+}
+async function loadPaymentMethods() {
+  const list = document.getElementById('payMethodList');
+  if (!list || !STORE?.id) return;
+  list.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading...</div>';
+  const { data, error } = await _sb.from('payment_methods').select('*').eq('store_id', STORE.id).order('sort_order');
+  if (error) { list.innerHTML = `<div style="font-size:12px;color:var(--danger-text)">Error: ${error.message}</div>`; return; }
+  PAY_METHODS = data || [];
+  if (!PAY_METHODS.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted)">No payment methods yet — add your bank/e-wallet QR code below.</div>';
+    return;
+  }
+  list.innerHTML = PAY_METHODS.map(m => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+      ${m.qr_b64 ? `<img src="data:image/png;base64,${m.qr_b64}" style="width:36px;height:36px;border-radius:4px;background:#fff;object-fit:contain">` : ''}
+      <span style="flex:1;font-weight:600">${m.label}</span>
+      ${m.qr_payload ? '<span style="font-size:11px;color:var(--ok-text)">Dynamic QR</span>' : ''}
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="removePaymentMethod('${m.id}')">Remove</button>
+    </div>`).join('');
+}
+function openAddPayMethod() {
+  document.getElementById('pmLabel').value = '';
+  document.getElementById('pmQrPreview').style.display = 'none';
+  document.getElementById('pmQrHint').style.display = '';
+  document.getElementById('pmQrDrop').classList.remove('has-img');
+  pendingPmQrb64 = null; pendingPmQrPayload = null;
+  document.getElementById('mAddPayMethod').classList.add('show');
+}
+function handleAddPayMethodQr(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const b64 = ev.target.result.split(',')[1];
+    pendingPmQrb64 = b64;
+    const img = document.getElementById('pmQrPreview');
+    img.src = ev.target.result; img.style.display = 'block';
+    document.getElementById('pmQrHint').style.display = 'none';
+    document.getElementById('pmQrDrop').classList.add('has-img');
+    pendingPmQrPayload = await _decodeQrPayload(ev.target.result);
+    if (pendingPmQrPayload) showToast('✅ QR decoded — exact amount will pre-fill for the customer.');
+    else showToast('⚠️ Could not read QR from image. Customer will need to type the amount manually.', true);
+  };
+  reader.readAsDataURL(file);
+}
+async function savePaymentMethod() {
+  const label = document.getElementById('pmLabel').value.trim();
+  if (!label) { showToast('Enter a label (e.g. GCash).', true); return; }
+  if (!pendingPmQrb64) { showToast('Upload a QR code image.', true); return; }
+  const { error } = await _sb.from('payment_methods').insert({
+    store_id: STORE.id, label, qr_b64: pendingPmQrb64, qr_payload: pendingPmQrPayload || null, sort_order: PAY_METHODS.length
+  });
+  if (error) { showToast('❌ Save failed: ' + error.message, true); return; }
+  closeModal('mAddPayMethod');
+  showToast('Payment method added.');
+  loadPaymentMethods();
+}
+async function removePaymentMethod(id) {
+  if (!confirm('Remove this payment method?')) return;
+  await _sb.from('payment_methods').delete().eq('id', id);
+  showToast('Payment method removed.');
+  loadPaymentMethods();
+}
 async function sendResetEmail() {
   const email = document.getElementById('resetEmail').value.trim();
   if (!email) { showToast('Enter your email.', true); return; }
@@ -6420,6 +6540,11 @@ async function openDashCam(mode, targetField){
     captureBtn.textContent = '📷 Capture ('+_prodPendingImgs.length+'/4)';
     bcBtn.style.display = 'none';
     document.querySelector('#dashCamModal h3').textContent = '📷 Product Photos';
+  } else if(_dashCamMode === 'paymethod'){
+    // Fully automatic — no capture button, closes itself the moment a QR is found.
+    captureBtn.style.display = 'none';
+    bcBtn.style.display = 'none';
+    document.querySelector('#dashCamModal h3').textContent = '📷 Scan Payment QR';
   } else {
     captureBtn.style.display = '';
     captureBtn.innerHTML = '📷 Capture Photo';
@@ -6433,7 +6558,8 @@ async function openDashCam(mode, targetField){
       video:{ facingMode:{ ideal:'environment' }, width:{ ideal:640 } }
     });
     video.srcObject = _dashStream; await video.play();
-    startDashBcLoop(video);
+    if (_dashCamMode === 'paymethod') startDashQrLoop(video);
+    else startDashBcLoop(video);
   } catch(e) {
     const errEl = document.getElementById('dashCamErr');
     errEl.textContent = '⚠️ Camera blocked — go to browser Settings → Site settings → Camera → Allow le0n1982.github.io';
@@ -6446,6 +6572,39 @@ function closeDashCam(){
   if(_dashStream){ _dashStream.getTracks().forEach(t=>t.stop()); _dashStream=null; }
   if(_dashBcLoopId){ clearTimeout(_dashBcLoopId); _dashBcLoopId=null; }
   if(_dashZxing){ try{ _dashZxing.reset(); }catch(_){} _dashZxing=null; }
+  if(_dashQrLoopId){ clearTimeout(_dashQrLoopId); _dashQrLoopId=null; }
+}
+// Live QR scan (payment-method QR) — points the camera, auto-captures and
+// decodes the moment a QR comes into frame, no manual "Capture" tap needed.
+let _dashQrLoopId = null;
+async function startDashQrLoop(video){
+  await _loadJsQr();
+  if (typeof jsQR === 'undefined') { showToast('Could not load QR scanner. Use "upload photo" instead.', true); closeDashCam(); return; }
+  const cv = document.createElement('canvas');
+  async function loop(){
+    if(!_dashStream){ _dashQrLoopId=null; return; }
+    if(video.readyState>=2 && video.videoWidth>0){
+      cv.width = video.videoWidth; cv.height = video.videoHeight;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(video, 0, 0, cv.width, cv.height);
+      const id = ctx.getImageData(0, 0, cv.width, cv.height);
+      const code = jsQR(id.data, id.width, id.height);
+      if (code) {
+        const b64 = cv.toDataURL('image/jpeg', 0.85).split(',')[1];
+        pendingPmQrb64 = b64;
+        pendingPmQrPayload = code.data;
+        const img = document.getElementById('pmQrPreview');
+        img.src = 'data:image/jpeg;base64,' + b64; img.style.display = 'block';
+        document.getElementById('pmQrHint').style.display = 'none';
+        document.getElementById('pmQrDrop').classList.add('has-img');
+        closeDashCam();
+        showToast('✅ QR scanned — exact amount will pre-fill for the customer.');
+        return;
+      }
+    }
+    _dashQrLoopId=setTimeout(loop,250);
+  }
+  setTimeout(loop,400); // let video stabilize first
 }
 
 function startDashBcLoop(video){
@@ -6556,6 +6715,13 @@ async function openImgUploadQR(type,maxImages){
     if(_imgQRType==='inventory'){
       if(_invPendingImgs.length===0) _invPendingImgs.push(imgs[0]);
       renderInvThumbs();
+    } else if(_imgQRType==='paymethod'){
+      pendingPmQrb64 = imgs[0];
+      const img = document.getElementById('pmQrPreview');
+      img.src = 'data:image/jpeg;base64,' + imgs[0]; img.style.display = 'block';
+      document.getElementById('pmQrHint').style.display = 'none';
+      document.getElementById('pmQrDrop').classList.add('has-img');
+      pendingPmQrPayload = await _decodeQrPayload(img.src);
     } else {
       imgs.forEach(b=>{if(_prodPendingImgs.length<4)_prodPendingImgs.push(b);});
       renderProdThumbs();
