@@ -3489,12 +3489,18 @@ async function openMySales() {
   document.getElementById('mMySales').classList.add('show');
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const [{ data: orders, error }, { data: logs }] = await Promise.all([
+  const [{ data: orders, error }, { data: logs }, { data: remits }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('timestamp', dayStart).order('timestamp', { ascending: false }),
     _sb.from('activity_logs').select('action,details,created_at')
       .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME)
+      .gte('created_at', dayStart).order('created_at', { ascending: false }),
+    // Structured remittance figures straight from the source table — reading
+    // cash_on_hand/remit_amount/drawer_float/status directly instead of
+    // trying to re-parse the activity log's pipe-delimited text summary.
+    _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('created_at', dayStart).order('created_at', { ascending: false })
   ]);
   if (error) {
@@ -3505,33 +3511,61 @@ async function openMySales() {
   const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
   document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
   document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + ' today';
-  // Merge today's sales with this cashier's own activity log (remittance,
-  // expenses, login/logout) into one chronological feed — a self-check of
+  // Merge today's sales with this cashier's own remittances, expenses, and
+  // login/logout into one chronological feed — a scannable self-check of
   // the whole shift, not just a sales total.
-  const ACTIVITY_LABEL = { REMITTANCE: '\u{1FA99} Remittance', EXPENSE_PAID: '\u{1F4CB} Expense', LOGIN: '\u{1F513} Login', LOGOUT: '\u{1F512} Logout' };
-  const feed = rows.map(o => ({
-    t: new Date(o.timestamp),
-    label: '#' + o.id,
-    sub: CUR + parseFloat(o.total).toFixed(2),
-    color: 'var(--text)',
-  }));
+  const feed = [];
+  rows.forEach(o => feed.push({ type: 'order', t: new Date(o.timestamp), id: o.id, amount: parseFloat(o.total) || 0 }));
   (logs || []).forEach(l => {
-    if (!ACTIVITY_LABEL[l.action]) return;
-    let sub = l.details || '';
     if (l.action === 'EXPENSE_PAID') {
-      try { const d = JSON.parse(l.details); sub = (CUR||'₱') + parseFloat(d.amount || 0).toFixed(2) + ' — ' + (d.category || ''); } catch(_) {}
+      let d = {}; try { d = JSON.parse(l.details); } catch(_) {}
+      feed.push({ type: 'expense', t: new Date(l.created_at), amount: parseFloat(d.amount || 0), category: d.category || '' });
     } else if (l.action === 'LOGIN' || l.action === 'LOGOUT') {
-      sub = '';
+      feed.push({ type: l.action.toLowerCase(), t: new Date(l.created_at) });
     }
-    feed.push({ t: new Date(l.created_at), label: ACTIVITY_LABEL[l.action], sub, color: '#a78bfa' });
+  });
+  (remits || []).forEach(r => {
+    const cash = parseFloat(r.cash_on_hand || 0);
+    const drawerFloat = parseFloat(r.drawer_float || 0);
+    feed.push({
+      type: 'remit', t: new Date(r.created_at), status: r.status,
+      cash, float: drawerFloat,
+      remitted: parseFloat(r.remit_amount || 0) || cash,
+    });
   });
   feed.sort((a, b) => b.t - a.t);
-  document.getElementById('mySalesList').innerHTML = feed.length
-    ? feed.map(f => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font-size:13px;gap:10px">
-        <span style="color:var(--muted);white-space:nowrap">${f.label} &middot; ${f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
-        <span style="font-weight:700;color:${f.color};text-align:right;overflow:hidden;text-overflow:ellipsis">${f.sub}</span>
-      </div>`).join('')
-    : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>';
+  document.getElementById('mySalesList').innerHTML = feed.length ? feed.map(_myActivityItemHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>';
+}
+function _myActivityItemHtml(f) {
+  const time = f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  if (f.type === 'order') {
+    return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(16,185,129,.08);border-left:3px solid #10b981;border-radius:8px;padding:9px 12px;font-size:13px">
+      <span style="color:var(--muted)">&#129534; Sale #${f.id} &middot; ${time}</span>
+      <span style="font-weight:700;color:#10b981">+${CUR}${f.amount.toFixed(2)}</span>
+    </div>`;
+  }
+  if (f.type === 'expense') {
+    return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(236,72,153,.08);border-left:3px solid #ec4899;border-radius:8px;padding:9px 12px;font-size:13px">
+      <span style="color:var(--muted)">&#128179; ${f.category || 'Expense'} &middot; ${time}</span>
+      <span style="font-weight:700;color:#ec4899">&minus;${CUR}${f.amount.toFixed(2)}</span>
+    </div>`;
+  }
+  if (f.type === 'remit') {
+    const STATUS_MAP = { balanced: ['Balanced', '#94a3b8'], over: ['Over', '#10b981'], short: ['Short', '#ef4444'], pending: ['Pending', '#f59e0b'] };
+    const [statusText, statusColor] = STATUS_MAP[f.status] || ['Recorded', '#94a3b8'];
+    const sub = f.float > 0
+      ? `Remitted ${CUR}${f.remitted.toFixed(2)} &middot; Kept ${CUR}${f.float.toFixed(2)}`
+      : `Counted ${CUR}${f.cash.toFixed(2)}`;
+    return `<div style="background:rgba(245,158,11,.08);border-left:3px solid #f59e0b;border-radius:8px;padding:9px 12px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--muted)">&#128176; Remittance &middot; ${time}</span>
+        <span style="font-weight:700;color:${statusColor};font-size:11px;text-transform:uppercase;letter-spacing:.3px">${statusText}</span>
+      </div>
+      <div style="color:var(--muted);font-size:11px;margin-top:2px">${sub}</div>
+    </div>`;
+  }
+  const label = f.type === 'login' ? '&#128275; Logged in' : '&#128274; Logged out';
+  return `<div style="text-align:center;padding:4px 0;font-size:11px;color:var(--dim)">${label} &middot; ${time}</div>`;
 }
 
 // ── Add Expense (cashier-facing, owner-toggled via Settings) ─────────────
