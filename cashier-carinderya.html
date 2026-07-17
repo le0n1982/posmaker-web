@@ -1187,17 +1187,20 @@ async function doLogin() {
   }
 }
 
-// Live-refresh permission-gated UI (currently just "View Sales") without
-// requiring a logout/login — the owner may flip a Settings toggle while the
-// cashier is mid-shift, so this should show up on its own instead of
-// needing a manual re-login.
+// Live-refresh store settings (permissions, tax rate, currency, theme,
+// payment methods, etc.) without requiring a logout/login — a cashier
+// mid-shift often can't log out until their cash is remitted, so owner-side
+// changes need to reach the open POS session on their own.
 async function checkStorePermissions() {
   if (!STORE?.id) return;
-  const { data } = await _sb.from('stores').select('show_sales_to_cashier').eq('id', STORE.id).maybeSingle();
-  if (!data) return;
-  STORE.show_sales_to_cashier = data.show_sales_to_cashier;
-  const btn = document.getElementById('btnMySales');
-  if (btn) btn.style.display = STORE.show_sales_to_cashier ? '' : 'none';
+  const { data } = await _sb.from('stores').select('*').eq('id', STORE.id).maybeSingle();
+  if (data) {
+    STORE = data;
+    CUR = data.currency || '₱';
+    TAX = parseFloat(data.tax_rate) || 0;
+    setStoreUI();
+  }
+  loadPaymentMethods();
 }
 function startPermissionsPoll() {
   if (_permPollInterval) clearInterval(_permPollInterval);
