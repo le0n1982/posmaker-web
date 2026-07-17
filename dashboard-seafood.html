@@ -798,6 +798,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <input type="checkbox" id="sShowSalesToCashier" style="width:auto">
           <label for="sShowSalesToCashier" style="margin:0">Let cashiers view their own sales <span style="color:var(--dim);font-weight:400;font-size:11px">(adds a "View Sales" button in the POS, showing only that cashier's own sales for the day)</span></label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="sEnableDrawerFloat" style="width:auto">
+          <label for="sEnableDrawerFloat" style="margin:0">Allow cashiers to keep a drawer float when remitting <span style="color:var(--dim);font-weight:400;font-size:11px">(e.g. ₱11,500 counted — cashier remits ₱10,000 and keeps ₱1,500 in the drawer as change fund for the next shift; recorded in the cashier log either way)</span></label>
+        </div>
         <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
       </div>
       <div class="info-card">
@@ -1812,6 +1816,7 @@ function _sig(ms = 25000) {
   document.getElementById('sFooter').value   = store.receipt_footer || '';
   document.getElementById('sShowCalc').checked = store.show_calculator !== false;
   document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
+  document.getElementById('sEnableDrawerFloat').checked = !!store.enable_drawer_float;
   applyCalcVisibility(store.show_calculator !== false);
   const { data: { user: _u } } = await _sb.auth.getUser();
   if (_u) document.getElementById('resetEmail').value = _u.email || '';
@@ -2606,7 +2611,7 @@ async function loadUnconfirmedRemits() {
   if (!tbody || !STORE?.id) return;
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>';
   const { data, error } = await _sb.from('cash_remittances')
-    .select('cashier_name,shift_date,pos_sales,cash_on_hand,difference,created_at')
+    .select('cashier_name,shift_date,pos_sales,cash_on_hand,remit_amount,drawer_float,difference,created_at')
     .eq('store_id', STORE.id).eq('status', 'pending')
     .order('created_at', { ascending: true }); // oldest/longest-waiting first
   if (error) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger-text);padding:20px">Error: ${error.message}</td></tr>`; return; }
@@ -2625,11 +2630,15 @@ async function loadUnconfirmedRemits() {
     const diffColor = diff > 0 ? '#f97316' : diff < 0 ? '#ef4444' : '#00b4d8';
     const dateStr = new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
     const overdue = (Date.now() - new Date(r.created_at).getTime()) > 24*60*60*1000;
+    const drawerFloat = parseFloat(r.drawer_float || 0);
+    const cashCell = drawerFloat > 0
+      ? `${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}<div style="font-size:10px;color:var(--muted);margin-top:2px">Remitted ${CUR||'₱'}${parseFloat(r.remit_amount||0).toFixed(2)} &middot; Float ${CUR||'₱'}${drawerFloat.toFixed(2)}</div>`
+      : `${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}`;
     return `<tr>
       <td style="font-weight:600">${r.cashier_name}</td>
       <td>${dateStr}</td>
       <td>${CUR||'₱'}${parseFloat(r.pos_sales||0).toFixed(2)}</td>
-      <td>${CUR||'₱'}${parseFloat(r.cash_on_hand||0).toFixed(2)}</td>
+      <td>${cashCell}</td>
       <td style="color:${diffColor};font-weight:600">${diff>=0?'+':''}${CUR||'₱'}${Math.abs(diff).toFixed(2)}</td>
       <td style="${overdue?'color:var(--danger-text);font-weight:600':'color:var(--muted)'}">${ago(r.created_at)}</td>
     </tr>`;
@@ -5683,6 +5692,7 @@ async function saveSettings() {
     receipt_footer: document.getElementById('sFooter').value.trim(),
     show_calculator: document.getElementById('sShowCalc').checked,
     show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
+    enable_drawer_float: document.getElementById('sEnableDrawerFloat').checked,
   };
   if (!payload.name) { showToast('Store name is required.', true); return; }
   const { error } = await _sb.from('stores').update(payload).eq('id', STORE.id);

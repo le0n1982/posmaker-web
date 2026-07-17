@@ -642,6 +642,14 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (how much is in the drawer?)</label>
       <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcRemitLogDiff()" style="font-size:22px;text-align:center;padding:12px;font-weight:700">
       <span id="remitLogDiff" style="display:none">—</span>
+      <div id="remitFloatSection" style="display:none;margin-top:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Remittance Amount (how much are you handing over?)</label>
+        <input class="inp" id="remitLogAmt" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcRemitLogFloat()" style="font-size:18px;text-align:center;padding:10px;font-weight:700">
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--muted)">
+          <span>Remaining for drawer</span>
+          <strong id="remitLogFloatDisp">—</strong>
+        </div>
+      </div>
       <div class="m-actions" style="margin-top:14px">
         <button class="btn-cancel" onclick="cancelRemitLogout()">Cancel</button>
         <button class="btn-confirm" id="remitLogCheckBtn" onclick="remitLogStep2()" disabled style="opacity:.4">Submit &#10003;</button>
@@ -661,6 +669,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
           <strong id="remitCk4" style="font-size:20px;color:var(--accent)">—</strong>
         </div>
         <span id="remitCk5" style="display:none">—</span>
+        <div id="remitCkFloatRow" style="display:none;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Remittance Amount</span><strong id="remitCk6" style="color:#22c55e">—</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Remaining for Drawer</span><strong id="remitCk7" style="color:var(--accent)">—</strong></div>
+        </div>
       </div>
       <div class="m-actions">
         <button class="btn-cancel" onclick="remitLogBack()">&#8592; Back</button>
@@ -1406,6 +1418,7 @@ async function checkCashierInbox() {
 }
 
 let _remitOnlineSales = 0;
+let _remitCarriedFloat = 0;
 async function openRemitOnLogout() {
   const name = CASHIER?.full_name || CASHIER?.username || CASHIER_NAME || '—';
   const today = new Date().toISOString().slice(0,10);
@@ -1416,6 +1429,9 @@ async function openRemitOnLogout() {
   document.getElementById('remitLogDiff').style.color = 'var(--muted)';
   document.getElementById('remitLogCheckBtn').disabled = true;
   document.getElementById('remitLogCheckBtn').style.opacity = '.4';
+  document.getElementById('remitFloatSection').style.display = STORE?.enable_drawer_float ? '' : 'none';
+  document.getElementById('remitLogAmt').value = '';
+  document.getElementById('remitLogFloatDisp').textContent = '—';
   document.getElementById('remitStep1').style.display = '';
   document.getElementById('remitStep2').style.display = 'none';
   document.getElementById('mRemitLogout').classList.add('show');
@@ -1431,8 +1447,13 @@ async function openRemitOnLogout() {
     // stuck/unattended session reloaded into a fresh login overnight), so the
     // real last remittance (whatever day it happened) must still be found.
     const { data: lastRemit } = await _sb.from('cash_remittances')
-      .select('created_at').eq('store_id', STORE_ID).eq('cashier_name', name)
+      .select('created_at,drawer_float').eq('store_id', STORE_ID).eq('cashier_name', name)
       .order('created_at', { ascending: false }).limit(1);
+    // Whatever the cashier kept in the drawer as change fund last time is
+    // still physically in there — it's not "new" money this shift, so it
+    // has to be added to the expected baseline or every shift after a kept
+    // float would look artificially "Over" by that same amount.
+    _remitCarriedFloat = parseFloat(lastRemit?.[0]?.drawer_float) || 0;
     const _lsRemitKey = 'pm_last_remit_' + STORE_ID + '_' + name;
     const _lsRemitTime = localStorage.getItem(_lsRemitKey);
     const _dbRemitTime = lastRemit?.[0]?.created_at;
@@ -1478,10 +1499,26 @@ function calcRemitLogDiff() {
   const btn  = document.getElementById('remitLogCheckBtn');
   const el   = document.getElementById('remitLogDiff');
   if (isNaN(cash)) { el.textContent='—'; el.style.color='var(--muted)'; btn.disabled=true; btn.style.opacity='.4'; return; }
-  const diff = cash - pos;
+  const diff = cash - pos - _remitCarriedFloat;
   el.textContent = (diff>=0?'+':'') + (CUR||'₱') + Math.abs(diff).toFixed(2);
   el.style.color = diff>0 ? '#f97316' : diff<0 ? '#ef4444' : '#00b4d8';
   btn.disabled = false; btn.style.opacity = '1';
+  // Drawer float defaults to remitting the full count — the cashier only
+  // has to touch the Remittance Amount field if they're keeping change.
+  if (STORE?.enable_drawer_float) {
+    document.getElementById('remitLogAmt').value = cash.toFixed(2);
+    calcRemitLogFloat();
+  }
+}
+function calcRemitLogFloat() {
+  const coh = parseFloat(document.getElementById('remitLogCOH').value) || 0;
+  const amtEl = document.getElementById('remitLogAmt');
+  let amt = parseFloat(amtEl.value);
+  if (isNaN(amt)) amt = coh;
+  if (amt > coh) { amt = coh; amtEl.value = coh.toFixed(2); }
+  if (amt < 0)   { amt = 0;   amtEl.value = '0.00'; }
+  const float = Math.max(0, coh - amt);
+  document.getElementById('remitLogFloatDisp').textContent = (CUR||'₱') + float.toFixed(2);
 }
 
 function remitLogStep2() {
@@ -1495,7 +1532,7 @@ function remitLogStep2() {
   const posText = document.getElementById('remitLogPOS').textContent;
   const pos  = parseFloat(posText.replace(/[^0-9.]/g,'')) || 0;
   const cash = parseFloat(document.getElementById('remitLogCOH').value) || 0;
-  const diff = cash - pos;
+  const diff = cash - pos - _remitCarriedFloat;
   const name = document.getElementById('remitLogCashier').textContent;
   document.getElementById('remitCk1').textContent = name;
   document.getElementById('remitCk2').textContent = document.getElementById('remitLogDate').textContent;
@@ -1504,6 +1541,16 @@ function remitLogStep2() {
   const diffEl = document.getElementById('remitCk5');
   diffEl.textContent = (diff>=0?'+':'') + (CUR||'₱') + Math.abs(diff).toFixed(2);
   diffEl.style.color = diff>0 ? '#f97316' : diff<0 ? '#ef4444' : '#00b4d8';
+  const floatRow = document.getElementById('remitCkFloatRow');
+  if (STORE?.enable_drawer_float) {
+    const remitAmt = parseFloat(document.getElementById('remitLogAmt').value) || cash;
+    const drawerFloat = Math.max(0, cash - remitAmt);
+    document.getElementById('remitCk6').textContent = (CUR||'₱') + remitAmt.toFixed(2);
+    document.getElementById('remitCk7').textContent = (CUR||'₱') + drawerFloat.toFixed(2);
+    floatRow.style.display = 'flex';
+  } else {
+    floatRow.style.display = 'none';
+  }
   document.getElementById('remitStep1').style.display = 'none';
   document.getElementById('remitStep2').style.display = '';
 }
@@ -1520,10 +1567,15 @@ async function confirmRemitLogout() {
   const today  = new Date().toISOString().slice(0,10);
   const pos    = parseFloat(document.getElementById('remitCk3').textContent.replace(/[^0-9.]/g,'')) || 0;
   const cash   = parseFloat(document.getElementById('remitCk4').textContent.replace(/[^0-9.]/g,'')) || 0;
-  const diff   = cash - pos;
+  const diff   = cash - pos - _remitCarriedFloat;
   const diffLabel = diff<0 ? `Short -${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : diff>0 ? `Over +${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : 'Balanced';
-  const remitRow = { store_id: STORE_ID, cashier_name: name, shift_date: today, pos_sales: pos, cash_on_hand: cash, difference: diff, status: 'pending', online_sales: _remitOnlineSales };
-  const logRow = { store_id: STORE_ID, actor_name: name, actor_role: CASHIER?.role||'cashier', action: 'REMITTANCE', target_name: name, details: `POS: ${CUR||'₱'}${pos.toFixed(2)} | Cash: ${CUR||'₱'}${cash.toFixed(2)} | ${diffLabel}` };
+  // Drawer float is opt-in per store — when off, the cashier remits the
+  // full count as before and drawer_float is just recorded as 0.
+  const remitAmt = STORE?.enable_drawer_float ? (parseFloat(document.getElementById('remitLogAmt').value) || cash) : cash;
+  const drawerFloat = Math.max(0, cash - remitAmt);
+  const floatLabel = drawerFloat > 0 ? ` | Remitted: ${CUR||'₱'}${remitAmt.toFixed(2)} | Float: ${CUR||'₱'}${drawerFloat.toFixed(2)}` : '';
+  const remitRow = { store_id: STORE_ID, cashier_name: name, shift_date: today, pos_sales: pos, cash_on_hand: cash, remit_amount: remitAmt, drawer_float: drawerFloat, difference: diff, status: 'pending', online_sales: _remitOnlineSales };
+  const logRow = { store_id: STORE_ID, actor_name: name, actor_role: CASHIER?.role||'cashier', action: 'REMITTANCE', target_name: name, details: `POS: ${CUR||'₱'}${pos.toFixed(2)} | Cash: ${CUR||'₱'}${cash.toFixed(2)}${floatLabel} | ${diffLabel}` };
   try { localStorage.setItem('pm_last_remit_' + STORE_ID + '_' + name, new Date().toISOString()); } catch(_e) {}
   // Queue locally first so logout is instant no matter how slow the network
   // is, then kick off a background sync. Previously this waited (up to 8s)
