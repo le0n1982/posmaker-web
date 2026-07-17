@@ -235,6 +235,33 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 </style>
 </head>
 <body>
+<script>
+  // Runs before ANY visible content is parsed — if this reload came from
+  // clicking "Update Now", inject a CSS rule that hides the login form
+  // before the browser ever gets a chance to paint it. A plain JS
+  // visibility toggle placed further down the page can still flash on some
+  // browsers depending on paint timing; a <style> rule this early cannot,
+  // since it exists before #loginWrap itself is even parsed.
+  (function(){
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if (localStorage.key(i).indexOf('pm_update_resume_') === 0) {
+          document.write('<style id="_resumeHideStyle">#loginWrap{display:none!important}</style>');
+          break;
+        }
+      }
+    } catch(_) {}
+  })();
+  // Manual refresh (F5, Ctrl+R, Ctrl+Shift+R) would log the cashier out —
+  // same as any reload that doesn't go through the "Update Now" flow's
+  // session-resume token. Block it entirely; updates should only ever
+  // happen via the in-app Update banner.
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) {
+      e.preventDefault();
+    }
+  }, true);
+</script>
 
 <!-- ── PWA INSTALL BANNER ── -->
 <div id="installBar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#111120;border-top:1px solid #00b4d8;padding:10px 16px;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
@@ -1012,23 +1039,27 @@ let _openScanTimer = null;
 // session instead of showing the login screen again — the whole point of
 // that banner is a one-click update that doesn't interrupt an active shift.
 async function _tryResumeAfterUpdate() {
+  // Removes the CSS rule injected at the top of <body> that hides
+  // #loginWrap — only needed if resume doesn't pan out, since showPOS()
+  // already sets display:none on success regardless.
+  const revealLogin = () => { const s = document.getElementById('_resumeHideStyle'); if (s) s.remove(); };
   const resumeKey = 'pm_update_resume_' + STORE_ID;
   const raw = localStorage.getItem(resumeKey);
   localStorage.removeItem(resumeKey);
-  if (!raw) return;
+  if (!raw) { revealLogin(); return; }
   let resume;
-  try { resume = JSON.parse(raw); } catch(_) { return; }
-  if (!resume || !resume.staffId || Date.now() - resume.ts > 60000) return;
+  try { resume = JSON.parse(raw); } catch(_) { revealLogin(); return; }
+  if (!resume || !resume.staffId || Date.now() - resume.ts > 60000) { revealLogin(); return; }
   try {
     const { data: found } = await _sb.from('store_users')
       .select('id,username,full_name,role,password_hash,active,last_seen')
       .eq('id', resume.staffId).eq('store_id', STORE_ID).maybeSingle();
-    if (!found || !found.active) return;
+    if (!found || !found.active) { revealLogin(); return; }
     CASHIER = found;
     _sb.rpc('log_staff_login', { p_store_id: STORE_ID, p_staff_id: found.id, p_username: found.username }).then(() => {});
     if (prods.length === 0) { await loadProds(); } else { loadProds().catch(() => {}); }
     showPOS(found.full_name || found.username);
-  } catch(_) {}
+  } catch(_) { revealLogin(); }
 }
 
 function _resolveSupplyStock(rawStock, useQty) {
@@ -1814,7 +1845,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.3.5';
+const POS_BUILD = '1.3.7';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
