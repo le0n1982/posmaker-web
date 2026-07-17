@@ -29,6 +29,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .inp{width:100%;padding:11px 13px;background:var(--s1);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:10px;outline:none;font-family:inherit}
 .inp:focus{border-color:var(--accent)}
 .inp::placeholder{color:#44445a}
+.calc-btn{padding:16px 0;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:19px;font-weight:600;cursor:pointer;font-family:inherit}
+.calc-btn:active{opacity:.7}
+.calc-btn-op{background:var(--accent);color:#fff;opacity:.85}
 .btn-login{width:100%;padding:13px;background:var(--accent);border:none;color:#fff;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px}
 #loginErr{color:#ef4444;font-size:12px;min-height:16px;margin-bottom:6px;text-align:center}
 
@@ -320,6 +323,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnCam" class="choc-btn" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:#3b82f6;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Camera scanner">&#128247;</button>
   <button id="btnDualScreen" onclick="openDualScreen()" title="Open Customer Display (2nd window — drag to your second monitor)" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Open customer display">&#128421;</button>
   <button id="btnSync" class="choc-btn" onclick="syncProds()" title="Refresh products" style="background:#14b8a6;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Refresh products">&#128260;</button>
+  <button id="btnCalc" class="choc-btn" onclick="openCalc()" title="Calculator" style="background:#06b6d4;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Calculator">&#129518;</button>
   <button id="btnPrinterSettings" class="choc-btn" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Printer settings">&#128424;</button>
   <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer">&#128424;</button>
   <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today">&#128200;</button>
@@ -481,6 +485,37 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeM('mAddExpense')">Cancel</button>
       <button class="btn-confirm" id="cexpSaveBtn" onclick="saveExpenseFromCashier()">&#10003; Save Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CALCULATOR ── -->
+<div class="modal" id="mCalc">
+  <div class="mbox" style="max-width:300px">
+    <div class="mtitle">&#129518; Calculator</div>
+    <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:12px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcClear()">C</button>
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('/')">&#247;</button>
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('*')">&#215;</button>
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcBackspace()">&#9003;</button>
+      <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
+      <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
+      <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('-')">&#8722;</button>
+      <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
+      <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
+      <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
+      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('+')">+</button>
+      <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
+      <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
+      <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
+      <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
+      <button type="button" class="calc-btn" onclick="calcInput('0')" style="grid-column:span 4">0</button>
+    </div>
+    <button type="button" onclick="calcEquals()" style="width:100%;margin-top:10px;padding:18px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:24px;font-weight:800;cursor:pointer">=</button>
+    <div class="m-actions" style="margin-top:12px">
+      <button class="btn-cancel" onclick="closeM('mCalc')">Close</button>
     </div>
   </div>
 </div>
@@ -1791,7 +1826,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.3.9';
+const POS_BUILD = '1.4.0';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2986,6 +3021,51 @@ async function deleteDraft(id) {
   await _sb.from('draft_orders').delete().eq('id', id);
   await loadDraftList();
 }
+
+// ── Calculator ─────────────────────────────────────────────────────────
+let _calcExpr = '';
+function openCalc() {
+  _calcExpr = '';
+  calcUpdateDisplay();
+  document.getElementById('mCalc').classList.add('show');
+}
+function calcUpdateDisplay() {
+  document.getElementById('calcDisplay').textContent = _calcExpr || '0';
+}
+function calcInput(val) {
+  _calcExpr += val;
+  calcUpdateDisplay();
+}
+function calcBackspace() {
+  _calcExpr = _calcExpr.slice(0, -1);
+  calcUpdateDisplay();
+}
+function calcClear() {
+  _calcExpr = '';
+  calcUpdateDisplay();
+}
+function calcEquals() {
+  if (!_calcExpr) return;
+  try {
+    const safe = _calcExpr.replace(/[^0-9+\-*/.]/g, '');
+    const result = Function('"use strict";return (' + safe + ')')();
+    _calcExpr = Number.isFinite(result) ? String(result) : 'Error';
+  } catch (_) {
+    _calcExpr = 'Error';
+  }
+  calcUpdateDisplay();
+}
+// Lets the cashier use a physical numpad/keyboard, not just the on-screen
+// buttons — only listens while the calculator modal is actually open so it
+// doesn't interfere with typing anywhere else in the POS.
+document.addEventListener('keydown', function(e) {
+  if (!document.getElementById('mCalc').classList.contains('show')) return;
+  if (e.key >= '0' && e.key <= '9') { calcInput(e.key); e.preventDefault(); }
+  else if (['+', '-', '*', '/', '.'].includes(e.key)) { calcInput(e.key); e.preventDefault(); }
+  else if (e.key === 'Enter' || e.key === '=') { calcEquals(); e.preventDefault(); }
+  else if (e.key === 'Backspace') { calcBackspace(); e.preventDefault(); }
+  else if (e.key === 'Escape') { calcClear(); e.preventDefault(); }
+});
 
 // ── Void / Refund requests (cashier submits with proof, manager approves) ─
 // ── My Sales Today (owner-toggled, Settings → "Let Cashiers View Sales") ──
