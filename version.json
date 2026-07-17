@@ -1,27 +1,15 @@
 {
-  "version": "1.2.7",
-  "date": "2026-06-17",
+  "version": "1.3.0",
+  "date": "2026-07-17",
   "changes": [
-    "💸 Send Payment to Staff — owner can send salary/advance to manager or staff with bank receipt (file upload or QR scan from phone); manager confirms receipt from inbox",
-    "💼 Manager: Remit to Owner — manager can now record cash deposits to the owner with receipt upload or QR scan; amount is automatically deducted from COH panel",
-    "🔧 Fixed: Cash Remit POS Sales stuck at same amount when remitting twice quickly (race condition fix)",
-    "Offline mode fixed — POS now opens without internet as long as it was connected once online",
-    "🤝 New Affiliate Program signup flow — apply, create your account, and track your application status from a new Affiliate Dashboard; admins get notified by email when approved",
-    "💡 Hover tooltips added across the dashboard (all business types) — point your cursor over sidebar items and buttons (Add Staff, Add POS, Reset Device, etc.) for a quick explanation of what they do",
-    "☕ Coffee Shop: Hover tooltips added — point your cursor over sidebar items and buttons (e.g. Add Staff, Inventory) for a quick explanation of what they do",
-    "☕ Coffee Shop: Raw Materials category — fixed item-name examples (e.g. Powder → Milk Powder, Cinnamon Powder)",
-    "☕ Coffee Shop: \"Beverages\" raw-material category auto-renamed to \"Syrups\" (Beverages is for menu products, not raw materials; avoids overlap with existing \"Powder\" category)",
-    "🔧 Fixed: new POS device sometimes bounced back to \"Enter Store Code\" right after connecting (device registration wasn't finished before reload)",
-    "🖼️ Fixed: product photos uploaded from the dashboard weren't showing on the POS menu grid",
-    "🔤 Fixed garbled currency symbols/emojis (₱ and icons showing as strange characters) across all POS screens",
-    "💬 Messages inbox — owner can message staff; staff see unread badge",
-    "🧾 Activity Log — receipt shows as button (View/Accept/Invalid)",
-    "✉️ Invalid receipt → auto-sends message to staff to resubmit",
-    "💰 Cash remittance popup when cashier logs out",
-    "📋 Manager receives & confirms remittance with description",
-    "🔴 COH panel — confirmed cashiers show ₱0, pending shows amount",
-    "📦 Add stock — shows cost price, deduct/deposit COH, receipt upload",
-    "🤖 AI detection 2.5x faster — single inference, 800ms loop",
-    "🔑 Staff login fix — case-insensitive username"
+    "🎟️ Discount now supports \"All Purchases\" or \"Specific Items Only\" scope",
+    "💰 Drawer Float on Logout — cashiers can keep part of the counted cash as change fund for the next shift (owner-toggled)",
+    "📊 \"View Sales\" expanded into \"My Activity Today\" — shows a cashier's sales, remittances, and expenses together",
+    "💳 Add Expense from the POS — owner-toggled, recorded under the cashier's name",
+    "🔔 Incoming cashier now sees a notice if the previous shift left a drawer float",
+    "🔴 Void now restores inventory stock, same as Refund (previously only Refund did)",
+    "🎨 Header icons redesigned with distinct colors and hover effect",
+    "⚡ Store settings (permissions, tax rate, theme, payment methods) now refresh live in the POS every 20s — no logout required",
+    "🧾 Cash Remittance reconciliation math fixed to account for carried-over drawer float"
   ]
 }
