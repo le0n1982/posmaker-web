@@ -1526,7 +1526,7 @@ function _actualLogout() {
 async function syncProds() {
   const btn = document.getElementById('btnSync');
   if(btn){ btn.style.animation='spin .6s linear infinite'; btn.disabled=true; }
-  await loadProds();
+  await Promise.all([loadProds(), checkStorePermissions()]);
   if(btn){ btn.style.animation=''; btn.disabled=false; }
 }
 async function loadProds() {

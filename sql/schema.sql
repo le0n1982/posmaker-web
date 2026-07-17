@@ -1123,3 +1123,13 @@ CREATE POLICY sd_owner ON staff_deductions FOR ALL TO authenticated
   WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
 CREATE POLICY sd_anon_rw ON staff_deductions FOR ALL TO anon
   USING (TRUE) WITH CHECK (TRUE);
+
+-- ============================================================
+--  Drawer Float on Logout — owner-toggled option letting a cashier keep
+--  part of the counted cash as a change fund for the next shift instead of
+--  remitting all of it (e.g. ₱11,500 counted, ₱10,000 remitted, ₱1,500 kept
+--  in the drawer). Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores           ADD COLUMN IF NOT EXISTS enable_drawer_float BOOLEAN DEFAULT false;
+ALTER TABLE cash_remittances ADD COLUMN IF NOT EXISTS remit_amount        NUMERIC DEFAULT NULL;
+ALTER TABLE cash_remittances ADD COLUMN IF NOT EXISTS drawer_float        NUMERIC DEFAULT NULL;
