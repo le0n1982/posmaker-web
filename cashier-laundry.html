@@ -1792,7 +1792,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.3.1';
+const POS_BUILD = '1.3.2';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3192,7 +3192,14 @@ async function openMySales() {
     });
   });
   feed.sort((a, b) => b.t - a.t);
-  document.getElementById('mySalesList').innerHTML = feed.length ? feed.map(_myActivityItemHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>';
+  // A leftover drawer float isn't "my" sale — flag it separately at the top
+  // so whoever's viewing (often a brand-new cashier with 0 sales so far)
+  // immediately sees what starting cash they're responsible for and who
+  // left it, instead of it only living inside the header banner.
+  const carryNotice = _remitCarriedFloat > 0
+    ? `<div style="background:rgba(245,158,11,.12);border:1px solid #f59e0b55;border-radius:8px;padding:9px 12px;font-size:12px;text-align:center;color:#f59e0b">&#128176; ${CUR}${_remitCarriedFloat.toFixed(2)} petty cash left by ${_remitCarriedFloatFrom || 'the previous cashier'}</div>`
+    : '';
+  document.getElementById('mySalesList').innerHTML = carryNotice + (feed.length ? feed.map(_myActivityItemHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>');
 }
 function _myActivityItemHtml(f) {
   const time = f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
@@ -3212,7 +3219,7 @@ function _myActivityItemHtml(f) {
     const STATUS_MAP = { balanced: ['Balanced', '#94a3b8'], over: ['Over', '#10b981'], short: ['Short', '#ef4444'], pending: ['Pending', '#f59e0b'] };
     const [statusText, statusColor] = STATUS_MAP[f.status] || ['Recorded', '#94a3b8'];
     const sub = f.float > 0
-      ? `Remitted ${CUR}${f.remitted.toFixed(2)} &middot; Kept ${CUR}${f.float.toFixed(2)}`
+      ? `Remitted ${CUR}${f.remitted.toFixed(2)} &middot; ${CUR}${f.float.toFixed(2)} petty cash left by ${CASHIER_NAME}`
       : `Counted ${CUR}${f.cash.toFixed(2)}`;
     return `<div style="background:rgba(245,158,11,.08);border-left:3px solid #f59e0b;border-radius:8px;padding:9px 12px;font-size:13px">
       <div style="display:flex;justify-content:space-between;align-items:center">
