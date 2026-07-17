@@ -481,14 +481,16 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 <div class="modal" id="mAddExpense">
   <div class="mbox" style="max-width:380px">
     <div class="mtitle">&#128179; Add Expense</div>
-    <div class="field"><label>Expense Name</label><input id="cexpName" type="text" placeholder="e.g. Ballpen, tape"></div>
-    <div class="field"><label>Amount</label><input id="cexpAmount" type="number" min="0" step="0.01" placeholder="0.00"></div>
-    <div class="field"><label>Category</label>
-      <select id="cexpCategory" style="padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;width:100%;outline:none">
-        <option>Supplies</option><option>Utilities</option><option>Transport</option><option>Repairs</option><option>Other</option>
-      </select>
-    </div>
-    <div class="field"><label>Notes <span style="color:var(--dim);font-weight:400">(optional)</span></label><input id="cexpNotes" type="text" placeholder="Optional details"></div>
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Expense Name</label>
+    <input class="inp" id="cexpName" type="text" placeholder="e.g. Ballpen, tape">
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Amount</label>
+    <input class="inp" id="cexpAmount" type="number" min="0" step="0.01" placeholder="0.00">
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Category</label>
+    <select id="cexpCategory" class="inp" style="cursor:pointer">
+      <option>Supplies</option><option>Utilities</option><option>Transport</option><option>Repairs</option><option>Other</option>
+    </select>
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Notes <span style="font-weight:400;color:#666">(optional)</span></label>
+    <input class="inp" id="cexpNotes" type="text" placeholder="Optional details">
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeM('mAddExpense')">Cancel</button>
       <button class="btn-confirm" id="cexpSaveBtn" onclick="saveExpenseFromCashier()">&#10003; Save Expense</button>
@@ -1883,7 +1885,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.3.3';
+const POS_BUILD = '1.3.4';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
