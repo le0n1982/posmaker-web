@@ -1,7 +1,8 @@
 {
-  "version": "1.3.2",
-  "date": "2026-07-17",
+  "version": "1.3.3",
+  "date": "2026-07-18",
   "changes": [
+    "🔧 Fixed: clicking \"Update Now\" logged the cashier out — it now silently resumes the same session after updating",
     "🧾 \"My Activity Today\" now shows a clear notice when a previous shift left petty cash in the drawer, with the cashier's name",
     "📊 \"My Activity Today\" redesigned — color-coded cards for sales, expenses, and remittances instead of plain text rows",
     "🔧 Fixed: Login/Logout entries in \"My Activity Today\" showed raw device data instead of a clean label",

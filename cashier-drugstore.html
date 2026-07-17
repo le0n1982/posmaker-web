@@ -1004,7 +1004,32 @@ let _openScanTimer = null;
   }
   setStoreUI();
   loadPaymentMethods();
+  await _tryResumeAfterUpdate();
 })();
+
+// If this reload was triggered by clicking "Update Now" on the update
+// banner (not a normal app restart), silently restore the same cashier's
+// session instead of showing the login screen again — the whole point of
+// that banner is a one-click update that doesn't interrupt an active shift.
+async function _tryResumeAfterUpdate() {
+  const resumeKey = 'pm_update_resume_' + STORE_ID;
+  const raw = localStorage.getItem(resumeKey);
+  localStorage.removeItem(resumeKey);
+  if (!raw) return;
+  let resume;
+  try { resume = JSON.parse(raw); } catch(_) { return; }
+  if (!resume || !resume.staffId || Date.now() - resume.ts > 60000) return;
+  try {
+    const { data: found } = await _sb.from('store_users')
+      .select('id,username,full_name,role,password_hash,active,last_seen')
+      .eq('id', resume.staffId).eq('store_id', STORE_ID).maybeSingle();
+    if (!found || !found.active) return;
+    CASHIER = found;
+    _sb.rpc('log_staff_login', { p_store_id: STORE_ID, p_staff_id: found.id, p_username: found.username }).then(() => {});
+    if (prods.length === 0) { await loadProds(); } else { loadProds().catch(() => {}); }
+    showPOS(found.full_name || found.username);
+  } catch(_) {}
+}
 
 function _resolveSupplyStock(rawStock, useQty) {
   const raw = rawStock || 0;
@@ -1797,7 +1822,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.3.2';
+const POS_BUILD = '1.3.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -1820,6 +1845,9 @@ function showUpdateBanner(ver) {
   btn.textContent = 'Update Now';
   btn.style.cssText = 'background:#22c55e;color:#062916;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer';
   btn.onclick = () => {
+    if (CASHIER && CASHIER.id && STORE_ID) {
+      try { localStorage.setItem('pm_update_resume_' + STORE_ID, JSON.stringify({ staffId: CASHIER.id, ts: Date.now() })); } catch(_) {}
+    }
     const u = new URL(location.href);
     u.searchParams.set('v', ver);
     location.href = u.toString();
