@@ -839,6 +839,7 @@ let USES_CHAIRS = false;
 let SHOW_SCANNER = false;
 let _pingInterval = null;
 let _syncRetryInterval = null;
+let _permPollInterval = null;
 let _openScanTimer = null;
 
 (async () => {
@@ -1248,13 +1249,30 @@ async function doLogin() {
   }
 }
 
+// Live-refresh permission-gated UI (currently just "View Sales") without
+// requiring a logout/login — the owner may flip a Settings toggle while the
+// cashier is mid-shift, so this should show up on its own instead of
+// needing a manual re-login.
+async function checkStorePermissions() {
+  if (!STORE?.id) return;
+  const { data } = await _sb.from('stores').select('show_sales_to_cashier').eq('id', STORE.id).maybeSingle();
+  if (!data) return;
+  STORE.show_sales_to_cashier = data.show_sales_to_cashier;
+  const btn = document.getElementById('btnMySales');
+  if (btn) btn.style.display = STORE.show_sales_to_cashier ? '' : 'none';
+}
+function startPermissionsPoll() {
+  if (_permPollInterval) clearInterval(_permPollInterval);
+  checkStorePermissions();
+  _permPollInterval = setInterval(checkStorePermissions, 20 * 1000);
+}
 function startPing() {
   if (_pingInterval) clearInterval(_pingInterval);
   if (CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {});
   _pingInterval = setInterval(() => { if (CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); }, 30 * 1000);
   if (_syncRetryInterval) clearInterval(_syncRetryInterval);
   _syncRetryInterval = setInterval(() => { if (navigator.onLine) { syncOfflineQueue(); syncRemitQueue(); syncLogoutQueue(); } }, 30 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); if (!document.hidden) checkStorePermissions(); });
   checkCashierInbox();
   setInterval(checkCashierInbox, 60000);
 }
@@ -1279,6 +1297,7 @@ function showPOS(name) {
   syncRemitQueue();
   syncLogoutQueue();
   startPing();
+  startPermissionsPoll();
   // Auto-open scanner (retail: docked in left panel; restaurant: floating) — only for grocery/convenience/drug stores
   if (SHOW_SCANNER) {
     const _tryAutoScan = () => { _openScanTimer = setTimeout(openScanner, 500); };
