@@ -1,7 +1,9 @@
 {
-  "version": "1.3.7",
+  "version": "1.3.9",
   "date": "2026-07-18",
   "changes": [
+    "🔔 Update notification is now a small bell icon in the corner instead of a big top banner",
+    "💰 \"My Activity Today\" now shows a \"Cash Drawer\" total (carried-over float + today's cash sales) next to Total Sales",
     "🔒 F5 / Ctrl+R / Ctrl+Shift+R disabled in the POS — a manual refresh can no longer accidentally log the cashier out",
     "🔧 Login-form-flash fix made more robust (CSS injected before the page renders, instead of a JS visibility toggle)",
     "🧾 Removed the persistent \"petty cash left\" top banner — that notice now only shows inside \"My Activity Today\"",
