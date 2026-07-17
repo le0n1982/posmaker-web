@@ -1,7 +1,8 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "date": "2026-07-18",
   "changes": [
+    "🔧 CRITICAL FIX: after resuming a session via \"Update Now\", logging out later could get permanently stuck on the POS screen instead of showing the login form",
     "🧮 New Calculator in the POS header — number pad + big \"=\" button, also works with a physical keyboard/numpad",
     "🔔 Update notification is now a small bell icon in the corner instead of a big top banner",
     "💰 \"My Activity Today\" now shows a \"Cash Drawer\" total (carried-over float + today's cash sales) next to Total Sales",

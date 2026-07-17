@@ -1104,6 +1104,11 @@ async function _tryResumeAfterUpdate() {
     _sb.rpc('log_staff_login', { p_store_id: STORE_ID, p_staff_id: found.id, p_username: found.username }).then(() => {});
     if (prods.length === 0) { await loadProds(); } else { loadProds().catch(() => {}); }
     showPOS(found.full_name || found.username);
+    // The injected style's job is done now that showPOS() has taken over —
+    // it must not outlive this moment, or it permanently blocks any FUTURE
+    // logout's loginWrap.style.display='flex' (inline styles lose to an
+    // !important stylesheet rule targeting the same element).
+    revealLogin();
   } catch(_) { revealLogin(); }
 }
 
@@ -1890,7 +1895,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.0';
+const POS_BUILD = '1.4.1';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
