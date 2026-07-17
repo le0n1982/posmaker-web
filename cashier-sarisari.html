@@ -3244,6 +3244,8 @@ async function openMySales() {
     let sub = l.details || '';
     if (l.action === 'EXPENSE_PAID') {
       try { const d = JSON.parse(l.details); sub = (CUR||'₱') + parseFloat(d.amount || 0).toFixed(2) + ' — ' + (d.category || ''); } catch(_) {}
+    } else if (l.action === 'LOGIN' || l.action === 'LOGOUT') {
+      sub = '';
     }
     feed.push({ t: new Date(l.created_at), label: ACTIVITY_LABEL[l.action], sub, color: '#a78bfa' });
   });
