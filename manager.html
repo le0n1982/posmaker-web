@@ -679,6 +679,10 @@ button{cursor:pointer}
       <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Date</span><span id="crmDate">—</span></div>
       <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">POS Sales</span><strong id="crmPOS" style="color:var(--accent)">—</strong></div>
       <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Cash on Hand</span><strong id="crmCash">—</strong></div>
+      <div id="crmFloatRows" style="display:none;flex-direction:column;gap:8px;padding-left:10px;border-left:2px solid var(--border)">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:13px">&#8627; Remitted to you</span><strong id="crmRemitted" style="color:#10b981">—</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:13px">&#8627; Kept in drawer</span><strong id="crmFloat" style="color:#f59e0b">—</strong></div>
+      </div>
       <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Non-Cash (Card/GCash)</span><strong id="crmOnline" style="color:#a78bfa">—</strong></div>
       <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
         <span style="color:var(--muted)">Difference</span>
@@ -1815,7 +1819,7 @@ function renderRemit() {
       <td style="color:var(--muted);font-size:12px;white-space:nowrap">${date}<div style="font-size:11px">${created}</div></td>
       <td><strong>${r.cashier_name}</strong></td>
       <td style="font-weight:600">&#8369;${parseFloat(r.pos_sales).toFixed(2)}</td>
-      <td style="font-weight:600">&#8369;${parseFloat(r.cash_on_hand).toFixed(2)}</td>
+      <td style="font-weight:600">&#8369;${parseFloat(r.cash_on_hand).toFixed(2)}${(parseFloat(r.drawer_float)||0) > 0 ? `<div style="font-size:10px;font-weight:400;color:var(--muted);margin-top:2px">Remitted &#8369;${(parseFloat(r.remit_amount)||0).toFixed(2)} &middot; Float &#8369;${parseFloat(r.drawer_float).toFixed(2)}</div>` : ''}</td>
       <td style="font-weight:700;color:${diffColor}">${diff>=0?'+':''}&#8369;${Math.abs(diff).toFixed(2)}</td>
       <td>${statusBadge}</td>
       <td>${descCell}</td>
@@ -2138,6 +2142,18 @@ function openConfirmRemit(id) {
   document.getElementById('crmDate').textContent = new Date(r.shift_date + 'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
   document.getElementById('crmPOS').textContent = '₱' + parseFloat(r.pos_sales).toFixed(2);
   document.getElementById('crmCash').textContent = '₱' + parseFloat(r.cash_on_hand).toFixed(2);
+  // Cash on Hand is the FULL amount counted in the drawer — when the store
+  // allows keeping a float, only remit_amount actually changes hands here;
+  // drawer_float stays with the cashier for the next shift's change fund.
+  const drawerFloat = parseFloat(r.drawer_float) || 0;
+  const floatRows = document.getElementById('crmFloatRows');
+  if (drawerFloat > 0) {
+    document.getElementById('crmRemitted').textContent = '₱' + (parseFloat(r.remit_amount) || 0).toFixed(2);
+    document.getElementById('crmFloat').textContent = '₱' + drawerFloat.toFixed(2);
+    floatRows.style.display = 'flex';
+  } else {
+    floatRows.style.display = 'none';
+  }
   document.getElementById('crmOnline').textContent = '₱' + (parseFloat(r.online_sales) || 0).toFixed(2);
   const diffEl = document.getElementById('crmDiff');
   diffEl.textContent = (diff>=0?'+':'') + '₱' + Math.abs(diff).toFixed(2);
