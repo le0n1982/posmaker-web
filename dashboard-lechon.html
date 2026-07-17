@@ -802,6 +802,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <input type="checkbox" id="sEnableDrawerFloat" style="width:auto">
           <label for="sEnableDrawerFloat" style="margin:0">Allow cashiers to keep a drawer float when remitting <span style="color:var(--dim);font-weight:400;font-size:11px">(e.g. ₱11,500 counted — cashier remits ₱10,000 and keeps ₱1,500 in the drawer as change fund for the next shift; recorded in the cashier log either way)</span></label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="sAllowCashierExpenses" style="width:auto">
+          <label for="sAllowCashierExpenses" style="margin:0">Let cashiers add expenses <span style="color:var(--dim);font-weight:400;font-size:11px">(adds an "Add Expense" button in the POS — recorded under that cashier's name, visible in your Activity Log)</span></label>
+        </div>
         <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
       </div>
       <div class="info-card">
@@ -1825,6 +1829,7 @@ function _sig(ms = 25000) {
   document.getElementById('sShowCalc').checked = store.show_calculator !== false;
   document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
   document.getElementById('sEnableDrawerFloat').checked = !!store.enable_drawer_float;
+  document.getElementById('sAllowCashierExpenses').checked = !!store.allow_cashier_expenses;
   applyCalcVisibility(store.show_calculator !== false);
   const { data: { user: _u } } = await _sb.auth.getUser();
   if (_u) document.getElementById('resetEmail').value = _u.email || '';
@@ -5750,6 +5755,7 @@ async function saveSettings() {
     show_calculator: document.getElementById('sShowCalc').checked,
     show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
     enable_drawer_float: document.getElementById('sEnableDrawerFloat').checked,
+    allow_cashier_expenses: document.getElementById('sAllowCashierExpenses').checked,
   };
   if (!payload.name) { showToast('Store name is required.', true); return; }
   const { error } = await _sb.from('stores').update(payload).eq('id', STORE.id);

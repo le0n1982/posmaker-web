@@ -1133,3 +1133,13 @@ CREATE POLICY sd_anon_rw ON staff_deductions FOR ALL TO anon
 ALTER TABLE stores           ADD COLUMN IF NOT EXISTS enable_drawer_float BOOLEAN DEFAULT false;
 ALTER TABLE cash_remittances ADD COLUMN IF NOT EXISTS remit_amount        NUMERIC DEFAULT NULL;
 ALTER TABLE cash_remittances ADD COLUMN IF NOT EXISTS drawer_float        NUMERIC DEFAULT NULL;
+
+-- ============================================================
+--  Cashier-Recorded Expenses + "My Activity" — owner-toggled option letting
+--  a cashier log an expense straight from the POS (e.g. bought office
+--  supplies out of the drawer), tagged with who recorded it so it shows up
+--  in both the owner's Activity Log and that cashier's own activity view.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores   ADD COLUMN IF NOT EXISTS allow_cashier_expenses BOOLEAN DEFAULT false;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS added_by               TEXT DEFAULT NULL;

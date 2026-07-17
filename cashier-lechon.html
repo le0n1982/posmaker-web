@@ -296,6 +296,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnPrinterSettings" class="choc-btn" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Printer settings">&#128424;</button>
   <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer">&#128424;</button>
   <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today">&#128200;</button>
+  <button id="btnAddExpense" class="choc-btn" onclick="openAddExpense()" title="Add Expense" style="display:none;background:#ec4899;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Add expense">&#128179;</button>
   <button class="choc-btn" onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:#f59e0b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Request void or refund">&#8630;</button>
   <button class="choc-btn" onclick="openCashierInbox()" title="Messages" style="position:relative;background:#a855f7;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Messages">
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
@@ -304,6 +305,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 <div id="syncBar" style="display:none;background:#1a3a1a;color:#4ade80;font-size:12px;font-weight:600;padding:5px 16px;text-align:center;border-bottom:1px solid #2a5a2a"></div>
+<div id="floatCarryBar" style="display:none;background:#231605;color:#f59e0b;font-size:12px;font-weight:600;padding:6px 16px;text-align:center;border-bottom:1px solid #f59e0b55"></div>
 <div id="lowStockBar" style="display:none;background:#1a0e00;border-bottom:1px solid #f59e0b55;padding:7px 14px;align-items:center;gap:8px;flex-wrap:wrap">
   <span style="color:#f59e0b;font-weight:700;font-size:12px;white-space:nowrap">&#9888; Low Stock:</span>
   <div id="lowStockItems" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0"></div>
@@ -411,7 +413,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 <!-- ── MY SALES TODAY ── -->
 <div class="modal" id="mMySales">
   <div class="mbox" style="max-width:380px">
-    <div class="mtitle">&#128200; My Sales Today</div>
+    <div class="mtitle">&#128200; My Activity Today</div>
     <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total Sales</div>
       <div style="font-size:28px;font-weight:800;color:var(--accent)" id="mySalesTotal">&#8212;</div>
@@ -420,6 +422,25 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div id="mySalesList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeM('mMySales')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD EXPENSE (cashier-facing, owner-toggled) ── -->
+<div class="modal" id="mAddExpense">
+  <div class="mbox" style="max-width:380px">
+    <div class="mtitle">&#128179; Add Expense</div>
+    <div class="field"><label>Expense Name</label><input id="cexpName" type="text" placeholder="e.g. Ballpen, tape"></div>
+    <div class="field"><label>Amount</label><input id="cexpAmount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="field"><label>Category</label>
+      <select id="cexpCategory" style="padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;width:100%;outline:none">
+        <option>Supplies</option><option>Utilities</option><option>Transport</option><option>Repairs</option><option>Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Notes <span style="color:var(--dim);font-weight:400">(optional)</span></label><input id="cexpNotes" type="text" placeholder="Optional details"></div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeM('mAddExpense')">Cancel</button>
+      <button class="btn-confirm" id="cexpSaveBtn" onclick="saveExpenseFromCashier()">&#10003; Save Expense</button>
     </div>
   </div>
 </div>
@@ -1019,6 +1040,7 @@ function setStoreUI() {
   adaptCashierMode(STORE.business_type);
   applyPosTheme(STORE);
   document.getElementById('btnMySales').style.display = STORE.show_sales_to_cashier ? '' : 'none';
+  document.getElementById('btnAddExpense').style.display = STORE.allow_cashier_expenses ? '' : 'none';
 }
 
 function adaptCashierMode(bizType) {
@@ -1295,6 +1317,7 @@ async function checkStorePermissions() {
     CUR = data.currency || '₱';
     TAX = parseFloat(data.tax_rate) || 0;
     setStoreUI();
+    refreshCarriedFloat();
   }
   loadPaymentMethods();
 }
@@ -1335,6 +1358,7 @@ function showPOS(name) {
   syncLogoutQueue();
   startPing();
   startPermissionsPoll();
+  refreshCarriedFloat();
   // Auto-open scanner (retail: docked in left panel; restaurant: floating) — only for grocery/convenience/drug stores
   if (SHOW_SCANNER) {
     const _tryAutoScan = () => { _openScanTimer = setTimeout(openScanner, 500); };
@@ -1397,6 +1421,34 @@ async function checkCashierInbox() {
 
 let _remitOnlineSales = 0;
 let _remitCarriedFloat = 0;
+let _remitCarriedFloatFrom = '';
+// Drawer float is physical cash sitting in the till — it belongs to
+// whichever shift is next, not necessarily the same cashier who left it, so
+// this looks at the store's most recent remittance overall (not filtered
+// by cashier_name like the "sales since last remit" query below is).
+async function refreshCarriedFloat() {
+  const bar = document.getElementById('floatCarryBar');
+  if (!STORE?.enable_drawer_float || !navigator.onLine) {
+    _remitCarriedFloat = 0; _remitCarriedFloatFrom = '';
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+  try {
+    const { data } = await _sb.from('cash_remittances')
+      .select('drawer_float,cashier_name').eq('store_id', STORE_ID)
+      .order('created_at', { ascending: false }).limit(1);
+    _remitCarriedFloat = parseFloat(data?.[0]?.drawer_float) || 0;
+    _remitCarriedFloatFrom = data?.[0]?.cashier_name || '';
+  } catch(_) { _remitCarriedFloat = 0; _remitCarriedFloatFrom = ''; }
+  if (bar) {
+    if (_remitCarriedFloat > 0) {
+      bar.textContent = '\u{1F4B0} ' + (CUR||'₱') + _remitCarriedFloat.toFixed(2) + ' left in the drawer by ' + (_remitCarriedFloatFrom || 'the previous cashier') + ' from the last shift.';
+      bar.style.display = '';
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+}
 async function openRemitOnLogout() {
   const name = CASHIER?.full_name || CASHIER?.username || CASHIER_NAME || '—';
   const today = new Date().toISOString().slice(0,10);
@@ -1425,13 +1477,9 @@ async function openRemitOnLogout() {
     // stuck/unattended session reloaded into a fresh login overnight), so the
     // real last remittance (whatever day it happened) must still be found.
     const { data: lastRemit } = await _sb.from('cash_remittances')
-      .select('created_at,drawer_float').eq('store_id', STORE_ID).eq('cashier_name', name)
+      .select('created_at').eq('store_id', STORE_ID).eq('cashier_name', name)
       .order('created_at', { ascending: false }).limit(1);
-    // Whatever the cashier kept in the drawer as change fund last time is
-    // still physically in there — it's not "new" money this shift, so it
-    // has to be added to the expected baseline or every shift after a kept
-    // float would look artificially "Over" by that same amount.
-    _remitCarriedFloat = parseFloat(lastRemit?.[0]?.drawer_float) || 0;
+    await refreshCarriedFloat();
     const _lsRemitKey = 'pm_last_remit_' + STORE_ID + '_' + name;
     const _lsRemitTime = localStorage.getItem(_lsRemitKey);
     const _dbRemitTime = lastRemit?.[0]?.created_at;
@@ -3058,10 +3106,14 @@ async function openMySales() {
   document.getElementById('mMySales').classList.add('show');
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const { data: orders, error } = await _sb.from('orders')
-    .select('id,timestamp,total,payment_method')
-    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
-    .gte('timestamp', dayStart).order('timestamp', { ascending: false });
+  const [{ data: orders, error }, { data: logs }] = await Promise.all([
+    _sb.from('orders').select('id,timestamp,total,payment_method')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+      .gte('timestamp', dayStart).order('timestamp', { ascending: false }),
+    _sb.from('activity_logs').select('action,details,created_at')
+      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME)
+      .gte('created_at', dayStart).order('created_at', { ascending: false })
+  ]);
   if (error) {
     document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
     return;
@@ -3070,12 +3122,66 @@ async function openMySales() {
   const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
   document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
   document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + ' today';
-  document.getElementById('mySalesList').innerHTML = rows.length
-    ? rows.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font-size:13px">
-        <span style="color:var(--muted)">#${o.id} &middot; ${new Date(o.timestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
-        <span style="font-weight:700">${CUR}${parseFloat(o.total).toFixed(2)}</span>
+  // Merge today's sales with this cashier's own activity log (remittance,
+  // expenses, login/logout) into one chronological feed — a self-check of
+  // the whole shift, not just a sales total.
+  const ACTIVITY_LABEL = { REMITTANCE: '\u{1FA99} Remittance', EXPENSE_PAID: '\u{1F4CB} Expense', LOGIN: '\u{1F513} Login', LOGOUT: '\u{1F512} Logout' };
+  const feed = rows.map(o => ({
+    t: new Date(o.timestamp),
+    label: '#' + o.id,
+    sub: CUR + parseFloat(o.total).toFixed(2),
+    color: 'var(--text)',
+  }));
+  (logs || []).forEach(l => {
+    if (!ACTIVITY_LABEL[l.action]) return;
+    let sub = l.details || '';
+    if (l.action === 'EXPENSE_PAID') {
+      try { const d = JSON.parse(l.details); sub = (CUR||'₱') + parseFloat(d.amount || 0).toFixed(2) + ' — ' + (d.category || ''); } catch(_) {}
+    }
+    feed.push({ t: new Date(l.created_at), label: ACTIVITY_LABEL[l.action], sub, color: '#a78bfa' });
+  });
+  feed.sort((a, b) => b.t - a.t);
+  document.getElementById('mySalesList').innerHTML = feed.length
+    ? feed.map(f => `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;font-size:13px;gap:10px">
+        <span style="color:var(--muted);white-space:nowrap">${f.label} &middot; ${f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span style="font-weight:700;color:${f.color};text-align:right;overflow:hidden;text-overflow:ellipsis">${f.sub}</span>
       </div>`).join('')
-    : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No sales yet today.</div>';
+    : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>';
+}
+
+// ── Add Expense (cashier-facing, owner-toggled via Settings) ─────────────
+function openAddExpense() {
+  document.getElementById('cexpName').value = '';
+  document.getElementById('cexpAmount').value = '';
+  document.getElementById('cexpCategory').value = 'Supplies';
+  document.getElementById('cexpNotes').value = '';
+  document.getElementById('mAddExpense').classList.add('show');
+}
+async function saveExpenseFromCashier() {
+  const name     = document.getElementById('cexpName').value.trim();
+  const amount   = parseFloat(document.getElementById('cexpAmount').value);
+  const category = document.getElementById('cexpCategory').value;
+  const notes    = document.getElementById('cexpNotes').value.trim();
+  if (!name) { showToast('Enter expense name.', true); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
+  const btn = document.getElementById('cexpSaveBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
+  const today = new Date().toISOString().slice(0,10);
+  const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category, expense_date: today, notes, added_by: CASHIER_NAME };
+  const { error } = await _sb.from('expenses').insert(row);
+  btn.disabled = false; btn.innerHTML = '&#10003; Save Expense';
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  // Logged under the cashier's own name so it shows up both in the owner's
+  // Activity Log (which renders EXPENSE_PAID's JSON details with the same
+  // amount/note/category styling as owner-recorded expenses) and in this
+  // cashier's own "View Sales" activity feed.
+  _sb.from('activity_logs').insert({
+    store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
+    action: 'EXPENSE_PAID', target_name: name,
+    details: JSON.stringify({ name, amount, category, note: notes })
+  }).then(() => {});
+  closeM('mAddExpense');
+  showToast('Expense recorded.');
 }
 
 let _vrOrder = null, _vrType = null;
