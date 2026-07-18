@@ -456,6 +456,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <div style="font-size:24px;font-weight:800;color:#f59e0b" id="myCashDrawer">&#8212;</div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">expected total</div>
       </div>
+      <div style="width:1px;background:var(--border)"></div>
+      <div style="flex:1;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">E-Pay</div>
+        <div style="font-size:24px;font-weight:800;color:#a855f7" id="myEpayTotal">&#8212;</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">non-cash today</div>
+      </div>
     </div>
     <div id="mySalesList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
     <div class="m-actions">
@@ -1968,7 +1974,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.5';
+const POS_BUILD = '1.4.6';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3346,6 +3352,12 @@ async function openMySales() {
     .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
     .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
   document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit - expensesSinceRemit).toFixed(2);
+  // E-Pay is just today's total, not scoped to "since last remit" like Cash
+  // Drawer — e-pay never touches the physical till, so there's nothing to
+  // reconcile there; it's purely informational (how much came in via GCash/
+  // card/etc. today).
+  const epayToday = rows.reduce((s, o) => s + ((parseFloat(o.total) || 0) - _cashPortion(o)), 0);
+  document.getElementById('myEpayTotal').textContent = CUR + epayToday.toFixed(2);
   // Merge today's sales with this cashier's own remittances, expenses, and
   // login/logout into one chronological feed — a scannable self-check of
   // the whole shift, not just a sales total.
