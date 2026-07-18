@@ -1883,7 +1883,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.2';
+const POS_BUILD = '1.4.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3134,7 +3134,7 @@ async function openMySales() {
   document.getElementById('mMySales').classList.add('show');
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const [{ data: orders, error }, { data: logs }, { data: remits }] = await Promise.all([
+  const [{ data: orders, error }, { data: logs }, { data: remits }, { data: lastRemit }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('timestamp', dayStart).order('timestamp', { ascending: false }),
@@ -3146,7 +3146,13 @@ async function openMySales() {
     // trying to re-parse the activity log's pipe-delimited text summary.
     _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
-      .gte('created_at', dayStart).order('created_at', { ascending: false })
+      .gte('created_at', dayStart).order('created_at', { ascending: false }),
+    // Just this cashier's most recent remit timestamp (any day) — needed to
+    // scope the Cash Drawer figure below to "since last remit", not the
+    // whole day (a mid-day remit already accounted for the sales before it).
+    _sb.from('cash_remittances').select('created_at')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+      .order('created_at', { ascending: false }).limit(1)
   ]);
   if (error) {
     document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
@@ -3156,18 +3162,27 @@ async function openMySales() {
   const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
   document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
   document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + ' today';
-  // "Cash Drawer" = starting float carried over from the last shift + only
-  // the cash actually collected today (e-pay/card never touched the
-  // physical till, so it doesn't belong in this figure) — the same
-  // cash-portion logic used when computing the remittance itself.
+  // "Cash Drawer" = starting float carried over from the last remit + only
+  // the cash collected SINCE that remit (not the whole day — a mid-day
+  // remit already accounted for everything before it, so re-including
+  // those earlier sales here would double-count them) minus any expenses
+  // paid out of the drawer in that same window.
+  let _sinceRemit;
+  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
+  const _dbLastRemit = lastRemit?.[0]?.created_at;
+  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
+  if (!_sinceRemit) _sinceRemit = dayStart;
   const _cashPortion = o => {
     const t = parseFloat(o.total) || 0;
     if ((o.payment_method || 'Cash') === 'Cash') return t;
     if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
     return 0;
   };
-  const cashToday = rows.reduce((s, o) => s + _cashPortion(o), 0);
-  document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashToday).toFixed(2);
+  const cashSinceRemit = rows.filter(o => o.timestamp >= _sinceRemit).reduce((s, o) => s + _cashPortion(o), 0);
+  const expensesSinceRemit = (logs || [])
+    .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
+    .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
+  document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit - expensesSinceRemit).toFixed(2);
   // Merge today's sales with this cashier's own remittances, expenses, and
   // login/logout into one chronological feed — a scannable self-check of
   // the whole shift, not just a sales total.

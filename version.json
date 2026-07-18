@@ -1,7 +1,8 @@
 {
-  "version": "1.4.2",
+  "version": "1.4.3",
   "date": "2026-07-18",
   "changes": [
+    "🔧 Fixed: \"Cash Drawer\" in \"My Activity Today\" double-counted sales made before a mid-day remit — now correctly scoped to sales since the last remit",
     "💰 Cash Remittance now shows \"Cash in Drawer (expected)\" up front, a per-bank/wallet Non-Cash Sales breakdown, and accounts for recorded expenses in the reconciliation math",
     "🔧 CRITICAL FIX: after resuming a session via \"Update Now\", logging out later could get permanently stuck on the POS screen instead of showing the login form",
     "🧮 New Calculator in the POS header — number pad + big \"=\" button, also works with a physical keyboard/numpad",
