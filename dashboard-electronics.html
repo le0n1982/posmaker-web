@@ -129,9 +129,9 @@ body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',s
    Sellers as a right sidebar on wide screens; on narrow/tablet screens
    they stack in reading order (Glance, Best Sellers, then Sales Report)
    instead of being squeezed side-by-side, which was cutting content off. */
-.sr-grid{display:grid;grid-template-columns:1fr 250px;grid-template-areas:"glance bestsellers" "report bestsellers";gap:16px;align-items:stretch}
+.sr-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"glance glance" "bestsellers summary" "report report";gap:16px;align-items:stretch}
 @media(max-width:900px){
-  .sr-grid{grid-template-columns:1fr;grid-template-areas:"glance" "bestsellers" "report"}
+  .sr-grid{grid-template-columns:1fr;grid-template-areas:"glance" "bestsellers" "summary" "report"}
 }
 
 /* STAT CARDS */
@@ -643,6 +643,9 @@ input:checked + .slider:before{transform:translateX(18px)}
           <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
           <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
           <div id="bestSellerList" style="padding:14px;max-height:320px;overflow-y:auto">Loading...</div>
+        </div>
+        <div class="tbl-wrap" style="grid-area:summary">
+          <div id="rptSummaryContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">&#8212;</div>
         </div>
         <div class="tbl-wrap" style="grid-area:report">
             <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
@@ -1797,7 +1800,7 @@ function _sig(ms = 25000) {
       return;
     }
   }
-  STORE = store; TAX = store.tax_rate || 12;
+  STORE = store; TAX = store.tax_rate ?? 12;
   _OPS_STORE_ID = store.id;
   { const _t = document.createElement('textarea'); _t.innerHTML = store.currency || '₱'; CUR = _t.value || '₱'; }
   localStorage.setItem('pm_store_id', store.id);
@@ -1834,7 +1837,7 @@ function _sig(ms = 25000) {
   document.getElementById('sPhone').value    = store.phone || '';
   document.getElementById('sAddress').value  = store.address || '';
   document.getElementById('sCurrency').value = store.currency || '&#8369;';
-  document.getElementById('sTax').value      = store.tax_rate || 12;
+  document.getElementById('sTax').value      = store.tax_rate ?? 12;
   document.getElementById('sOpenTime').value  = store.open_time  || '08:00';
   document.getElementById('sCloseTime').value = store.close_time || '20:00';
   const _closedDays = (store.closed_days || '').split(',').filter(Boolean);
@@ -3571,6 +3574,8 @@ function renderReport(orders, from, to) {
   const el = document.getElementById('rptContent');
   if(!orders.length){
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">No orders in this period.</div>';
+    const _summaryElEmpty = document.getElementById('rptSummaryContent');
+    if (_summaryElEmpty) _summaryElEmpty.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No orders in this period.</div>';
     document.getElementById('rptDownload').style.display = 'none';
     return;
   }
@@ -3735,7 +3740,12 @@ function renderReport(orders, from, to) {
   </div>`;
 
   html += '</div>';
-  el.innerHTML = `<div style="display:flex;gap:0;align-items:flex-start"><div style="flex:1;min-width:0">${html}</div><div style="width:1px;background:var(--border);margin:0 18px;align-self:stretch;flex-shrink:0"></div><div style="width:260px;flex-shrink:0;position:sticky;top:16px">${summaryHtml}</div></div>`;
+  // Overall Summary now lives in its own card next to Best Sellers (see
+  // #rptSummaryContent) instead of a sidebar squeezed beside this list —
+  // the day-by-day breakdown gets the card's full width to itself.
+  el.innerHTML = html;
+  const summaryEl = document.getElementById('rptSummaryContent');
+  if (summaryEl) summaryEl.innerHTML = summaryHtml;
   document.getElementById('rptDownload').style.display = '';
 }
 // "This Month/Year at a Glance" — independent of the Daily/Custom report
