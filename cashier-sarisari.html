@@ -327,6 +327,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer">&#128424;</button>
   <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today">&#128200;</button>
   <button id="btnAddExpense" class="choc-btn" onclick="openAddExpense()" title="Add Expense" style="display:none;background:#ec4899;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Add expense">&#128179;</button>
+  <button class="choc-btn" onclick="showDrafts()" title="Drafts" style="background:#6366f1;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Drafts">&#128203;</button>
   <button class="choc-btn" onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:#f59e0b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Request void or refund">&#8630;</button>
   <button class="choc-btn" onclick="openCashierInbox()" title="Messages" style="position:relative;background:#a855f7;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Messages">
     &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
@@ -1950,7 +1951,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.3';
+const POS_BUILD = '1.4.4';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
