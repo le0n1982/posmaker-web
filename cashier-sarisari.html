@@ -366,7 +366,6 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <!-- Retail mid: cart items list (retail mode) -->
   <div class="retail-mid" id="retailMid">
     <div class="cart-acts" id="cartActs">
-      <button class="act-btn" onclick="showDrafts()">&#128203; Drafts</button>
       <button class="act-btn" id="btnTable" onclick="showTableModal()">&#127963; Table: &#8212;</button>
       <button class="act-btn" id="btnKOT"   onclick="toggleKOT()">&#128104;&#8205;&#127859; KOT</button>
     </div>
@@ -1951,7 +1950,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.4';
+const POS_BUILD = '1.4.5';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
