@@ -1143,3 +1143,13 @@ ALTER TABLE cash_remittances ADD COLUMN IF NOT EXISTS drawer_float        NUMERI
 -- ============================================================
 ALTER TABLE stores   ADD COLUMN IF NOT EXISTS allow_cashier_expenses BOOLEAN DEFAULT false;
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS added_by               TEXT DEFAULT NULL;
+
+-- ============================================================
+--  BIR Registration Info — stored for the owner's own records and for
+--  eventual BIR-compliant Official Receipt numbering (registered name,
+--  TIN, and a photo of the Certificate of Registration / BIR Form 2303).
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_registered_name TEXT DEFAULT '';
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_tin              TEXT DEFAULT '';
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_cor_b64          TEXT DEFAULT NULL;

@@ -787,6 +787,25 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
       <div class="info-card">
+        <h3>BIR Registration</h3>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px">For your own records and for BIR-compliant receipts. Store Name, Address, and Phone are managed in Store Information above.</p>
+        <div class="field"><label>Registered Business Name <span style="color:var(--dim);font-weight:400">(Corporate/Trade Name on your BIR Certificate)</span></label><input id="sBirName" type="text" placeholder="e.g. RD Bigasan Trading"></div>
+        <div class="field"><label>TIN (Tax Identification Number)</label><input id="sBirTin" type="text" placeholder="000-000-000-000"></div>
+        <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
+        <div class="field" style="margin-top:16px">
+          <label>BIR Certificate of Registration (Form 2303)</label>
+          <div class="logo-drop" id="birCorDrop" onclick="document.getElementById('birCorInput').click()">
+            <img id="birCorPreview" style="display:none">
+            <p id="birCorHint">Click to upload a photo of your Certificate of Registration</p>
+          </div>
+          <input type="file" id="birCorInput" accept="image/*" style="display:none" onchange="handleBirCor(event)">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn btn-accent" id="saveBirCorBtn" style="display:none" onclick="saveBirCor()">Save Certificate</button>
+            <button class="btn btn-ghost" id="removeBirCorBtn" style="display:none" onclick="removeBirCor()">Remove</button>
+          </div>
+        </div>
+      </div>
+      <div class="info-card">
         <h3>Payment Methods</h3>
         <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px">Add your bank/e-wallet QR codes (GCash, BDO, BPI, Maya, etc.) — whichever you add here shows up as an option in the POS's E-Pay widget, with the exact amount to pay.</p>
         <div id="payMethodList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
@@ -1720,6 +1739,7 @@ let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
 let pendingLogob64 = null;
+let pendingBirCorb64 = null;
 let pendingPmQrb64 = null;
 let pendingPmQrPayload = null;
 let PAY_METHODS = [];
@@ -1846,6 +1866,16 @@ function _sig(ms = 25000) {
     document.getElementById('logoHint').style.display = 'none';
     document.getElementById('logoDrop').classList.add('has-img');
     document.getElementById('removeLogoBtn').style.display = 'inline-flex';
+  }
+  document.getElementById('sBirName').value = store.bir_registered_name || '';
+  document.getElementById('sBirTin').value  = store.bir_tin || '';
+  if (store.bir_cor_b64) {
+    const corImg = document.getElementById('birCorPreview');
+    corImg.src = 'data:image/png;base64,' + store.bir_cor_b64;
+    corImg.style.display = 'block';
+    document.getElementById('birCorHint').style.display = 'none';
+    document.getElementById('birCorDrop').classList.add('has-img');
+    document.getElementById('removeBirCorBtn').style.display = 'inline-flex';
   }
   loadPaymentMethods();
 
@@ -5602,6 +5632,41 @@ async function removeLogo() {
   pendingLogob64 = null;
   showToast('Logo removed.');
 }
+function handleBirCor(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const b64 = ev.target.result.split(',')[1];
+    pendingBirCorb64 = b64;
+    const img = document.getElementById('birCorPreview');
+    img.src = ev.target.result; img.style.display = 'block';
+    document.getElementById('birCorHint').style.display = 'none';
+    document.getElementById('birCorDrop').classList.add('has-img');
+    document.getElementById('saveBirCorBtn').style.display = 'inline-flex';
+    document.getElementById('removeBirCorBtn').style.display = 'inline-flex';
+  };
+  reader.readAsDataURL(file);
+}
+async function saveBirCor() {
+  if (!pendingBirCorb64) return;
+  await _sb.from('stores').update({ bir_cor_b64: pendingBirCorb64 }).eq('id', STORE.id);
+  STORE.bir_cor_b64 = pendingBirCorb64;
+  document.getElementById('saveBirCorBtn').style.display = 'none';
+  pendingBirCorb64 = null;
+  showToast('Certificate saved.');
+}
+async function removeBirCor() {
+  if (!confirm('Remove this certificate photo?')) return;
+  await _sb.from('stores').update({ bir_cor_b64: null }).eq('id', STORE.id);
+  STORE.bir_cor_b64 = null;
+  document.getElementById('birCorPreview').style.display = 'none';
+  document.getElementById('birCorHint').style.display = '';
+  document.getElementById('birCorDrop').classList.remove('has-img');
+  document.getElementById('saveBirCorBtn').style.display = 'none';
+  document.getElementById('removeBirCorBtn').style.display = 'none';
+  pendingBirCorb64 = null;
+  showToast('Certificate removed.');
+}
 let _jsQrReady = false;
 function _loadJsQr() {
   if (_jsQrReady) return Promise.resolve();
@@ -5715,6 +5780,8 @@ async function saveSettings() {
     show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
     enable_drawer_float: document.getElementById('sEnableDrawerFloat').checked,
     allow_cashier_expenses: document.getElementById('sAllowCashierExpenses').checked,
+    bir_registered_name: document.getElementById('sBirName').value.trim(),
+    bir_tin: document.getElementById('sBirTin').value.trim(),
   };
   if (!payload.name) { showToast('Store name is required.', true); return; }
   const { error } = await _sb.from('stores').update(payload).eq('id', STORE.id);
