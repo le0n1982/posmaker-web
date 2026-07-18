@@ -1065,7 +1065,12 @@ async function checkFaceAttendanceResult(){
   const name = session.matchedName, username = session.matchedUsername, role = session.matchedRole || 'cashier';
 
   if (_faceAttMode === 'recognize_in') {
+    // log_staff_login records the DTR time-in (staff_logs row) — but a
+    // physical Time In is not the same thing as an active POS session, so
+    // explicitly clear last_seen right after so this staff member doesn't
+    // show as "Online" until they actually log into a cashier terminal.
     await _sb.rpc('log_staff_login', { p_store_id: MGR.store_id, p_staff_id: session.matchedStaffId, p_username: username });
+    await _sb.from('store_users').update({ last_seen: null }).eq('id', session.matchedStaffId);
   } else {
     await _sb.from('activity_logs').insert({
       store_id: MGR.store_id, actor_name: name, actor_role: role,
