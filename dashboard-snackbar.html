@@ -125,6 +125,15 @@ body{background:var(--page-bg,var(--bg));color:var(--text);font-family:'Inter',s
 .section{display:none}
 .section.active{display:block}
 
+/* SALES REPORT — Glance + Sales Report stack in the left column with Best
+   Sellers as a right sidebar on wide screens; on narrow/tablet screens
+   they stack in reading order (Glance, Best Sellers, then Sales Report)
+   instead of being squeezed side-by-side, which was cutting content off. */
+.sr-grid{display:grid;grid-template-columns:1fr 250px;grid-template-areas:"glance bestsellers" "report bestsellers";gap:16px;align-items:stretch}
+@media(max-width:900px){
+  .sr-grid{grid-template-columns:1fr;grid-template-areas:"glance" "bestsellers" "report"}
+}
+
 /* STAT CARDS */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
 .stat-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--card-shadow,none)}
@@ -601,9 +610,8 @@ input:checked + .slider:before{transform:translateX(18px)}
 
     <!-- SALES REPORT -->
     <div class="section" id="sec-salesreport">
-      <div style="display:flex;gap:16px;align-items:stretch">
-        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
-          <div class="tbl-wrap">
+      <div class="sr-grid">
+        <div class="tbl-wrap" style="grid-area:glance">
             <div class="tbl-head"><h3 id="candleTitle">&#128200; This Month at a Glance</h3>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-accent btn-sm" id="candleViewMonth" onclick="setCandleView('month')">Month</button>
@@ -630,8 +638,13 @@ input:checked + .slider:before{transform:translateX(18px)}
                 </div>
               </div>
             </div>
-          </div>
-          <div class="tbl-wrap" style="flex:1">
+        </div>
+        <div class="tbl-wrap" style="grid-area:bestsellers">
+          <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
+          <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
+          <div id="bestSellerList" style="padding:14px;max-height:320px;overflow-y:auto">Loading...</div>
+        </div>
+        <div class="tbl-wrap" style="grid-area:report">
             <div class="tbl-head" style="flex-wrap:wrap;gap:8px">
               <h3>&#128202; Sales Report</h3>
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -647,16 +660,10 @@ input:checked + .slider:before{transform:translateX(18px)}
               </div>
             </div>
             <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
-          </div>
-        </div>
-        <div class="tbl-wrap" style="width:250px;flex-shrink:0">
-          <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
-          <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
-          <div id="bestSellerList" style="padding:14px;max-height:320px;overflow-y:auto">Loading...</div>
         </div>
       </div>
     </div>
-    <!-- DAILY CHECKLIST + RECIPE/SOP NOTES -->
+<!-- DAILY CHECKLIST + RECIPE/SOP NOTES -->
     <div class="section" id="sec-checklist">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px">
         <div class="tbl-wrap">
