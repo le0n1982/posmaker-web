@@ -689,7 +689,15 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
           <span style="color:var(--muted)">Date</span>
           <span id="remitLogDate">—</span>
         </div>
+        <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
+          <span style="color:var(--muted)">Cash in Drawer (expected)</span>
+          <strong id="remitLogExpected" style="color:var(--accent)">—</strong>
+        </div>
         <span id="remitLogPOS" style="display:none">—</span>
+      </div>
+      <div id="remitNonCashSection" style="display:none;background:var(--s2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px">
+        <div style="color:var(--muted);font-weight:600;margin-bottom:6px;text-transform:uppercase;font-size:10px;letter-spacing:.3px">Non-Cash Sales (already settled electronically)</div>
+        <div id="remitNonCashList"></div>
       </div>
       <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (how much is in the drawer?)</label>
       <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcRemitLogDiff()" style="font-size:22px;text-align:center;padding:12px;font-weight:700">
@@ -1505,6 +1513,7 @@ async function checkCashierInbox() {
 let _remitOnlineSales = 0;
 let _remitCarriedFloat = 0;
 let _remitCarriedFloatFrom = '';
+let _remitExpensesTotal = 0;
 // Drawer float is physical cash sitting in the till — it belongs to
 // whichever shift is next, not necessarily the same cashier who left it, so
 // this looks at the store's most recent remittance overall (not filtered
@@ -1537,11 +1546,14 @@ async function openRemitOnLogout() {
   document.getElementById('remitFloatSection').style.display = STORE?.enable_drawer_float ? '' : 'none';
   document.getElementById('remitLogAmt').value = '';
   document.getElementById('remitLogFloatDisp').textContent = '—';
+  document.getElementById('remitLogExpected').textContent = 'Loading…';
+  document.getElementById('remitNonCashSection').style.display = 'none';
   document.getElementById('remitStep1').style.display = '';
   document.getElementById('remitStep2').style.display = 'none';
   document.getElementById('mRemitLogout').classList.add('show');
   // Fetch POS sales since last remittance (not whole day, to reset each session)
   document.getElementById('remitLogPOS').textContent = 'Loading…';
+  _remitExpensesTotal = 0;
   if (!navigator.onLine) {
     document.getElementById('remitLogPOS').textContent = '—';
     return;
@@ -1570,7 +1582,7 @@ async function openRemitOnLogout() {
         .order('created_at', { ascending: true }).limit(1);
       from = firstLogin?.[0]?.created_at || (today + 'T00:00:00');
     }
-    const { data } = await _sb.from('orders').select('total,payment_method')
+    const { data } = await _sb.from('orders').select('total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', name)
       .gte('timestamp', from).lte('timestamp', to);
     // Sales made while offline sit in the local queue until the connection
@@ -1581,15 +1593,54 @@ async function openRemitOnLogout() {
     // "Over" cash. Count them from the local queue too.
     const _queuedOrders = getOfflineQueue()
       .filter(o => o.cashier_name === name && o.timestamp >= from && o.timestamp <= to)
-      .map(o => ({ total: o.total, payment_method: o.payment_method }));
-    // Compare against actual cash received only — card/GCash sales settle
-    // electronically and were never in the physical drawer to count.
+      .map(o => ({ total: o.total, payment_method: o.payment_method, amount_tendered: o.amount_tendered }));
+    // Compare against actual cash received only — e-pay sales settle
+    // electronically and were never in the physical drawer to count. Split
+    // sales only put their cash portion (amount_tendered) in the drawer —
+    // the rest went out electronically, same as a pure e-pay sale.
     const _orders = (data||[]).concat(_queuedOrders);
-    const total = _orders.filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
-    _remitOnlineSales = _orders.filter(o => (o.payment_method || 'Cash') !== 'Cash').reduce((s,o)=>s+(parseFloat(o.total)||0), 0);
+    const _cashPortion = o => {
+      const t = parseFloat(o.total) || 0;
+      if ((o.payment_method || 'Cash') === 'Cash') return t;
+      if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
+      return 0;
+    };
+    const total = _orders.reduce((s,o) => s + _cashPortion(o), 0);
+    _remitOnlineSales = _orders.reduce((s,o) => s + ((parseFloat(o.total)||0) - _cashPortion(o)), 0);
     document.getElementById('remitLogPOS').textContent = (CUR||'₱') + total.toFixed(2);
+    // Broken down per payment method (GCash, BDO, Maya, etc.) so the
+    // cashier can see exactly what already settled electronically, instead
+    // of one lump "non-cash" figure that doesn't say which bank/wallet.
+    const _nonCashByMethod = {};
+    _orders.forEach(o => {
+      const amt = (parseFloat(o.total) || 0) - _cashPortion(o);
+      if (amt <= 0) return;
+      const method = o.payment_method || 'Other';
+      _nonCashByMethod[method] = (_nonCashByMethod[method] || 0) + amt;
+    });
+    const _ncEntries = Object.entries(_nonCashByMethod);
+    const ncSection = document.getElementById('remitNonCashSection');
+    if (_ncEntries.length) {
+      document.getElementById('remitNonCashList').innerHTML = _ncEntries.map(([mName, amt]) =>
+        `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${mName}</span><strong>${(CUR||'₱')}${amt.toFixed(2)}</strong></div>`
+      ).join('');
+      ncSection.style.display = '';
+    } else {
+      ncSection.style.display = 'none';
+    }
+    // Cash actually paid out for expenses this shift left the drawer too —
+    // without subtracting it, an honest cashier who bought supplies with
+    // drawer cash would look "Short" for money that's accounted for by a
+    // receipt, not missing.
+    const { data: expData } = await _sb.from('expenses').select('amount,created_at')
+      .eq('store_id', STORE_ID).eq('added_by', name)
+      .gte('created_at', from).lte('created_at', to);
+    _remitExpensesTotal = (expData || []).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const expected = _remitCarriedFloat + total - _remitExpensesTotal;
+    document.getElementById('remitLogExpected').textContent = (CUR||'₱') + expected.toFixed(2);
   } catch(_) {
     document.getElementById('remitLogPOS').textContent = '—';
+    document.getElementById('remitLogExpected').textContent = '—';
   }
 }
 
@@ -1600,7 +1651,7 @@ function calcRemitLogDiff() {
   const btn  = document.getElementById('remitLogCheckBtn');
   const el   = document.getElementById('remitLogDiff');
   if (isNaN(cash)) { el.textContent='—'; el.style.color='var(--muted)'; btn.disabled=true; btn.style.opacity='.4'; return; }
-  const diff = cash - pos - _remitCarriedFloat;
+  const diff = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
   el.textContent = (diff>=0?'+':'') + (CUR||'₱') + Math.abs(diff).toFixed(2);
   el.style.color = diff>0 ? '#f97316' : diff<0 ? '#ef4444' : '#00b4d8';
   btn.disabled = false; btn.style.opacity = '1';
@@ -1633,7 +1684,7 @@ function remitLogStep2() {
   const posText = document.getElementById('remitLogPOS').textContent;
   const pos  = parseFloat(posText.replace(/[^0-9.]/g,'')) || 0;
   const cash = parseFloat(document.getElementById('remitLogCOH').value) || 0;
-  const diff = cash - pos - _remitCarriedFloat;
+  const diff = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
   const name = document.getElementById('remitLogCashier').textContent;
   document.getElementById('remitCk1').textContent = name;
   document.getElementById('remitCk2').textContent = document.getElementById('remitLogDate').textContent;
@@ -1668,7 +1719,7 @@ async function confirmRemitLogout() {
   const today  = new Date().toISOString().slice(0,10);
   const pos    = parseFloat(document.getElementById('remitCk3').textContent.replace(/[^0-9.]/g,'')) || 0;
   const cash   = parseFloat(document.getElementById('remitCk4').textContent.replace(/[^0-9.]/g,'')) || 0;
-  const diff   = cash - pos - _remitCarriedFloat;
+  const diff   = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
   const diffLabel = diff<0 ? `Short -${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : diff>0 ? `Over +${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : 'Balanced';
   // Drawer float is opt-in per store — when off, the cashier remits the
   // full count as before and drawer_float is just recorded as 0.
@@ -1895,7 +1946,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.1';
+const POS_BUILD = '1.4.2';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
