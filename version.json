@@ -1,7 +1,8 @@
 {
-  "version": "1.5.3",
+  "version": "1.5.4",
   "date": "2026-07-19",
   "changes": [
+    "💸 New \"Request Funds\" feature — a manager can request cash from a specific cashier mid-shift (Manager's Dashboard > Request Funds); the cashier sees a notification in the POS header, confirms giving the amount or declines, and it's recorded in the Activity Log",
     "📷 New \"Require photo proof for Void/Refund requests\" setting — turn off to let cashiers submit Void/Refund requests with just a reason, skipping the manager QR-scan photo step",
     "🔧 CRITICAL FIX: with \"Allow selling more than available stock\" ON, a product already at 0 stock was still completely unclickable — the sale can now go through and stock goes negative, same as intended; it only ever worked before while stock still had some left",
     "🔧 Fixed: the stock number shown on a product's card (e.g. \"10 pc\") stayed stale after a sale until the cashier switched category or refreshed — it now updates immediately so the cashier always sees the real remaining stock",

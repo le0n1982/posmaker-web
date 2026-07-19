@@ -161,6 +161,7 @@ button{cursor:pointer}
     <div class="sb-item" onclick="nav('log')" title="See all past actions — add stock, edit item, etc."><span class="ico">&#128203;</span> Activity Log</div>
     <div class="sb-item" onclick="nav('sales')" title="View store sales — daily, weekly, or monthly."><span class="ico">&#128200;</span> Sales</div>
     <div class="sb-item" onclick="nav('remit')" title="View cash remittances from cashiers. Red = awaiting confirmation."><span class="ico">&#128176;</span> Cash Remit <span id="remitBadge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:auto"></span></div>
+    <div class="sb-item" onclick="nav('fundreq')" title="Request cash from a cashier mid-shift — e.g. pulling part of their drawer."><span class="ico">&#128184;</span> Request Funds</div>
     <div class="sb-item" onclick="nav('staff')" title="See your fellow staff — who's online now and their login history. View only, no editing."><span class="ico">&#128101;</span> Staff</div>
     <div class="sb-item" onclick="nav('checklist')" title="Tasks before opening and closing the store — with photo proof."><span class="ico">&#9989;</span> Daily Checklist</div>
     <div class="sb-item" onclick="nav('funds')" title="Money sent by owner to staff — salary, advance, allowance."><span class="ico">&#128176;</span> Staff Funds</div>
@@ -371,6 +372,33 @@ button{cursor:pointer}
       <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Money sent by owner to staff — salary, advance, allowance. Upload proof of disbursement when received.</p>
       <div id="paymentsList2" style="display:flex;flex-direction:column;gap:10px">
         <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REQUEST FUNDS (from a cashier) -->
+  <div class="section" id="sec-fundreq">
+    <div style="max-width:560px">
+      <div class="tbl-wrap" style="margin-bottom:16px">
+        <div class="tbl-head"><h3>&#128184; Request Fund from Cashier</h3></div>
+        <div style="padding:16px 20px">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px">Ask a cashier to hand over part of their drawer mid-shift. They'll see a notification in the POS and confirm once given — recorded in the Activity Log.</p>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Cashier</label>
+          <select id="frCashierSelect" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;margin-bottom:8px;font-family:inherit">
+            <option value="">Select cashier...</option>
+          </select>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Amount</label>
+          <input type="number" id="frAmount" min="1" step="0.01" placeholder="0.00" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;margin-bottom:10px;font-family:inherit">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Reason</label>
+          <textarea id="frReason" rows="2" placeholder="e.g. Need change for another till" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical"></textarea>
+          <button class="btn btn-accent" id="frSubmitBtn" onclick="submitFundRequest()">Send Request</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-head"><h3>Requests I've Sent</h3></div>
+        <div id="frHistoryList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+          <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1388,7 +1416,7 @@ function downloadSalesCSV(){
 }
 
 // ── UI Helpers ─────────────────────────────────────────────────────────────
-const SECTION_TITLES = {inv:'Inventory', log:'Activity Log', sales:'Sales', remit:'Cash Remit', staff:'Staff', checklist:'Daily Checklist', funds:'Staff Funds', cashadvance:'Cash Advance', payroll:'Payroll', voidrefund:'Void & Refund', helpers:'Helpers'};
+const SECTION_TITLES = {inv:'Inventory', log:'Activity Log', sales:'Sales', remit:'Cash Remit', staff:'Staff', checklist:'Daily Checklist', funds:'Staff Funds', fundreq:'Request Funds', cashadvance:'Cash Advance', payroll:'Payroll', voidrefund:'Void & Refund', helpers:'Helpers'};
 function nav(id){
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
@@ -1401,6 +1429,7 @@ function nav(id){
   if(id==='log')       loadLog();
   if(id==='sales')     loadSales();
   if(id==='remit')     { loadRemit(); checkPendingRemits(); }
+  if(id==='fundreq')   loadFundRequests();
   if(id==='staff')     loadMgrStaff();
   if(id==='checklist') loadChecklist();
   if(id==='funds')     loadPayments();
@@ -2539,6 +2568,73 @@ async function loadPayments() {
 
 // ── Cash Advance (any staff — manager submits on their behalf, incl. self) ─
 let _caMaxAmt = null, _caMaxPerMonth = null, _caThisMonthCount = 0, _caAllStaff = [];
+// ── Request Funds (manager asks a specific cashier to hand over cash) ─────
+let _frAllCashiers = [];
+async function loadFundRequests() {
+  const CUR = '₱';
+  const { data: staffRows } = await _sb.from('store_users')
+    .select('id,username,full_name,role').eq('store_id', MGR.store_id).eq('active', true).eq('role', 'cashier').order('username');
+  _frAllCashiers = staffRows || [];
+  const sel = document.getElementById('frCashierSelect');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Select cashier...</option>' +
+    _frAllCashiers.map(s => `<option value="${s.id}">${s.full_name || s.username}</option>`).join('');
+  sel.value = current;
+
+  const list = document.getElementById('frHistoryList');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>';
+  const { data: mine, error } = await _sb.from('fund_requests')
+    .select('*').eq('store_id', MGR.store_id).eq('requested_by_id', MGR.staff_id)
+    .order('created_at', { ascending: false });
+  if (error) {
+    list.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message.includes('does not exist') || error.message.includes('relation') ? 'Request Funds needs a schema update. Ask your admin to run the latest schema SQL in Supabase.' : error.message}</div>`;
+    return;
+  }
+  if (!mine?.length) { list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No requests yet.</div>'; return; }
+
+  list.innerHTML = mine.map(r => {
+    const statusColor = r.status === 'pending' ? '#f59e0b' : r.status === 'declined' ? '#ef4444' : '#10b981';
+    const statusLabel = r.status === 'pending' ? 'Waiting for cashier' : r.status === 'declined' ? 'Declined' : 'Given';
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <strong style="font-size:15px">${CUR}${parseFloat(r.amount).toFixed(2)}</strong>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px">from ${r.staff_name}</span>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:${statusColor};white-space:nowrap">${statusLabel}</span>
+      </div>
+      ${r.reason ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">${r.reason}</div>` : ''}
+      ${r.status === 'declined' && r.decline_note ? `<div style="font-size:12px;color:#ef4444;margin-top:6px">&#128172; ${r.decline_note}</div>` : ''}
+      <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`;
+  }).join('');
+}
+
+async function submitFundRequest() {
+  const CUR = '₱';
+  const btn = document.getElementById('frSubmitBtn');
+  const staffId = document.getElementById('frCashierSelect').value;
+  const staff = _frAllCashiers.find(s => s.id === staffId);
+  const amount = parseFloat(document.getElementById('frAmount').value);
+  const reason = document.getElementById('frReason').value.trim();
+  if (!staff) { showToast('Select a cashier.', true); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
+
+  btn.disabled = true; btn.textContent = 'Sending...';
+  const { error } = await _sb.from('fund_requests').insert({
+    store_id: MGR.store_id, staff_id: staff.id, staff_name: staff.full_name || staff.username,
+    requested_by_id: MGR.staff_id, requested_by_name: MGR.name,
+    amount, reason: reason || null, status: 'pending'
+  });
+  btn.disabled = false; btn.textContent = 'Send Request';
+  if (error) { showToast(error.message, true); return; }
+
+  document.getElementById('frAmount').value = '';
+  document.getElementById('frReason').value = '';
+  showToast(`Request sent to ${staff.full_name || staff.username}.`);
+  loadFundRequests();
+}
+
 async function loadCashAdvance() {
   const CUR = '₱';
   const list = document.getElementById('caHistoryList');

@@ -1170,3 +1170,34 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS allow_oversell BOOLEAN DEFAULT false
 --  Run this block in Supabase -> SQL Editor (once)
 -- ============================================================
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS require_void_refund_proof BOOLEAN DEFAULT true;
+
+-- ============================================================
+--  Request Funds — manager requests cash FROM a specific cashier mid-shift
+--  (e.g. pulling part of their drawer). Cashier sees a notification in the
+--  POS, confirms handing over the amount, and it's recorded in the
+--  Activity Log. Not a salary advance — separate from cash_advances.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS fund_requests (
+  id                 UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  store_id           UUID        REFERENCES stores NOT NULL,
+  staff_id           UUID        NOT NULL,   -- the cashier being asked for funds
+  staff_name         TEXT        NOT NULL,
+  requested_by_id    UUID        NOT NULL,   -- the manager who requested
+  requested_by_name  TEXT        NOT NULL,
+  amount             NUMERIC     NOT NULL,
+  reason             TEXT        DEFAULT '',
+  status             TEXT        DEFAULT 'pending', -- pending | given | declined
+  decline_note       TEXT        DEFAULT NULL,
+  created_at         TIMESTAMPTZ DEFAULT NOW(),
+  given_at           TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_fund_requests_store ON fund_requests(store_id, staff_id);
+ALTER TABLE fund_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fr_owner   ON fund_requests;
+DROP POLICY IF EXISTS fr_anon_rw ON fund_requests;
+CREATE POLICY fr_owner ON fund_requests FOR ALL TO authenticated
+  USING     (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()))
+  WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
+CREATE POLICY fr_anon_rw ON fund_requests FOR ALL TO anon
+  USING (TRUE) WITH CHECK (TRUE);
