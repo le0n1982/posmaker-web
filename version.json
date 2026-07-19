@@ -1,7 +1,9 @@
 {
-  "version": "1.5.6",
+  "version": "1.5.8",
   "date": "2026-07-19",
   "changes": [
+    "🔧 Fixed: switching Discount to \"Specific Items\" could push the item checklist off the top of the screen on smaller/tablet screens, making it look like it wasn't there — the panel now repositions itself after it grows",
+    "🔧 Fixed: the product list (and cart, on some screens) could stop scrolling once it had enough items — a flexbox quirk clipped anything past what fit on screen instead of letting you scroll down to it",
     "💸 \"Fund Transfer to Manager\" is now owner-toggled — new \"Let cashiers transfer funds to manager\" setting (off by default) controls whether the \"Transfer\" button shows in the POS",
     "📷 New \"Require photo proof for Void/Refund requests\" setting — turn off to let cashiers submit Void/Refund requests with just a reason, skipping the manager QR-scan photo step",
     "🔧 CRITICAL FIX: with \"Allow selling more than available stock\" ON, a product already at 0 stock was still completely unclickable — the sale can now go through and stock goes negative, same as intended; it only ever worked before while stock still had some left",

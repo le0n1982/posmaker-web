@@ -67,7 +67,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .search-inp:focus{border-color:var(--accent)}
 .search-inp::placeholder{color:var(--muted)}
 /* ── RETAIL LEFT PANEL ─────────────────────────────────── */
-.retail-left{width:200px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:none;flex-direction:column;align-items:stretch;padding:8px 8px 0;gap:6px;overflow:hidden}
+.retail-left{width:200px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:none;flex-direction:column;align-items:stretch;padding:8px 8px 0;gap:6px;overflow:hidden;min-height:0}
 /* Embedded camera box */
 .rl-cam-box{border-radius:9px;overflow:hidden;background:#000;border:1.5px solid var(--border);position:relative;flex-shrink:0;cursor:pointer}
 .rl-cam-box video{width:100%;height:110px;object-fit:cover;display:block}
@@ -89,7 +89,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .rl-cat-sel:focus{border-color:var(--accent)}
 .rl-count{font-size:10px;color:var(--muted);flex-shrink:0}
 /* Product list rows in left panel */
-.retail-grid{flex:1;overflow-y:auto;padding:2px 0 8px;display:flex;flex-direction:column;gap:2px}
+.retail-grid{flex:1;overflow-y:auto;padding:2px 0 8px;display:flex;flex-direction:column;gap:2px;min-height:0}
 .r-card{padding:7px 8px;background:transparent;border:1px solid transparent;border-radius:6px;cursor:pointer;display:flex;flex-direction:column;gap:1px;transition:background .1s,border-color .1s}
 .r-card:hover{background:var(--s2);border-color:var(--border)}
 .r-card:active{border-color:var(--accent);background:rgba(0,180,216,.07)}
@@ -112,7 +112,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .retail-pay .t-row.big{font-size:calc(26px * var(--font-scale,1));font-weight:900;color:var(--accent);padding:12px 0 4px;border-top:1px solid var(--border);margin-top:4px}
 
 /* ── PRODUCT GRID ───────────────────────────────────────── */
-.products{flex:1;overflow-y:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;align-content:start}
+.products{flex:1;overflow-y:auto;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;align-content:start;min-height:0}
 
 /* Restaurant card — large image */
 .p-btn{background:var(--s2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:left;user-select:none;transition:transform .1s,border-color .1s;overflow:hidden;display:flex;flex-direction:column}
@@ -138,7 +138,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .act-btn.on{background:rgba(0,180,216,.15);color:var(--accent);border-color:var(--accent)}
 
 /* Cart items */
-.cart-list{flex:1;overflow-y:auto;padding:4px 7px}
+.cart-list{flex:1;overflow-y:auto;padding:4px 7px;min-height:0}
 .cart-empty{color:var(--muted);text-align:center;padding:20px 8px;font-size:12px}
 .ci{display:flex;align-items:center;gap:4px;padding:5px 0;border-bottom:1px solid var(--border)}
 .ci-name{flex:1;color:var(--name-color,var(--text));font-size:calc(11px * var(--font-scale,1));line-height:1.25;user-select:none}
@@ -1941,7 +1941,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.6';
+const POS_BUILD = '1.5.8';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2442,6 +2442,12 @@ function setDiscScope(scope) {
   document.getElementById('discScopeSpecificBtn').style.color = scope === 'specific' ? '#fff' : 'var(--muted)';
   document.getElementById('discItemPicker').style.display = scope === 'specific' ? '' : 'none';
   if (scope === 'specific') renderDiscItemPicker();
+  // The panel was positioned for its SMALL pre-item-picker height when it
+  // first opened — switching to "Specific Items" can make it grow a lot
+  // taller (checkbox list). Without repositioning, on a shorter screen
+  // (tablet) that growth pushes the checkbox list off the top of the
+  // viewport, making it look like nothing appeared.
+  positionDiscPanel();
   updateDiscTriggerLabel();
   redrawCart();
 }
