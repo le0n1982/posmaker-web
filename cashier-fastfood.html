@@ -1967,7 +1967,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.7';
+const POS_BUILD = '1.4.8';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3151,11 +3151,30 @@ window.addEventListener('offline', ()=>{ updateNetStatus(); });
 window.addEventListener('beforeunload', ()=>{ if (STORE_ID && CASHIER) _sb.from('stores').update({ pos_online: false }).eq('id', STORE_ID).then(() => {}); });
 
 // ── Confirm Order ─────────────────────────────────────────────────────────
+let _confirmInFlight = false;
 async function confirmOrder() {
   if (payMeth === 'QRPay' && !_qrPayAutoConfirm) { startQrPayment(); return; }
   if (payMeth === 'Maya QRPh' && !_qrPayAutoConfirm) { startMayaQrPayment(); return; }
   _qrPayAutoConfirm = false;
 
+  // A fast double-tap on the checkout button (or a manual tap overlapping
+  // with the automatic QR-payment confirm callback) used to fire this
+  // twice concurrently before the first insert finished — each call wrote
+  // its own separate order, double charging the cart and double-deducting
+  // stock. This guard makes the second call a no-op while the first is
+  // still in flight.
+  if (_confirmInFlight) return;
+  _confirmInFlight = true;
+  const _btnCOGuard = document.getElementById('btnCO');
+  if (_btnCOGuard) _btnCOGuard.disabled = true;
+  try {
+    await __confirmOrderImpl();
+  } finally {
+    _confirmInFlight = false;
+    if (_btnCOGuard) _btnCOGuard.disabled = false;
+  }
+}
+async function __confirmOrderImpl() {
   const { items, raw, disc, total, tax, sub } = getCartTotals();
   const tender = payMeth === 'Cash' ? parseFloat(document.getElementById('tendered').value) || 0 : total;
   const change = payMeth === 'Cash' ? parseFloat((tender - total).toFixed(2)) : 0;

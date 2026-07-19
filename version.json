@@ -1,7 +1,8 @@
 {
-  "version": "1.4.7",
+  "version": "1.4.8",
   "date": "2026-07-19",
   "changes": [
+    "🔧 CRITICAL FIX: fast double-tap on \"Confirm Order\" could post the same sale twice (duplicate order, duplicate stock deduction, duplicate receipt) — the button is now locked while a sale is being saved",
     "📦 New \"Allow selling more than available stock\" setting — a sale can go through even if it exceeds recorded stock; stock goes negative and self-corrects once new stock is added",
     "📱 \"My Activity Today\" now also shows an \"E-Pay\" total (today's non-cash sales) alongside Total Sales and Cash Drawer",
     "📋 Drafts moved to its own icon in the header — the old full-width button above the cart is gone",

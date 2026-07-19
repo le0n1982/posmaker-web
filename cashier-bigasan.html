@@ -3020,7 +3020,25 @@ async function _epayContinue() {
   else { payMeth = _epayChosenLabel; }
   await _doConfirmOrder();
 }
+let _confirmInFlight = false;
 async function _doConfirmOrder() {
+  // A fast double-tap on the checkout button (very common on touchscreen
+  // POS devices) used to fire this twice concurrently before the first
+  // insert finished — each call wrote its own separate order, double
+  // charging the customer's cart and double-deducting stock. This guard
+  // makes the second tap a no-op while the first is still in flight.
+  if (_confirmInFlight) return;
+  _confirmInFlight = true;
+  const _btnCOGuard = document.getElementById('btnCO');
+  if (_btnCOGuard) _btnCOGuard.disabled = true;
+  try {
+    await __doConfirmOrderImpl();
+  } finally {
+    _confirmInFlight = false;
+    if (_btnCOGuard) _btnCOGuard.disabled = false;
+  }
+}
+async function __doConfirmOrderImpl() {
   const { items, raw, disc, total, tax, sub } = getCartTotals();
   const tender = payMeth === 'Cash' ? parseFloat(document.getElementById('tendered').value) || 0
                : payMeth === 'Split' ? _splitCashAmt
@@ -5057,7 +5075,7 @@ function confirmWeightAdd() {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.7';
+const POS_BUILD = '1.4.8';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
