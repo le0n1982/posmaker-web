@@ -1974,7 +1974,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.6';
+const POS_BUILD = '1.4.7';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2309,6 +2309,10 @@ function toggleKOT() {
 function _maxStock(id) {
   const p = prods.find(x => x.id == id);
   if (!p) return Infinity;
+  // Owner-toggled: some stores would rather let a sale go through on a
+  // stock count they don't fully trust, and reconcile the resulting
+  // negative number once real stock is counted/added back in.
+  if (STORE?.allow_oversell) return Infinity;
   if (!STORE.track_stock && !p._invResolved) return Infinity;
   if (p.stock == null) return Infinity;
   return Math.max(0, parseFloat(p.stock));
@@ -2653,7 +2657,7 @@ async function syncOfflineQueue(){
         }
         for(const[invId,totalUse]of Object.entries(deductions)){
           const{data:row}=await _sb.from('inventory_items').select('stock').eq('id',invId).single();
-          if(row!=null)await _sb.from('inventory_items').update({stock:Math.max(0,(row.stock||0)-totalUse)}).eq('id',invId);
+          if(row!=null){const _ns=STORE?.allow_oversell?((row.stock||0)-totalUse):Math.max(0,(row.stock||0)-totalUse);await _sb.from('inventory_items').update({stock:_ns}).eq('id',invId);}
         }
       }catch(_){}
     }catch(e){failed.push(entry);}
@@ -2844,11 +2848,11 @@ async function _doConfirmOrder() {
         const curStock = stockMap[invId];
         if (curStock == null) return Promise.resolve();
         const totalUse = deductions[invId];
-        const newStock = Math.max(0, (curStock || 0) - totalUse);
+        const newStock = STORE?.allow_oversell ? ((curStock || 0) - totalUse) : Math.max(0, (curStock || 0) - totalUse);
         // Update in-memory stock so display refreshes without a full reload
         if (invById[invId]) invById[invId].stock = newStock;
         const mp = prods.find(x => x._autoInvLink === invId || (x._invResolved && (JSON.parse(x.inv_links||'[]').some(l=>(l.id||l)===invId))));
-        if (mp) mp.stock = Math.max(0, (mp.stock || 0) - totalUse);
+        if (mp) mp.stock = STORE?.allow_oversell ? ((mp.stock || 0) - totalUse) : Math.max(0, (mp.stock || 0) - totalUse);
         _sb.from('stock_history').insert({ store_id: STORE_ID, inventory_item_id: invId, change_type: 'SALE', qty_change: -totalUse, note: [...(deductionNotes[invId] || [])].join(', ') }).then(() => {});
         return _sb.from('inventory_items').update({ stock: newStock }).eq('id', invId);
       }));

@@ -1153,3 +1153,12 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS added_by               TEXT DEFAUL
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_registered_name TEXT DEFAULT '';
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_tin              TEXT DEFAULT '';
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_cor_b64          TEXT DEFAULT NULL;
+
+-- ============================================================
+--  Allow Overselling — owner-toggled option letting a sale go through even
+--  when the requested quantity exceeds recorded stock (stock goes negative
+--  and self-corrects once new stock is added). Default off — preserves the
+--  existing "block the sale" behavior unless a store opts in.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS allow_oversell BOOLEAN DEFAULT false;

@@ -835,6 +835,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <input type="checkbox" id="sAllowCashierExpenses" style="width:auto">
           <label for="sAllowCashierExpenses" style="margin:0">Let cashiers add expenses <span style="color:var(--dim);font-weight:400;font-size:11px">(adds an "Add Expense" button in the POS — recorded under that cashier's name, visible in your Activity Log)</span></label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="sAllowOversell" style="width:auto">
+          <label for="sAllowOversell" style="margin:0">Allow selling more than available stock <span style="color:var(--dim);font-weight:400;font-size:11px">(e.g. 10 left, customer buys 15 — the sale still goes through and stock goes negative; it self-corrects once you add new stock)</span></label>
+        </div>
         <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
       </div>
       <div class="info-card">
@@ -1860,6 +1864,7 @@ function _sig(ms = 25000) {
   document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
   document.getElementById('sEnableDrawerFloat').checked = !!store.enable_drawer_float;
   document.getElementById('sAllowCashierExpenses').checked = !!store.allow_cashier_expenses;
+  document.getElementById('sAllowOversell').checked = !!store.allow_oversell;
   applyCalcVisibility(store.show_calculator !== false);
   const { data: { user: _u } } = await _sb.auth.getUser();
   if (_u) document.getElementById('resetEmail').value = _u.email || '';
@@ -5838,6 +5843,7 @@ async function saveSettings() {
     show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
     enable_drawer_float: document.getElementById('sEnableDrawerFloat').checked,
     allow_cashier_expenses: document.getElementById('sAllowCashierExpenses').checked,
+    allow_oversell: document.getElementById('sAllowOversell').checked,
     bir_registered_name: document.getElementById('sBirName').value.trim(),
     bir_tin: document.getElementById('sBirTin').value.trim(),
   };
