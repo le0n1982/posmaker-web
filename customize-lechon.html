@@ -699,7 +699,12 @@ function setScale(id) {
 (async () => {
   const { data: { session } } = await _sb.auth.getSession();
   if (!session) { location.href = 'login.html'; return; }
-  const { data: store } = await _sb.from('stores').select('*').eq('owner_id', session.user.id).single();
+  // .single() throws on >1 row — owners with multiple POS terminals/branches
+  // have more than one store row, which made this think they had NO store
+  // and bounced them straight back to the dashboard. Oldest store wins, same
+  // as the dashboard's own store-lookup.
+  const { data: storeRows } = await _sb.from('stores').select('*').eq('owner_id', session.user.id).order('created_at', { ascending: true }).limit(1);
+  const store = storeRows?.[0];
   if (!store) { location.href = 'dashboard.html'; return; }
 
   // Route to this store's dedicated customize page based on business type
