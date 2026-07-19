@@ -1,7 +1,8 @@
 {
-  "version": "1.4.8",
+  "version": "1.4.9",
   "date": "2026-07-19",
   "changes": [
+    "💰 Inventory now shows a \"Total Cost\" column (unit cost × stock) — Owner's Dashboard only, not shown to Managers",
     "🔧 CRITICAL FIX: fast double-tap on \"Confirm Order\" could post the same sale twice (duplicate order, duplicate stock deduction, duplicate receipt) — the button is now locked while a sale is being saved",
     "📦 New \"Allow selling more than available stock\" setting — a sale can go through even if it exceeds recorded stock; stock goes negative and self-corrects once new stock is added",
     "📱 \"My Activity Today\" now also shows an \"E-Pay\" total (today's non-cash sales) alongside Total Sales and Cash Drawer",

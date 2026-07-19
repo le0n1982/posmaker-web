@@ -435,8 +435,8 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
         <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
-          <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Unit</th><th>Cost</th><th>Stock</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
-          <tbody id="invTbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
+          <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Unit</th><th>Cost</th><th>Stock</th><th>Total Cost</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
+          <tbody id="invTbody"><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -6306,7 +6306,7 @@ function filterInv() {
 }
 function renderInv(items) {
   const tbody=document.getElementById('invTbody');
-  if(!items.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No items. Click + Add Item.</td></tr>';return;}
+  if(!items.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">No items. Click + Add Item.</td></tr>';return;}
   tbody.innerHTML=items.map(i=>{
     const stock=parseFloat(i.stock??0);
     const thresh=parseFloat(i.low_stock_threshold??5);
@@ -6344,6 +6344,7 @@ function renderInv(items) {
         <span style="min-width:32px;text-align:center;font-weight:700;color:${out?'#ef4444':low?'#f59e0b':'var(--text)'}">${Number.isInteger(stock)?stock:stock.toFixed(2)}</span>
         <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="adjInvStock('${i.id}',1)">+</button>`}
       </div></td>
+      <td style="color:var(--muted);font-weight:600">${CUR}${(parseFloat(i.cost_price||0)*stock).toFixed(2)}</td>
       <td>${badge}</td>
       <td>${expiryCell}</td>
       <td style="white-space:nowrap">
