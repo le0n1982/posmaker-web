@@ -1,7 +1,8 @@
 {
-  "version": "1.4.9",
+  "version": "1.5.0",
   "date": "2026-07-19",
   "changes": [
+    "🎨 POS header icons redesigned — each now has a small label (Scan, Refresh, Calc, Printer, Sales, Expense, Drafts, Void, Chat, Logout) plus bigger rounded corners, deeper shadow, and a lift/glow on hover",
     "💰 Inventory now shows a big \"Total Inventory Cost\" summary at the top (sum of all items) plus a per-item \"Total Cost\" column (unit cost × stock) — Owner's Dashboard only, not shown to Managers",
     "🔧 CRITICAL FIX: fast double-tap on \"Confirm Order\" could post the same sale twice (duplicate order, duplicate stock deduction, duplicate receipt) — the button is now locked while a sale is being saved",
     "📦 New \"Allow selling more than available stock\" setting — a sale can go through even if it exceeds recorded stock; stock goes negative and self-corrects once new stock is added",

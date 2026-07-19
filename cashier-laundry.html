@@ -40,10 +40,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .hdr-logo{height:28px;width:auto;border-radius:4px;object-fit:contain;display:none}
 .hdr-title{font-size:calc(15px * var(--font-scale,1));font-weight:700;flex:1;color:var(--hdr-text,#fff)}
 .hdr-cashier{font-size:calc(12px * var(--font-scale,1));opacity:.9;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--hdr-text,#fff)}
-.btn-logout{background:#dc2626;border:none;color:#fff;padding:9px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);}
-.choc-btn{transition:transform .15s ease,box-shadow .15s ease}
-.choc-btn:hover{transform:translateY(-2px)}
-.choc-btn:active{transform:translateY(0)}
+.btn-logout{background:#dc2626;border:none;color:#fff;padding:8px 14px;border-radius:14px;cursor:pointer;font-size:12px;font-weight:700;flex-shrink:0;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);letter-spacing:.2px}
+.choc-btn{transition:transform .15s ease,box-shadow .15s ease,filter .15s ease;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:48px}
+.choc-btn .ico{font-size:17px;line-height:1}
+.choc-btn .lbl{font-size:8.5px;font-weight:800;letter-spacing:.2px;text-transform:uppercase;line-height:1;color:rgba(255,255,255,.95);white-space:nowrap}
+.choc-btn:hover{transform:translateY(-3px);filter:brightness(1.12)}
+.choc-btn:active{transform:translateY(0);filter:brightness(.9)}
 
 /* ── ORDER TYPE TABS ────────────────────────────────────── */
 .ot-bar{background:var(--s1);display:flex;border-bottom:2px solid var(--border);flex-shrink:0}
@@ -320,19 +322,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <span id="netStatus" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(0,0,0,.3);margin-left:8px;letter-spacing:.3px"></span>
   <span class="hdr-cashier" id="hdrCashier"></span>
   <div id="hdrActions" style="display:contents">
-  <button id="btnCam" class="choc-btn" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:#3b82f6;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Camera scanner">&#128247;</button>
-  <button id="btnSync" class="choc-btn" onclick="syncProds()" title="Refresh products" style="background:#14b8a6;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Refresh products">&#128260;</button>
-  <button id="btnCalc" class="choc-btn" onclick="openCalc()" title="Calculator" style="background:#06b6d4;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Calculator">&#129518;</button>
-  <button id="btnPrinterSettings" class="choc-btn" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Printer settings">&#128424;</button>
-  <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer">&#128424;</button>
-  <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today">&#128200;</button>
-  <button id="btnAddExpense" class="choc-btn" onclick="openAddExpense()" title="Add Expense" style="display:none;background:#ec4899;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Add expense">&#128179;</button>
-  <button class="choc-btn" onclick="showDrafts()" title="Drafts" style="background:#6366f1;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Drafts">&#128203;</button>
-  <button class="choc-btn" onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:#f59e0b;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Request void or refund">&#8630;</button>
-  <button class="choc-btn" onclick="openCashierInbox()" title="Messages" style="position:relative;background:#a855f7;border:none;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:18px;margin-right:6px;box-shadow:0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Messages">
-    &#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span>
+  <button id="btnCam" class="choc-btn" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:#3b82f6;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Camera scanner"><span class="ico">&#128247;</span><span class="lbl">Scan</span></button>
+  <button id="btnSync" class="choc-btn" onclick="syncProds()" title="Refresh products" style="background:#14b8a6;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Refresh products"><span class="ico">&#128260;</span><span class="lbl">Refresh</span></button>
+  <button id="btnCalc" class="choc-btn" onclick="openCalc()" title="Calculator" style="background:#06b6d4;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Calculator"><span class="ico">&#129518;</span><span class="lbl">Calc</span></button>
+  <button id="btnPrinterSettings" class="choc-btn" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:#64748b;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Printer settings"><span class="ico">&#128424;</span><span class="lbl">Printer</span></button>
+  <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer"><span class="ico">&#128424;</span><span class="lbl">Install</span></button>
+  <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today"><span class="ico">&#128200;</span><span class="lbl">Sales</span></button>
+  <button id="btnAddExpense" class="choc-btn" onclick="openAddExpense()" title="Add Expense" style="display:none;background:#ec4899;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Add expense"><span class="ico">&#128179;</span><span class="lbl">Expense</span></button>
+  <button class="choc-btn" onclick="showDrafts()" title="Drafts" style="background:#6366f1;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Drafts"><span class="ico">&#128203;</span><span class="lbl">Drafts</span></button>
+  <button class="choc-btn" onclick="openVoidRefundModal()" title="Request Void / Refund" style="background:#f59e0b;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Request void or refund"><span class="ico">&#8630;</span><span class="lbl">Void</span></button>
+  <button class="choc-btn" onclick="openCashierInbox()" title="Messages" style="position:relative;background:#a855f7;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Messages">
+    <span class="ico">&#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span></span><span class="lbl">Chat</span>
   </button>
-  <button class="btn-logout choc-btn" onclick="doLogout()">Logout</button>
+  <button class="btn-logout choc-btn" onclick="doLogout()"><span class="ico" style="font-size:15px">&#9211;</span><span class="lbl">Logout</span></button>
   </div>
 </div>
 <div id="syncBar" style="display:none;background:#1a3a1a;color:#4ade80;font-size:12px;font-weight:600;padding:5px 16px;text-align:center;border-bottom:1px solid #2a5a2a"></div>
@@ -1946,7 +1948,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.4.8';
+const POS_BUILD = '1.5.0';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
