@@ -418,6 +418,10 @@ input:checked + .slider:before{transform:translateX(18px)}
             <button class="btn btn-accent btn-sm" id="btnAddInv" onclick="openInvModal()" title="Add a new raw material or stock item and set its quantity and cost.">+ Add Item</button>
           </div>
         </div>
+        <div id="invTotalCostBanner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:0 0 12px">
+          <span style="font-size:13px;color:var(--muted);font-weight:600">&#128176; Total Inventory Cost (all items)</span>
+          <span id="invTotalCostVal" style="font-size:32px;font-weight:800;color:var(--accent)">&#8369;0.00</span>
+        </div>
         <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
           <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Unit</th><th>Cost</th><th>Stock</th><th>Total Cost</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
@@ -6042,6 +6046,8 @@ async function loadInventory() {
   const {data}=await _sb.from('inventory_items').select('*').eq('store_id',STORE.id).order('category').order('name').abortSignal(_sig());
   invItems=data||[];
   frozenInvIds = computeFrozenIds(invItems, FREE_INV_LIMIT, IS_PRO);
+  const _invTotalCostEl=document.getElementById('invTotalCostVal');
+  if(_invTotalCostEl){const _invTotalCost=invItems.reduce((s,i)=>s+parseFloat(i.cost_price||0)*parseFloat(i.stock||0),0);_invTotalCostEl.textContent=CUR+_invTotalCost.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
   const cats=[...new Set(invItems.map(i=>i.category).filter(Boolean))].sort();
   const sel=document.getElementById('invCatFilter');
   sel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
