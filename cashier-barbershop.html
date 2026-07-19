@@ -2014,7 +2014,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.0';
+const POS_BUILD = '1.5.1';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2098,6 +2098,15 @@ function _firstImg(b64) {
   return b64;
 }
 
+// Patches just the one product's retail stock badge in place right after a
+// sale changes its stock — so the cashier sees the new count immediately
+// instead of only after switching category / manually refreshing.
+function _refreshStockBadge(id) {
+  const p = prods.find(x => x.id == id);
+  if (!p) return;
+  const rc = document.getElementById('rcard_' + id);
+  if (rc) rc.outerHTML = renderRetailCard(p);
+}
 function renderRetailList(list) {
   document.getElementById('retailGrid').innerHTML = list.length
     ? list.map(p => {
@@ -3365,7 +3374,7 @@ async function __confirmOrderImpl() {
         // Update in-memory stock so display refreshes without a full reload
         if (invById[invId]) invById[invId].stock = newStock;
         const mp = prods.find(x => x._autoInvLink === invId || (x._invResolved && (JSON.parse(x.inv_links||'[]').some(l=>(l.id||l)===invId))));
-        if (mp) mp.stock = STORE?.allow_oversell ? ((mp.stock || 0) - totalUse) : Math.max(0, (mp.stock || 0) - totalUse);
+        if (mp) { mp.stock = STORE?.allow_oversell ? ((mp.stock || 0) - totalUse) : Math.max(0, (mp.stock || 0) - totalUse); _refreshStockBadge(mp.id); }
         _sb.from('stock_history').insert({ store_id: STORE_ID, inventory_item_id: invId, change_type: 'SALE', qty_change: -totalUse, note: [...(deductionNotes[invId] || [])].join(', ') }).then(() => {});
         return _sb.from('inventory_items').update({ stock: newStock }).eq('id', invId);
       }));
