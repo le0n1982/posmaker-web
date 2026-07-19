@@ -1969,7 +1969,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.1';
+const POS_BUILD = '1.5.2';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2063,7 +2063,7 @@ function renderProds(cat) {
 function renderPhotoGrid(list) {
   document.getElementById('grid').innerHTML = list.length
     ? list.map(p => {
-        const oos = parseFloat(p.stock ?? 0) <= 0 && STORE.track_stock;
+        const oos = !STORE?.allow_oversell && parseFloat(p.stock ?? 0) <= 0 && STORE.track_stock;
         const img = _firstImg(p.image_b64);
         return `
         <div class="p-btn${oos?' out-of-stock':''}" id="rcard_${p.id}" onclick="${oos?'void 0':'openProductOptWidget(\''+p.id+'\')'}">
@@ -2096,7 +2096,7 @@ function renderRetailList(list) {
   document.getElementById('retailGrid').innerHTML = list.length
     ? list.map(p => {
         const stock  = parseFloat(p.stock ?? 0);
-        const oos    = stock <= 0 && (p._invResolved || STORE.track_stock);
+        const oos    = !STORE?.allow_oversell && stock <= 0 && (p._invResolved || STORE.track_stock);
         const sc     = stockClass(stock);
         const unit   = p.unit || 'pc';
         const sku    = p.sku  || '';
