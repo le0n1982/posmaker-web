@@ -476,6 +476,7 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
             <option value="">— Select Store Type —</option>
           </select>
           <button class="btn btn-accent btn-sm" id="bugCheckBtn" onclick="runBugCheck()">&#128269; Run Check</button>
+          <button class="btn btn-ghost btn-sm" onclick="showSqlSetup()">&#128203; View/Copy Setup SQL</button>
         </div>
         <div id="bugCheckResults" style="margin-top:18px"></div>
       </div>
@@ -1197,6 +1198,19 @@ BEGIN
     GROUP BY s.owner_id
     HAVING count(*) > 1;
 
+  -- The DB-level guard against the "Golden K88" bug above — if this
+  -- constraint is missing, a near-simultaneous double-signup can still slip
+  -- two store rows past the client-side "already has a store" check.
+  RETURN QUERY
+    SELECT 'Missing Constraint'::text, 'critical'::text,
+           'stores.owner_id has no UNIQUE constraint — duplicate-store signups (like "Golden K88") can happen again'::text,
+           'Run: ALTER TABLE stores ADD CONSTRAINT stores_owner_id_unique UNIQUE (owner_id); (dedupe any existing violators first)'::text
+    WHERE NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+      WHERE table_schema = 'public' AND table_name = 'stores'
+        AND constraint_name = 'stores_owner_id_unique'
+    );
+
   -- Duplicate products, per store of this type
   RETURN QUERY
     SELECT 'Duplicate Products'::text, 'warning'::text,
@@ -1261,7 +1275,13 @@ BEGIN
       ('products','embeddings'),
       ('products','cost_price'),
       ('stores','gcash_qr_b64'),
-      ('cash_remittances','owner_confirmed')
+      ('cash_remittances','owner_confirmed'),
+      ('stores','allow_oversell'),
+      ('stores','require_void_refund_proof'),
+      ('stores','allow_fund_transfer'),
+      ('stores','bir_registered_name'),
+      ('stores','bir_tin'),
+      ('stores','bir_cor_b64')
     ) AS want(tbl, col)
     WHERE NOT EXISTS (
       SELECT 1 FROM information_schema.columns c
@@ -1398,7 +1418,7 @@ async function runBugCheck() {
   btn.disabled = false; btn.innerHTML = '&#128269; Run Check';
   if (error) {
     if (error.message && error.message.includes('does not exist')) {
-      resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">The ${fn} function isn't set up in Supabase yet. Run the latest setup SQL (Settings → re-copy setup SQL) in the SQL Editor, then try again.</p>`;
+      resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">The ${fn} function isn't set up in Supabase yet (or is out of date). Click "View/Copy Setup SQL" above, run it in your Supabase SQL Editor, then try again.</p>`;
     } else {
       handleAuthError(error);
       resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">Error: ${esc(error.message)}</p>`;
