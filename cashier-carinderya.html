@@ -335,9 +335,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button class="choc-btn" onclick="openCashierInbox()" title="Messages" style="position:relative;background:#a855f7;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Messages">
     <span class="ico">&#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span></span><span class="lbl">Chat</span>
   </button>
-  <button class="choc-btn" onclick="openFundRequests()" title="Fund Requests from Manager" style="position:relative;background:#84cc16;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Fund requests from manager">
-    <span class="ico">&#128184;<span id="fundReqBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span></span><span class="lbl">Funds</span>
-  </button>
+  <button id="btnFundTransfer" class="choc-btn" onclick="openFundTransfer()" title="Fund Transfer to Manager" style="display:none;background:#84cc16;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Fund transfer to manager"><span class="ico">&#128184;</span><span class="lbl">Transfer</span></button>
   <button class="btn-logout choc-btn" onclick="doLogout()"><span class="ico" style="font-size:15px">&#9211;</span><span class="lbl">Logout</span></button>
   </div>
 </div>
@@ -702,15 +700,18 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
-<!-- ── FUND REQUESTS FROM MANAGER ── -->
-<div class="modal" id="mFundRequests">
-  <div class="mbox" style="width:min(480px,96vw)">
-    <div class="mtitle">&#128184; Fund Requests from Manager</div>
-    <div id="fundReqList" style="max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
-      <div style="text-align:center;color:#555;padding:20px;font-size:12px">Loading...</div>
-    </div>
+<!-- ── FUND TRANSFER TO MANAGER ── -->
+<div class="modal" id="mFundTransfer">
+  <div class="mbox" style="max-width:380px">
+    <div class="mtitle">&#128184; Fund Transfer to Manager</div>
+    <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Cash you're handing over to the manager mid-shift — deducted from your Cash Drawer, same as an expense.</p>
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Amount</label>
+    <input class="inp" id="ftAmount" type="number" min="0" step="0.01" placeholder="0.00">
+    <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Reason</label>
+    <input class="inp" id="ftReason" type="text" placeholder="e.g. Need change for another till">
     <div class="m-actions">
-      <button class="btn-cancel" onclick="closeM('mFundRequests')">Close</button>
+      <button class="btn-cancel" onclick="closeM('mFundTransfer')">Cancel</button>
+      <button class="btn-confirm" id="ftSaveBtn" onclick="saveFundTransfer()">&#10003; Confirm Transfer</button>
     </div>
   </div>
 </div>
@@ -1095,6 +1096,7 @@ function setStoreUI() {
   applyPosTheme(STORE);
   document.getElementById('btnMySales').style.display = STORE.show_sales_to_cashier ? '' : 'none';
   document.getElementById('btnAddExpense').style.display = STORE.allow_cashier_expenses ? '' : 'none';
+  document.getElementById('btnFundTransfer').style.display = STORE.allow_fund_transfer ? '' : 'none';
 }
 
 function adaptCashierMode(bizType) {
@@ -1388,8 +1390,6 @@ function startPing() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); if (!document.hidden) checkStorePermissions(); });
   checkCashierInbox();
   setInterval(checkCashierInbox, 60000);
-  checkFundRequests();
-  setInterval(checkFundRequests, 60000);
 }
 
 function showPOS(name) {
@@ -1474,84 +1474,37 @@ async function checkCashierInbox() {
   } catch(_) {}
 }
 
-// ── Fund Requests from Manager ──────────────────────────────────────────────
-// A manager can request that this cashier hand over part of their drawer
-// mid-shift. The badge stays up (unlike Messages' read/unread) until the
-// cashier actually confirms giving the cash or declines — a pending request
-// is a task, not just something to be seen.
-async function checkFundRequests() {
-  if (!STORE_ID || !CASHIER?.id) return;
-  try {
-    const { count } = await _sb.from('fund_requests')
-      .select('id', { count: 'exact', head: true })
-      .eq('store_id', STORE_ID).eq('staff_id', CASHIER.id).eq('status', 'pending');
-    const badge = document.getElementById('fundReqBadge');
-    if (count > 0) { badge.textContent = count > 9 ? '9+' : count; badge.style.display = 'inline-block'; }
-    else badge.style.display = 'none';
-  } catch(_) {}
+// ── Fund Transfer to Manager ────────────────────────────────────────────────
+// Cash the cashier is physically handing over to the manager mid-shift (e.g.
+// to consolidate cash, make change for another till). Recorded the exact
+// same way as a cashier-added expense — same `expenses` row shape, same
+// EXPENSE_PAID activity-log action — so it automatically flows through the
+// existing "Cash Drawer" deduction math (My Activity Today + Cash
+// Remittance modal) without needing separate reconciliation logic.
+function openFundTransfer() {
+  document.getElementById('ftAmount').value = '';
+  document.getElementById('ftReason').value = '';
+  document.getElementById('mFundTransfer').classList.add('show');
 }
-async function openFundRequests() {
-  const list = document.getElementById('fundReqList');
-  list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Loading...</div>';
-  document.getElementById('mFundRequests').classList.add('show');
-  try {
-    if (!CASHIER?.id || !STORE_ID) { list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Not logged in.</div>'; return; }
-    if (!navigator.onLine) { list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">Fund requests need an internet connection.</div>'; return; }
-    const { data, error } = await _sb.from('fund_requests')
-      .select('*').eq('store_id', STORE_ID).eq('staff_id', CASHIER.id)
-      .order('created_at', { ascending: false }).limit(30);
-    if (error) throw error;
-    if (!data?.length) {
-      list.innerHTML = '<div style="text-align:center;color:#555;padding:20px;font-size:12px">No fund requests.</div>';
-      return;
-    }
-    list.innerHTML = data.map(r => {
-      const dt = new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
-      const statusColor = r.status === 'pending' ? '#f59e0b' : r.status === 'declined' ? '#ef4444' : '#10b981';
-      const statusLabel = r.status === 'pending' ? 'Pending' : r.status === 'declined' ? 'Declined' : 'Given';
-      return `<div style="background:#1a1a2a;border:1px solid #252540;border-radius:10px;padding:14px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;font-weight:700;color:#84cc16">${r.requested_by_name || 'Manager'}</span>
-          <span style="font-size:11px;color:#666">${dt}</span>
-        </div>
-        <div style="font-size:18px;font-weight:800;color:#f0f0f8">${CUR}${parseFloat(r.amount).toFixed(2)}</div>
-        ${r.reason ? `<div style="font-size:13px;color:#ccc;margin-top:2px">${r.reason}</div>` : ''}
-        ${r.status === 'pending'
-          ? `<div style="display:flex;gap:8px;margin-top:10px">
-               <button class="btn-confirm" style="flex:1;padding:8px" onclick="confirmFundGiven('${r.id}')">&#10004; Given</button>
-               <button class="btn-cancel" style="flex:1;padding:8px" onclick="declineFundRequest('${r.id}')">Decline</button>
-             </div>`
-          : `<div style="font-size:11px;font-weight:700;color:${statusColor};margin-top:8px">${statusLabel}${r.status==='declined'&&r.decline_note?' — '+r.decline_note:''}</div>`}
-      </div>`;
-    }).join('');
-  } catch(e) {
-    list.innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:12px">${e.message}</div>`;
-  }
-}
-async function confirmFundGiven(id) {
-  if (!confirm('Confirm you handed over this amount to the manager?')) return;
-  const { data: reqRow, error } = await _sb.from('fund_requests')
-    .update({ status: 'given', given_at: new Date().toISOString() })
-    .eq('id', id).select('*').single();
-  if (error) { alert(error.message); return; }
+async function saveFundTransfer() {
+  const amount = parseFloat(document.getElementById('ftAmount').value);
+  const reason = document.getElementById('ftReason').value.trim();
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
+  const btn = document.getElementById('ftSaveBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
+  const today = new Date().toISOString().slice(0, 10);
+  const name = 'Fund Transfer to Manager';
+  const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer', expense_date: today, notes: reason, added_by: CASHIER_NAME };
+  const { error } = await _sb.from('expenses').insert(row);
+  btn.disabled = false; btn.innerHTML = '&#10003; Confirm Transfer';
+  if (error) { showToast('Error: ' + error.message); return; }
   _sb.from('activity_logs').insert({
     store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
-    action: 'FUND_GIVEN_TO_MANAGER', target_name: reqRow.requested_by_name,
-    details: `Gave ${CUR}${parseFloat(reqRow.amount).toFixed(2)} to ${reqRow.requested_by_name}${reqRow.reason ? ' — ' + reqRow.reason : ''}`
+    action: 'EXPENSE_PAID', target_name: name,
+    details: JSON.stringify({ name, amount, category: 'Fund Transfer', note: reason })
   }).then(() => {});
-  showToast('Marked as given — recorded in Activity Log.');
-  openFundRequests();
-  checkFundRequests();
-}
-async function declineFundRequest(id) {
-  const note = prompt('Reason for declining (optional):') || '';
-  const { error } = await _sb.from('fund_requests')
-    .update({ status: 'declined', decline_note: note || null })
-    .eq('id', id);
-  if (error) { alert(error.message); return; }
-  showToast('Request declined.');
-  openFundRequests();
-  checkFundRequests();
+  closeM('mFundTransfer');
+  showToast('Fund transfer recorded.');
 }
 
 let _remitOnlineSales = 0;
@@ -1990,7 +1943,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.4';
+const POS_BUILD = '1.5.6';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

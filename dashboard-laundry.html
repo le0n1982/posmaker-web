@@ -840,6 +840,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <input type="checkbox" id="sRequireVoidRefundProof" style="width:auto">
           <label for="sRequireVoidRefundProof" style="margin:0">Require photo proof for Void/Refund requests <span style="color:var(--dim);font-weight:400;font-size:11px">(cashier scans a QR to have the manager take a proof photo; turn off to let cashiers submit Void/Refund requests with just a reason, no photo)</span></label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="sAllowFundTransfer" style="width:auto">
+          <label for="sAllowFundTransfer" style="margin:0">Let cashiers transfer funds to manager <span style="color:var(--dim);font-weight:400;font-size:11px">(adds a "Transfer" button in the POS — cash handed over mid-shift is recorded under that cashier's name and deducted from their Cash Drawer, same as an expense)</span></label>
+        </div>
         <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
       </div>
       <div class="info-card">
@@ -1871,6 +1875,7 @@ function _sig(ms = 25000) {
   document.getElementById('sAllowCashierExpenses').checked = !!store.allow_cashier_expenses;
   document.getElementById('sAllowOversell').checked = !!store.allow_oversell;
   document.getElementById('sRequireVoidRefundProof').checked = store.require_void_refund_proof !== false;
+  document.getElementById('sAllowFundTransfer').checked = !!store.allow_fund_transfer;
   applyCalcVisibility(store.show_calculator !== false);
   const { data: { user: _u } } = await _sb.auth.getUser();
   if (_u) document.getElementById('resetEmail').value = _u.email || '';
@@ -5796,6 +5801,7 @@ async function saveSettings() {
     allow_cashier_expenses: document.getElementById('sAllowCashierExpenses').checked,
     allow_oversell: document.getElementById('sAllowOversell').checked,
     require_void_refund_proof: document.getElementById('sRequireVoidRefundProof').checked,
+    allow_fund_transfer: document.getElementById('sAllowFundTransfer').checked,
     bir_registered_name: document.getElementById('sBirName').value.trim(),
     bir_tin: document.getElementById('sBirTin').value.trim(),
   };
