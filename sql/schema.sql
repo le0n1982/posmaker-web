@@ -1162,3 +1162,11 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS bir_cor_b64          TEXT DEFAULT NU
 --  Run this block in Supabase -> SQL Editor (once)
 -- ============================================================
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS allow_oversell BOOLEAN DEFAULT false;
+
+-- ============================================================
+--  Owner-toggled: whether a cashier's Void/Refund request requires a
+--  manager-scanned photo proof before it can be submitted. Default true —
+--  preserves the existing "photo required" behavior unless a store opts out.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS require_void_refund_proof BOOLEAN DEFAULT true;

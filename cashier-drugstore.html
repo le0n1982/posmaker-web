@@ -802,7 +802,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Reason</label>
         <textarea id="vrReason" rows="2" placeholder="e.g. Customer changed mind, wrong item, defective" class="disc-inp" style="width:100%;padding:9px 10px;font-size:13px;resize:vertical"></textarea>
       </div>
-      <div style="margin-bottom:10px">
+      <div id="vrProofSection" style="margin-bottom:10px">
         <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Photo Proof <span style="color:var(--muted)">(manager scans this with their phone — cashiers shouldn't need one)</span></label>
         <button type="button" class="btn-cancel" style="width:100%" onclick="openVrQR()">&#128241; Scan QR (Manager's Phone)</button>
         <div id="vrPreview" style="display:none;margin-top:8px;text-align:center">
@@ -1953,7 +1953,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.2';
+const POS_BUILD = '1.5.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3619,6 +3619,7 @@ function openVoidRefundModal() {
   document.getElementById('vrReason').value = '';
   document.getElementById('vrPreview').style.display = 'none';
   document.getElementById('vrPhotoImg').src = '';
+  document.getElementById('vrProofSection').style.display = STORE?.require_void_refund_proof === false ? 'none' : '';
   document.getElementById('mVoidRefund').classList.add('show');
 }
 
@@ -3692,7 +3693,7 @@ async function submitVoidRefundRequest() {
   if (!reason) { alert('Enter a reason.'); return; }
   const photoImg = document.getElementById('vrPhotoImg');
   const proof = photoImg.src && photoImg.src.startsWith('data:') ? photoImg.src : null;
-  if (!proof) { alert('Attach a photo as proof.'); return; }
+  if (STORE?.require_void_refund_proof !== false && !proof) { alert('Attach a photo as proof.'); return; }
 
   const btn = document.getElementById('vrSubmitBtn');
   btn.disabled = true; btn.textContent = 'Submitting...';

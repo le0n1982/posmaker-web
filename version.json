@@ -1,7 +1,8 @@
 {
-  "version": "1.5.2",
+  "version": "1.5.3",
   "date": "2026-07-19",
   "changes": [
+    "📷 New \"Require photo proof for Void/Refund requests\" setting — turn off to let cashiers submit Void/Refund requests with just a reason, skipping the manager QR-scan photo step",
     "🔧 CRITICAL FIX: with \"Allow selling more than available stock\" ON, a product already at 0 stock was still completely unclickable — the sale can now go through and stock goes negative, same as intended; it only ever worked before while stock still had some left",
     "🔧 Fixed: the stock number shown on a product's card (e.g. \"10 pc\") stayed stale after a sale until the cashier switched category or refreshed — it now updates immediately so the cashier always sees the real remaining stock",
     "🎨 POS header icons redesigned — each now has a small label (Scan, Refresh, Calc, Printer, Sales, Expense, Drafts, Void, Chat, Logout) plus bigger rounded corners, deeper shadow, and a lift/glow on hover",
