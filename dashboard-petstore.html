@@ -1733,6 +1733,12 @@ function renderDP(id) {
   const total = new Date(s.y, s.m+1, 0).getDate();
   const prev  = new Date(s.y, s.m, 0).getDate();
   const bStyle = `font-size:12px;padding:5px 0;cursor:pointer;border-radius:4px;border:none;width:100%`;
+  // Today gets a light-blue ring (distinct from the solid accent fill used
+  // for the selected date) so the owner/manager can spot "today" at a
+  // glance without checking a separate clock/calendar.
+  const _tdy = new Date();
+  const todayStr = `${_tdy.getFullYear()}-${String(_tdy.getMonth()+1).padStart(2,'0')}-${String(_tdy.getDate()).padStart(2,'0')}`;
+  const todayRing = 'box-shadow:inset 0 0 0 1.5px #3b82f6';
   let h = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <button onclick="dpNav('${id}',-1);event.stopPropagation()" style="background:none;border:none;color:var(--text);cursor:pointer;font-size:20px;line-height:1;padding:0 6px">&#8249;</button>
     <span style="font-size:13px;font-weight:600">${MN[s.m]} ${s.y}</span>
@@ -1744,18 +1750,21 @@ function renderDP(id) {
   for(let i=0;i<first;i++){
     const d=prev-first+1+i, pm=s.m-1<0?11:s.m-1, py=s.m-1<0?s.y-1:s.y;
     const ds=`${py}-${String(pm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:none;color:var(--dim)">${d}</button>`;
+    const isToday=ds===todayStr;
+    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:none;color:${isToday?'var(--text)':'var(--dim)'};${isToday?todayRing:''}">${d}</button>`;
   }
   for(let d=1;d<=total;d++){
     const ds=`${s.y}-${String(s.m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const sel=ds===selVal;
-    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:${sel?'var(--accent)':'none'};color:${sel?'#fff':'var(--text)'}">${d}</button>`;
+    const isToday=ds===todayStr;
+    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:${sel?'var(--accent)':(isToday?'rgba(59,130,246,.18)':'none')};color:${sel?'#fff':'var(--text)'};font-weight:${isToday&&!sel?'700':'400'};${(!sel&&isToday)?todayRing:''}">${d}</button>`;
   }
   const rem=(7-(first+total)%7)%7;
   for(let d=1;d<=rem;d++){
     const nm=s.m+1>11?0:s.m+1, ny=s.m+1>11?s.y+1:s.y;
     const ds=`${ny}-${String(nm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:none;color:var(--dim)">${d}</button>`;
+    const isToday=ds===todayStr;
+    h+=`<button onclick="dpPick('${id}','${ds}')" style="${bStyle};background:none;color:${isToday?'var(--text)':'var(--dim)'};${isToday?todayRing:''}">${d}</button>`;
   }
   h+=`</div><div style="text-align:right;margin-top:8px">
     <button class="btn btn-ghost btn-sm" onclick="dpClear('${id}')" style="font-size:11px;padding:3px 10px">Clear</button>
