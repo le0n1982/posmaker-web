@@ -2048,47 +2048,61 @@ function openSidebar()  { document.getElementById('sidebar').classList.add('open
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbOverlay').classList.remove('show'); }
 
 // ── My Wallet — money managers have deposited to the owner's bank account ──
-// Only deposits the owner has clicked "Confirm Received" on count toward
-// the balance; pending ones show with a Confirm button once the owner has
-// actually seen it land in their bank account.
+// Reuses the existing "Deposit to Owner" mechanism (manager.html's
+// mgrDepositModal / saveMgrDeposit) instead of a separate system — those
+// write a cash_remittances row (status='mgr_remit', cash_on_hand negative)
+// plus an activity_logs 'MGR_REMIT' entry (linked via details.cr_id) that
+// carries the receipt photo and note, since the remittance row itself
+// doesn't store the photo. Only rows the owner has clicked "Confirm
+// Received" on (owner_confirmed=true, via the existing confirmMgrDeposit())
+// count toward the balance.
 async function loadWallet() {
   if (!STORE?.id) return;
   const balEl = document.getElementById('walletBalanceVal');
   const listEl = document.getElementById('walletHistoryList');
   if (!balEl || !listEl) return;
-  const { data, error } = await _sb.from('wallet_deposits').select('*').eq('store_id', STORE.id).order('created_at', { ascending: false });
+  const [{ data: crRows, error }, { data: logRows }] = await Promise.all([
+    _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description,owner_confirmed')
+      .eq('store_id', STORE.id).eq('status', 'mgr_remit').order('created_at', { ascending: false }),
+    _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'MGR_REMIT')
+  ]);
   if (error) {
-    listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message.includes('does not exist') || error.message.includes('relation') ? 'My Wallet needs a schema update — run the latest schema SQL in Supabase.' : error.message}</div>`;
+    listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message}</div>`;
     return;
   }
-  const rows = data || [];
-  const confirmedTotal = rows.filter(d => d.status === 'confirmed').reduce((s, d) => s + parseFloat(d.amount || 0), 0);
+  const proofByCrId = {};
+  (logRows || []).forEach(l => {
+    try { const d = JSON.parse(l.details || '{}'); if (d.cr_id) proofByCrId[d.cr_id] = d; } catch (_) {}
+  });
+  const rows = crRows || [];
+  const confirmedTotal = rows.filter(r => r.owner_confirmed).reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
   balEl.textContent = CUR + confirmedTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const pendingCount = rows.filter(d => d.status === 'pending').length;
+  const pendingCount = rows.filter(r => !r.owner_confirmed).length;
   const badge = document.getElementById('walletPendingBadge');
   if (badge) { if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else badge.style.display = 'none'; }
   if (!rows.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No deposits yet.</div>'; return; }
-  listEl.innerHTML = rows.map(d => {
-    const statusColor = d.status === 'pending' ? 'var(--warn-text)' : 'var(--ok-text)';
-    const statusLabel = d.status === 'pending' ? 'Pending' : 'Confirmed';
+  listEl.innerHTML = rows.map(r => {
+    const amount = Math.abs(parseFloat(r.cash_on_hand || 0));
+    const proof = proofByCrId[r.id] || {};
+    const note = (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim();
+    const statusColor = r.owner_confirmed ? 'var(--ok-text)' : 'var(--warn-text)';
+    const statusLabel = r.owner_confirmed ? 'Confirmed' : 'Pending';
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <div>
-          <strong style="font-size:16px">${CUR}${parseFloat(d.amount).toFixed(2)}</strong>
-          <span style="font-size:11px;color:var(--muted);margin-left:6px">${d.bank_name} &middot; from ${d.deposited_by_name}</span>
+          <strong style="font-size:16px">${CUR}${amount.toFixed(2)}</strong>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px">${note ? note + ' &middot; ' : ''}from ${r.cashier_name}</span>
         </div>
         <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>
       </div>
-      ${d.proof_b64 ? `<div style="margin-top:8px"><img src="${d.proof_b64}" style="max-width:180px;max-height:140px;border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="window.open('${d.proof_b64}','_blank')"></div>` : ''}
-      <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(d.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-      ${d.status === 'pending' ? `<button class="btn btn-accent btn-sm" style="margin-top:8px" onclick="confirmWalletDeposit('${d.id}')">&#10003; Confirm Received</button>` : ''}
+      ${proof.receipt_b64 ? `<div style="margin-top:8px"><img src="${proof.receipt_b64}" style="max-width:180px;max-height:140px;border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="window.open('${proof.receipt_b64}','_blank')"></div>` : ''}
+      <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      ${!r.owner_confirmed ? `<button class="btn btn-accent btn-sm" style="margin-top:8px" onclick="confirmWalletDeposit('${r.id}',this)">&#10003; Confirm Received</button>` : ''}
     </div>`;
   }).join('');
 }
-async function confirmWalletDeposit(id) {
-  const { error } = await _sb.from('wallet_deposits').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', id);
-  if (error) { showToast('Error: ' + error.message, true); return; }
-  showToast('Deposit confirmed — added to your wallet.');
+async function confirmWalletDeposit(id, btnEl) {
+  await confirmMgrDeposit(id, btnEl);
   loadWallet();
 }
 
