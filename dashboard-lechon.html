@@ -244,6 +244,7 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="sb-store" id="sbStore">Loading...</div>
   <div class="sb-nav">
     <div class="sb-item active" onclick="nav('dashboard')" title="Overview of your store: sales, orders, and quick stats for today."><span class="ico">&#128202;</span> Dashboard</div>
+    <div class="sb-item" onclick="nav('wallet')" title="Money your managers have deposited to your bank account, once you confirm it."><span class="ico">&#128188;</span> My Wallet <span id="walletPendingBadge" style="display:none;margin-left:auto;font-size:10px;background:#f59e0b;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" id="navOrders"    onclick="nav('orders')" title="See incoming and past orders from your POS."><span class="ico">&#128221;</span> <span id="navOrdersLbl">Orders</span></div>
     <div class="sb-item" id="navInventory" onclick="nav('inventory')" title="Track stock levels for your raw materials and supplies, and add new items."><span class="ico">&#128230;</span> <span id="navInventoryLbl">Inventory</span> <span id="lowStockBadge" style="display:none;margin-left:auto;font-size:10px;background:#f59e0b;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('categories')" title="Organize your products and inventory items into categories."><span class="ico">&#128194;</span> Categories</div>
@@ -375,6 +376,23 @@ input:checked + .slider:before{transform:translateX(18px)}
           <thead><tr><th>#</th><th>Date &amp; Time</th><th>Cashier</th><th>Total</th><th>Method</th></tr></thead>
           <tbody id="ordersTbody"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Loading orders...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- MY WALLET -->
+    <div class="section" id="sec-wallet">
+      <div class="tbl-wrap" style="margin-bottom:16px">
+        <div style="padding:28px;text-align:center">
+          <div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:6px">&#128188; My Wallet</div>
+          <div id="walletBalanceVal" style="font-size:42px;font-weight:800;color:var(--ok-text)">&#8369;0.00</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:4px">Total confirmed deposits from your managers</div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-head"><h3>Deposit History</h3></div>
+        <div id="walletHistoryList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+          <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>
+        </div>
       </div>
     </div>
 
@@ -1932,12 +1950,13 @@ function _sig(ms = 25000) {
   loadInventory();
   loadStaff();
   loadPOSTerminals();
+  loadWallet();
   checkSetupBanner();
   checkTrialBanner();
 })();
 
 // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const SECTION_TITLES = {dashboard:'Dashboard',orders:'Orders',inventory:'Inventory',categories:'Categories',products:'Products',staff:'Staff',activitylog:'Activity Log',messages:'Staff Messages',salesreport:'Sales Report',checklist:'Daily Checklist',expenses:'Other Expenses',payroll:'Payroll',settings:'Settings',access:'Cashier Link',pos:'My POS Terminals'};
+const SECTION_TITLES = {dashboard:'Dashboard',wallet:'My Wallet',orders:'Orders',inventory:'Inventory',categories:'Categories',products:'Products',staff:'Staff',activitylog:'Activity Log',messages:'Staff Messages',salesreport:'Sales Report',checklist:'Daily Checklist',expenses:'Other Expenses',payroll:'Payroll',settings:'Settings',access:'Cashier Link',pos:'My POS Terminals'};
 // ── Business-type adaptation ───────────────────────────────────────────────────
 const RESTAURANT_BIZ = new Set(['Fast Food','Carinderya','Coffee Shop','Bakery','Lechon',
   'Pizza / Pasta','Seafood','Milk Tea / Drinks','Karinderya / Buffet','Snack Bar']);
@@ -2008,6 +2027,7 @@ function nav(id) {
   document.getElementById('topbarTitle').textContent = SECTION_TITLES[id] || id;
   closeSidebar();
   if (id === 'dashboard') { loadDashboard(); }
+  if (id === 'wallet')     loadWallet();
   if (id === 'orders')     loadOrders();
   if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); loadBestSellers(); }
   if (id === 'inventory')  loadInventory();
@@ -2022,6 +2042,51 @@ function nav(id) {
 }
 function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sbOverlay').classList.add('show'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbOverlay').classList.remove('show'); }
+
+// ── My Wallet — money managers have deposited to the owner's bank account ──
+// Only deposits the owner has clicked "Confirm Received" on count toward
+// the balance; pending ones show with a Confirm button once the owner has
+// actually seen it land in their bank account.
+async function loadWallet() {
+  if (!STORE?.id) return;
+  const balEl = document.getElementById('walletBalanceVal');
+  const listEl = document.getElementById('walletHistoryList');
+  if (!balEl || !listEl) return;
+  const { data, error } = await _sb.from('wallet_deposits').select('*').eq('store_id', STORE.id).order('created_at', { ascending: false });
+  if (error) {
+    listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message.includes('does not exist') || error.message.includes('relation') ? 'My Wallet needs a schema update — run the latest schema SQL in Supabase.' : error.message}</div>`;
+    return;
+  }
+  const rows = data || [];
+  const confirmedTotal = rows.filter(d => d.status === 'confirmed').reduce((s, d) => s + parseFloat(d.amount || 0), 0);
+  balEl.textContent = CUR + confirmedTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pendingCount = rows.filter(d => d.status === 'pending').length;
+  const badge = document.getElementById('walletPendingBadge');
+  if (badge) { if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else badge.style.display = 'none'; }
+  if (!rows.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No deposits yet.</div>'; return; }
+  listEl.innerHTML = rows.map(d => {
+    const statusColor = d.status === 'pending' ? 'var(--warn-text)' : 'var(--ok-text)';
+    const statusLabel = d.status === 'pending' ? 'Pending' : 'Confirmed';
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <strong style="font-size:16px">${CUR}${parseFloat(d.amount).toFixed(2)}</strong>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px">${d.bank_name} &middot; from ${d.deposited_by_name}</span>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+      </div>
+      ${d.proof_b64 ? `<div style="margin-top:8px"><img src="${d.proof_b64}" style="max-width:180px;max-height:140px;border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="window.open('${d.proof_b64}','_blank')"></div>` : ''}
+      <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(d.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      ${d.status === 'pending' ? `<button class="btn btn-accent btn-sm" style="margin-top:8px" onclick="confirmWalletDeposit('${d.id}')">&#10003; Confirm Received</button>` : ''}
+    </div>`;
+  }).join('');
+}
+async function confirmWalletDeposit(id) {
+  const { error } = await _sb.from('wallet_deposits').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  showToast('Deposit confirmed — added to your wallet.');
+  loadWallet();
+}
 
 // ── Expenses ─────────────────────────────────────────────────────────────
 let _expFrom = null, _expTo = null, _expPeriod = 'monthly';

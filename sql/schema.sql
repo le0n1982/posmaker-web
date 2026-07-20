@@ -1181,3 +1181,34 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS require_void_refund_proof BOOLEAN DE
 --  Run this block in Supabase -> SQL Editor (once)
 -- ============================================================
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS allow_fund_transfer BOOLEAN DEFAULT false;
+
+-- ============================================================
+--  My Wallet — a manager deposits cash they're holding (COH) into the
+--  owner's bank account and records it here with photo proof. Deducts from
+--  the manager's Net Cash with Manager immediately (same pool cash
+--  advances pull from), but only counts toward the owner's Wallet balance
+--  once the owner clicks "Confirm Received" after checking their bank app.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS wallet_deposits (
+  id                 UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  store_id           UUID        REFERENCES stores NOT NULL,
+  deposited_by_id    UUID        NOT NULL,
+  deposited_by_name  TEXT        NOT NULL,
+  bank_name          TEXT        NOT NULL,
+  amount             NUMERIC     NOT NULL,
+  proof_b64          TEXT        DEFAULT NULL,
+  notes              TEXT        DEFAULT '',
+  status             TEXT        DEFAULT 'pending', -- pending | confirmed
+  created_at         TIMESTAMPTZ DEFAULT NOW(),
+  confirmed_at       TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_deposits_store ON wallet_deposits(store_id);
+ALTER TABLE wallet_deposits ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS wd_owner   ON wallet_deposits;
+DROP POLICY IF EXISTS wd_anon_rw ON wallet_deposits;
+CREATE POLICY wd_owner ON wallet_deposits FOR ALL TO authenticated
+  USING     (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()))
+  WITH CHECK(store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
+CREATE POLICY wd_anon_rw ON wallet_deposits FOR ALL TO anon
+  USING (TRUE) WITH CHECK (TRUE);

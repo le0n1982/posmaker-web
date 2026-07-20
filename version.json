@@ -1,8 +1,8 @@
 {
-  "version": "1.6.7",
+  "version": "1.6.8",
   "date": "2026-07-20",
   "changes": [
-    "💵 New \"Potential Profit\" stat in Inventory — Potential Revenue minus capital (Total Inventory Cost) minus this month's Other Expenses, shown red if negative",
+    "💼 New \"My Wallet\" (Owner's Dashboard) + \"Deposit to Bank\" (Manager) — when a manager deposits cash they're holding into your bank account (e.g. BDO) with photo proof, it deducts from their Net Cash with Manager right away; your Wallet balance updates once you click \"Confirm Received\" after checking your bank app",
     "📈 Relabeled \"Possible Income\" to \"Potential Revenue\" — the figure is price × stock with no cost subtracted, so \"Revenue\" is the accurate accounting term, not \"Income\" (which implies profit)",
     "📈 New Inventory stat: potential revenue if all currently-stocked products sold at their listed price, shown right next to \"Total Inventory Cost\" so you can compare cost vs. potential revenue at a glance",
     "🧮 Owner Dashboard's floating Calculator redesigned — bigger panel and buttons, amber-tinted operator keys for clearer visual distinction, taller \"=\" and wider \"0\" like a standard calculator layout",
