@@ -429,11 +429,6 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div id="poList" style="max-height:200px;overflow-y:auto"></div>
 
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:6px">
-      <label style="font-size:10px;color:#888;display:block;margin-bottom:3px">Discount (all items)</label>
-      <div class="disc-inputs" style="margin-bottom:8px">
-        <input class="disc-inp" id="poDiscPct" type="number" placeholder="%" min="0" max="100" step="0.5" oninput="onPoDiscPct()">
-        <input class="disc-inp" id="poDiscAmt" type="number" placeholder="Amount" min="0" step="0.01" oninput="onPoDiscAmt()">
-      </div>
       <div id="poInvRow"><select id="poInvItem" class="inp" onchange="addPoInvItem()" style="margin-bottom:6px"><option value="">&#8212; Add Bag / Packaging &#8212;</option></select>
       <div id="poInvAddedList" style="font-size:11px;color:#ccc"></div></div>
     </div>
@@ -2029,7 +2024,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.9';
+const POS_BUILD = '1.6.1';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2657,20 +2652,16 @@ function addItem(id) {
 }
 
 // ── Product Options widget — stages multiple products in a scrollable list,
-// plus ONE shared discount and ONE bag/packaging picker for the whole batch.
+// plus ONE bag/packaging picker for the whole batch. Discount lives only in
+// the main cart (Discount button) — no separate copy here.
 // Nothing is committed to the real cart until "Add to Cart" is clicked.
 let _poItems = []; // [{ id, name, price, unit, qty }]
-let _poDiscPct = 0, _poDiscAmt = 0;
 let _poExtra = 0, _poAddedItems = [];
 function openProductOptWidget(id) {
   const p = prods.find(x => x.id == id); if (!p) return;
   const widget = document.getElementById('prodOptWidget');
   if (widget.style.display !== 'block') {
-    // Fresh open (was closed) — seed the batch discount from whatever the
-    // cart-wide discount currently is, and reset the packaging picker.
-    _poDiscPct = discPct; _poDiscAmt = discAmt;
-    document.getElementById('poDiscPct').value = discPct || '';
-    document.getElementById('poDiscAmt').value = discAmt || '';
+    // Fresh open (was closed) — reset the packaging picker.
     _poExtra = 0; _poAddedItems = [];
     document.getElementById('poInvAddedList').innerHTML = '';
     populatePoInvItems();
@@ -2697,7 +2688,6 @@ function openProductOptWidget(id) {
 function closeProductOptWidget() {
   document.getElementById('prodOptWidget').style.display = 'none';
   _poItems = [];
-  _poDiscPct = 0; _poDiscAmt = 0;
   _poExtra = 0; _poAddedItems = [];
 }
 function renderProductOptWidget() {
@@ -2715,8 +2705,7 @@ function renderProductOptWidget() {
 }
 function updatePoGrandTotal() {
   const itemsRaw = _poItems.reduce((s, it) => s + it.price * it.qty, 0);
-  const discRaw  = _poDiscAmt > 0 ? Math.min(_poDiscAmt, itemsRaw) : (itemsRaw * _poDiscPct / 100);
-  const grand = Math.max(0, itemsRaw - discRaw) + _poExtra;
+  const grand = itemsRaw + _poExtra;
   document.getElementById('poTotal').textContent = CUR + grand.toFixed(2);
 }
 function adjPoItemQty(idx, d) {
@@ -2735,16 +2724,6 @@ function adjPoItemQty(idx, d) {
 function removePoItem(idx) {
   _poItems.splice(idx, 1);
   renderProductOptWidget();
-}
-function onPoDiscPct() {
-  _poDiscPct = parseFloat(document.getElementById('poDiscPct').value) || 0;
-  _poDiscAmt = 0; document.getElementById('poDiscAmt').value = '';
-  updatePoGrandTotal();
-}
-function onPoDiscAmt() {
-  _poDiscAmt = parseFloat(document.getElementById('poDiscAmt').value) || 0;
-  _poDiscPct = 0; document.getElementById('poDiscPct').value = '';
-  updatePoGrandTotal();
 }
 function populatePoInvItems() {
   const sel = document.getElementById('poInvItem');
@@ -2806,10 +2785,6 @@ function confirmProductOpt() {
     if (!cart[it.id]) cart[it.id] = { id: it.id, name: it.name, price: it.price, qty: 0 };
     cart[it.id].qty += it.qty;
   }
-  // Commit the batch discount into the shared cart-wide discount.
-  discPct = _poDiscPct; discAmt = _poDiscAmt;
-  document.getElementById('discPct').value = discPct || '';
-  document.getElementById('discAmt').value = discAmt || '';
   // Bag/packaging picked for this batch — flat fee, its own cart line.
   // Gate on having picked an item, not on its cost: a ₱0 packaging item
   // (e.g. a free plastic bag) still needs its stock deducted.

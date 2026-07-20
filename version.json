@@ -1,7 +1,8 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "date": "2026-07-20",
   "changes": [
+    "🎟️ Removed the redundant \"Discount (all items)\" fields from the \"Add Items\" widget — Discount already lives in the main cart; adding items no longer overwrites whatever discount was already set there",
     "🏆 Best Sellers now has Daily / Weekly / Monthly / All-time filters — spot fast-moving products, not just all-time totals",
     "🔧 CRITICAL FIX: on some Android devices, the whole app's internal scrolling (product list, cart, etc.) silently stopped working once content got long enough — older Android WebView versions don't support the \"dvh\" CSS unit this app relied on for its layout height. Added an older-unit fallback plus a JS-measured height as a safety net",
     "🔧 Fixed: switching Discount to \"Specific Items\" could push the item checklist off the top of the screen on smaller/tablet screens, making it look like it wasn't there — the panel now repositions itself after it grows",
