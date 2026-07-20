@@ -1832,7 +1832,7 @@ function renderRemit() {
   const renderRow = (r, isPending) => {
     const diff = parseFloat(r.difference) || 0;
     const diffColor = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--muted)';
-    const ADJ_STATUS_LABEL = { coh_to_staff: 'C.A.', purchase: 'Purchase', deposit: 'Deposit', refund: 'Refund' };
+    const ADJ_STATUS_LABEL = { coh_to_staff: 'C.A.', purchase: 'Purchase', deposit: 'Deposit', refund: 'Refund', fund_transfer: 'Cashier Transfer' };
     const statusBadge = isPending
       ? `<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);animation:pulse 1.5s infinite">&#9679; Pending</span>`
       : r.status === 'mgr_remit'

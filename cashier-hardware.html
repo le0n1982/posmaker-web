@@ -1572,6 +1572,16 @@ async function saveFundTransfer() {
     action: 'EXPENSE_PAID', target_name: name,
     details: JSON.stringify({ name, amount, category: 'Fund Transfer', note: reason })
   }).then(() => {});
+  // The expense row above only deducts from THIS cashier's own Cash Drawer
+  // figure — it doesn't put the cash anywhere. A positive cash_remittances
+  // row adds it to the manager's Cash on Hand pool, same as a normal
+  // end-of-shift remittance would, since that cash physically moved into
+  // the manager's hands.
+  _sb.from('cash_remittances').insert({
+    store_id: STORE_ID, cashier_name: CASHIER_NAME, shift_date: today,
+    pos_sales: 0, cash_on_hand: amount, difference: amount,
+    status: 'fund_transfer', description: 'Fund transfer' + (reason ? ': ' + reason : '')
+  }).then(() => {});
   closeM('mFundTransfer');
   showToast('Fund transfer recorded.');
 }
@@ -2012,7 +2022,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.1';
+const POS_BUILD = '1.7.2';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

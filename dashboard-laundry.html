@@ -3273,7 +3273,7 @@ async function openMgrCohModal() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
-  const adjStatuses = ['purchase','deposit','coh_to_staff'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
@@ -3373,7 +3373,7 @@ async function loadManagerCash() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
-  const adjStatuses = ['purchase','deposit','coh_to_staff'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));

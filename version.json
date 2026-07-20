@@ -1,8 +1,8 @@
 {
-  "version": "1.7.1",
+  "version": "1.7.2",
   "date": "2026-07-20",
   "changes": [
-    "🎟️ CRITICAL FIX: a discount left set on a cart that got cleared without completing checkout (customer changed their mind, etc.) could silently carry over and apply to the next, completely different customer's order — the discount now resets automatically the moment the cart becomes empty",
+    "💸 \"Fund Transfer to Manager\" now adds the amount to the manager's Cash on Hand pool (shows as \"Cashier Transfer\" in Cash Remit, and correctly counted in the owner's \"Net Cash with Manager\") — previously it only deducted from the cashier's Cash Drawer without the cash landing anywhere",
     "💸 Fixed: \"Fund Transfer to Manager\" had no visible record for either the manager or the owner — managers now see a \"Fund Transfers Received from Cashiers\" list on the Cash Remit page; owners no longer see it counted in Other Expenses / Net Profit / Potential Profit (it's an internal cash handoff, not a real business cost)",
     "💼 Fixed: \"My Wallet\" wasn't picking up manager deposits — it was reading from a new, separate deposit form instead of the store's existing \"Deposit to Owner\" feature (Cash Remit > Deposit, with photo proof/QR upload). My Wallet now reads from that existing feature directly, so deposits managers already know how to make show up correctly",
     "💼 New \"My Wallet\" (Owner's Dashboard) — total confirmed cash your managers have deposited to your bank account; click \"Confirm Received\" on a pending deposit after checking your bank app",
