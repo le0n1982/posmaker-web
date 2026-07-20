@@ -312,6 +312,13 @@ button{cursor:pointer}
         </table>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">&#128184; Fund Transfers Received from Cashiers</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Cash a cashier handed over to you mid-shift (POS &rarr; Transfer button). Doesn't show up in the owner's Other Expenses — this is just for you to see what's come your way.</p>
+      <div id="ftReceivedList">
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>
+      </div>
+    </div>
   </div>
 
   <!-- STAFF (view only for managers — no edit or delete) -->
@@ -1400,7 +1407,7 @@ function nav(id){
   closeSidebar();
   if(id==='log')       loadLog();
   if(id==='sales')     loadSales();
-  if(id==='remit')     { loadRemit(); checkPendingRemits(); }
+  if(id==='remit')     { loadRemit(); checkPendingRemits(); loadFundTransfersReceived(); }
   if(id==='staff')     loadMgrStaff();
   if(id==='checklist') loadChecklist();
   if(id==='funds')     loadPayments();
@@ -1738,6 +1745,36 @@ function findInvalidReceiptForRemit(r) {
   });
 }
 
+// Fund Transfers (cashier -> manager, from the POS "Transfer" button) are
+// recorded as an EXPENSE_PAID activity log tagged category='Fund Transfer'
+// (reused so it correctly deducts from the cashier's own Cash Drawer
+// figure) — but that means they're not scoped to actor_name=MGR.name like
+// the rest of this manager's own Activity Log, so they need their own
+// store-wide (not per-actor) query to surface here at all.
+async function loadFundTransfersReceived() {
+  const el = document.getElementById('ftReceivedList');
+  if (!el) return;
+  const CUR = '₱';
+  const { data, error } = await _sb.from('activity_logs').select('*')
+    .eq('store_id', MGR.store_id).eq('action', 'EXPENSE_PAID')
+    .order('created_at', { ascending: false }).limit(50);
+  if (error) { el.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message}</div>`; return; }
+  const rows = (data || []).filter(l => {
+    try { return JSON.parse(l.details || '{}').category === 'Fund Transfer'; } catch (_) { return false; }
+  });
+  if (!rows.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No fund transfers yet.</div>'; return; }
+  el.innerHTML = rows.map(l => {
+    let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+    const dt = new Date(l.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <strong style="font-size:14px">${CUR}${parseFloat(d.amount || 0).toFixed(2)}</strong>
+        <span style="font-size:11px;color:var(--muted)">${dt}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">from ${l.actor_name}${d.note ? ' — ' + d.note : ''}</div>
+    </div>`;
+  }).join('');
+}
 async function loadRemit() {
   const tb = document.getElementById('remitTbody');
   tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Loading...</td></tr>';

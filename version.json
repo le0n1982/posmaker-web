@@ -1,7 +1,8 @@
 {
-  "version": "1.6.9",
+  "version": "1.7.0",
   "date": "2026-07-20",
   "changes": [
+    "💸 Fixed: \"Fund Transfer to Manager\" had no visible record for either the manager or the owner — managers now see a \"Fund Transfers Received from Cashiers\" list on the Cash Remit page; owners no longer see it counted in Other Expenses / Net Profit / Potential Profit (it's an internal cash handoff, not a real business cost)",
     "💼 Fixed: \"My Wallet\" wasn't picking up manager deposits — it was reading from a new, separate deposit form instead of the store's existing \"Deposit to Owner\" feature (Cash Remit > Deposit, with photo proof/QR upload). My Wallet now reads from that existing feature directly, so deposits managers already know how to make show up correctly",
     "💼 New \"My Wallet\" (Owner's Dashboard) — total confirmed cash your managers have deposited to your bank account; click \"Confirm Received\" on a pending deposit after checking your bank app",
     "📈 Relabeled \"Possible Income\" to \"Potential Revenue\" — the figure is price × stock with no cost subtracted, so \"Revenue\" is the accurate accounting term, not \"Income\" (which implies profit)",

@@ -2225,7 +2225,11 @@ async function loadExpenses(period) {
   const viewDays    = period === 'custom' ? customDays : (PERIOD_DAYS[period] || 30);
 
   const [{ data: rawExps }, { data: orders }] = await Promise.all([
-    _sb.from('expenses').select('*').eq('store_id', STORE.id)
+    // Fund Transfer entries are an internal cashier->manager cash handoff,
+    // not a real business cost — excluded here so they don't inflate this
+    // report (they're recorded under expenses only so they correctly
+    // deduct from the cashier's own Cash Drawer figure).
+    _sb.from('expenses').select('*').eq('store_id', STORE.id).neq('category', 'Fund Transfer')
        .lte('expense_date', toDate)
        .order('expense_date', { ascending: false }),
     _sb.from('orders').select('id,total').eq('store_id', STORE.id)
@@ -3692,7 +3696,7 @@ async function loadReport(period) {
   const _rptViewDays = Math.max(1, Math.round((to - from) / 86400000));
   const _rptToDate = to.toISOString().split('T')[0];
   const _rptFromDate = from.toISOString().split('T')[0];
-  const { data: _rptRawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', _rptToDate);
+  const { data: _rptRawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).neq('category', 'Fund Transfer').lte('expense_date', _rptToDate);
   const _RPT_CYCLE_DAYS = { daily: 1, weekly: 7, monthly: 30 };
   _rptExpenseTotal = (_rptRawExps || []).reduce((s, e) => {
     const cycle = e.billing_cycle || 'one-time';
@@ -4046,7 +4050,7 @@ async function loadCandleChart() {
 
   // Other Expenses, prorated to each bucket (day or month) — same logic as the report
   const rangeEndStr = isYear ? new Date(now.getFullYear(), 11, 31).toLocaleDateString('en-CA') : new Date(now.getFullYear(), now.getMonth()+1, 0).toLocaleDateString('en-CA');
-  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).lte('expense_date', rangeEndStr);
+  const { data: rawExps } = await _sb.from('expenses').select('amount,billing_cycle,expense_date').eq('store_id', STORE.id).neq('category', 'Fund Transfer').lte('expense_date', rangeEndStr);
   const CYCLE_DAYS_C = { daily: 1, weekly: 7, monthly: 30 };
   function expenseForBucket(bucketStartStr, bucketEndStr, bucketDays) {
     return (rawExps || []).reduce((s, e) => {
@@ -4271,7 +4275,7 @@ async function updatePossibleIncome() {
     try {
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       const { data: exps } = await _sb.from('expenses').select('amount')
-        .eq('store_id', STORE.id).gte('expense_date', monthStart.toISOString().slice(0, 10));
+        .eq('store_id', STORE.id).neq('category', 'Fund Transfer').gte('expense_date', monthStart.toISOString().slice(0, 10));
       monthExpenses = (exps || []).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     } catch (_) {}
     const profit = total - invCapital - monthExpenses;
