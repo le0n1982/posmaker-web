@@ -1,7 +1,9 @@
 {
-  "version": "1.7.4",
+  "version": "1.7.6",
   "date": "2026-07-21",
   "changes": [
+    "🔧 CRITICAL FIX: remittance and expense dates were computed using UTC time instead of local (Philippines) time — any remittance or cashier-recorded expense made between 12:00 AM and 7:59 AM was silently saved under YESTERDAY's date instead of today's. Now uses the actual local calendar date.",
+    "🔧 CRITICAL FIX: submitting an actual end-of-shift Cash Remittance after doing a Fund Transfer could save the WRONG \"POS Sales\" figure (and therefore the wrong Over/Short \"Difference\") straight into the record — the Fund Transfer was mistakenly treated as if it were the last real remit, so any sales made before it were silently excluded from the count the manager sees when confirming the remittance.",
     "🔧 CRITICAL FIX: \"My Activity Today\" (Total Sales, Cash Drawer, and the whole activity feed) reset to zero the moment the calendar day changed, even if the cashier still had un-remitted cash from before midnight — it now looks back to the last actual remit instead of hard-resetting at midnight, so unremitted cash never silently disappears from the count.",
     "🔧 Fixed: after the previous Fund Transfer → Cash on Hand update, \"My Activity Today\" started showing the wrong Cash Drawer total (and a confusing duplicate \"Remittance\" entry) whenever a cashier did a Fund Transfer — sales made before the transfer were being dropped from the expected drawer amount. Fund Transfers no longer count as an end-of-shift remit for this calculation.",
     "💸 \"Fund Transfer to Manager\" now adds the amount to the manager's Cash on Hand pool (shows as \"Cashier Transfer\" in Cash Remit, and correctly counted in the owner's \"Net Cash with Manager\") — previously it only deducted from the cashier's Cash Drawer without the cash landing anywhere",

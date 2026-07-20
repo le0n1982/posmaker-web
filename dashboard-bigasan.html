@@ -1803,6 +1803,15 @@ function toggleTheme() {
 }
 _updateThemeIcon();
 
+// `new Date().toISOString().slice(0, 10)` reads the UTC calendar date, which
+// is behind the Philippines' local date (UTC+8) from 12:00 AM to 7:59 AM
+// local time — using it for "today" silently saves/labels things with
+// YESTERDAY's date during that window. This reads the actual local date.
+function _localToday() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
@@ -3388,7 +3397,7 @@ async function transferCohToStaffFunds(maxAmount) {
   const amt = parseFloat(inp.value);
   if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
   if (amt > maxAmount + 0.001) { showToast('Cannot transfer more than the current Net Cash with Manager.', true); return; }
-  const today = new Date().toISOString().slice(0,10);
+  const today = _localToday();
   const { error: e1 } = await _sb.from('cash_remittances').insert({
     store_id: STORE.id, cashier_name: 'Owner Transfer', shift_date: today,
     pos_sales: 0, cash_on_hand: amt, difference: amt,
@@ -4176,7 +4185,7 @@ function downloadReport() {
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'sales_report_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.download = 'sales_report_' + _localToday() + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
   showToast('Report downloaded.');
@@ -5561,7 +5570,7 @@ function downloadActivityLog() {
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0,10);
+  const today = _localToday();
   a.href = url; a.download = 'activity-log-' + today + '.csv';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
@@ -6328,7 +6337,7 @@ function exportOrdCSV() {
   const csv = [hdr.join(','), ...rows].join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('ï»¿' + csv);
-  a.download = `orders_${STORE.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `orders_${STORE.name.replace(/\s+/g,'_')}_${_localToday()}.csv`;
   a.click();
   showToast('CSV downloaded.');
 }
@@ -7443,7 +7452,7 @@ async function saveSendPay(){
   const rcpt=(rImg.src&&rImg.src.startsWith('data:'))?rImg.src:null;
   const btn=document.getElementById('spBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending…';
-  const today=new Date().toISOString().slice(0,10);
+  const today=_localToday();
   const desc='Owner sent'+(note?': '+note:'');
   const {data:crD,error:crE}=await _sb.from('cash_remittances').insert({
     store_id:STORE.id,cashier_name:s.username||'staff',shift_date:today,

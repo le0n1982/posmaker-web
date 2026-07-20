@@ -1481,6 +1481,15 @@ async function checkCashierInbox() {
   } catch(_) {}
 }
 
+// `new Date().toISOString().slice(0, 10)` reads the UTC calendar date, which
+// is behind the Philippines' local date (UTC+8) from 12:00 AM to 7:59 AM
+// local time — using it for "today" silently saves YESTERDAY's date during
+// that window (e.g. a remittance at 12:31 AM gets the wrong shift_date).
+// This reads the actual local calendar date instead.
+function _localToday() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 // ── Fund Transfer to Manager ────────────────────────────────────────────────
 // Cash the cashier is physically handing over to the manager mid-shift (e.g.
 // to consolidate cash, make change for another till). Recorded the exact
@@ -1499,7 +1508,7 @@ async function saveFundTransfer() {
   if (!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
   const btn = document.getElementById('ftSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = _localToday();
   const name = 'Fund Transfer to Manager';
   const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer', expense_date: today, notes: reason, added_by: CASHIER_NAME };
   const { error } = await _sb.from('expenses').insert(row);
@@ -1540,8 +1549,11 @@ async function refreshCarriedFloat() {
     return;
   }
   try {
+    // Exclude 'fund_transfer' rows — those are just the automatic COH-credit
+    // side effect of a mid-shift Fund Transfer, not a real end-of-shift cash
+    // count, and must not be mistaken for a carried-over drawer float.
     const { data } = await _sb.from('cash_remittances')
-      .select('drawer_float,cashier_name').eq('store_id', STORE_ID)
+      .select('drawer_float,cashier_name').eq('store_id', STORE_ID).neq('status', 'fund_transfer')
       .order('created_at', { ascending: false }).limit(1);
     _remitCarriedFloat = parseFloat(data?.[0]?.drawer_float) || 0;
     _remitCarriedFloatFrom = data?.[0]?.cashier_name || '';
@@ -1549,7 +1561,7 @@ async function refreshCarriedFloat() {
 }
 async function openRemitOnLogout() {
   const name = CASHIER?.full_name || CASHIER?.username || CASHIER_NAME || '—';
-  const today = new Date().toISOString().slice(0,10);
+  const today = _localToday();
   document.getElementById('remitLogCashier').textContent = name;
   document.getElementById('remitLogDate').textContent = new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
   document.getElementById('remitLogCOH').value = '';
@@ -1577,8 +1589,11 @@ async function openRemitOnLogout() {
     // Not scoped to today — a cashier's shift can span past midnight (e.g. a
     // stuck/unattended session reloaded into a fresh login overnight), so the
     // real last remittance (whatever day it happened) must still be found.
+    // Same exclusion as above — a Fund Transfer must not count as "the last
+    // remit" here, or sales made before it get silently dropped from POS
+    // Sales on the next real remittance (wrong pos_sales/difference saved).
     const { data: lastRemit } = await _sb.from('cash_remittances')
-      .select('created_at').eq('store_id', STORE_ID).eq('cashier_name', name)
+      .select('created_at').eq('store_id', STORE_ID).eq('cashier_name', name).neq('status', 'fund_transfer')
       .order('created_at', { ascending: false }).limit(1);
     await refreshCarriedFloat();
     const _lsRemitKey = 'pm_last_remit_' + STORE_ID + '_' + name;
@@ -1730,7 +1745,7 @@ async function confirmRemitLogout() {
   const btn = document.getElementById('remitLogConfirmBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
   const name   = document.getElementById('remitLogCashier').textContent;
-  const today  = new Date().toISOString().slice(0,10);
+  const today  = _localToday();
   const pos    = parseFloat(document.getElementById('remitCk3').textContent.replace(/[^0-9.]/g,'')) || 0;
   const cash   = parseFloat(document.getElementById('remitCk4').textContent.replace(/[^0-9.]/g,'')) || 0;
   const diff   = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
@@ -1960,7 +1975,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.4';
+const POS_BUILD = '1.7.6';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3411,7 +3426,7 @@ async function saveExpenseFromCashier() {
   if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
   const btn = document.getElementById('cexpSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
-  const today = new Date().toISOString().slice(0,10);
+  const today = _localToday();
   const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category, expense_date: today, notes, added_by: CASHIER_NAME };
   const { error } = await _sb.from('expenses').insert(row);
   btn.disabled = false; btn.innerHTML = '&#10003; Save Expense';
