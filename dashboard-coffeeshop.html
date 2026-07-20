@@ -442,6 +442,10 @@ input:checked + .slider:before{transform:translateX(18px)}
             <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">&#128200; Potential Revenue <span style="font-weight:400">(if all stock sold)</span></div>
             <div id="invPossibleIncomeVal" style="font-size:28px;font-weight:800;color:var(--ok-text)">&#8369;0.00</div>
           </div>
+          <div id="invPotentialProfitBanner" style="flex:1;min-width:220px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 20px">
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">&#128181; Potential Profit <span style="font-weight:400">(revenue &minus; capital &minus; this month's expenses)</span></div>
+            <div id="invPotentialProfitVal" style="font-size:28px;font-weight:800;color:var(--ok-text)">&#8369;0.00</div>
+          </div>
         </div>
         <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
@@ -4260,7 +4264,7 @@ function _defaultOpsData() {
 // auto-match against inventory_items), so this always matches what the POS
 // would actually let a cashier sell. Untracked products (no stock signal
 // at all) are excluded rather than counted as unlimited.
-function updatePossibleIncome() {
+async function updatePossibleIncome() {
   const el = document.getElementById('invPossibleIncomeVal');
   if (!el) return;
   const invById = {}, invByName = {};
@@ -4291,6 +4295,25 @@ function updatePossibleIncome() {
     if (isFinite(stock) && stock > 0) total += parseFloat(p.price || 0) * stock;
   });
   el.textContent = CUR + total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Potential Profit = Potential Revenue - capital (Total Inventory Cost) -
+  // this month's Other Expenses. Revenue/capital are both "right now"
+  // snapshots (not date-ranged), so expenses are scoped to the current
+  // calendar month rather than all-time, to stay roughly comparable.
+  const profitEl = document.getElementById('invPotentialProfitVal');
+  if (profitEl) {
+    const invCapital = (invItems || []).reduce((s, i) => s + parseFloat(i.cost_price || 0) * parseFloat(i.stock || 0), 0);
+    let monthExpenses = 0;
+    try {
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      const { data: exps } = await _sb.from('expenses').select('amount')
+        .eq('store_id', STORE.id).gte('expense_date', monthStart.toISOString().slice(0, 10));
+      monthExpenses = (exps || []).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    } catch (_) {}
+    const profit = total - invCapital - monthExpenses;
+    profitEl.textContent = CUR + profit.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    profitEl.style.color = profit >= 0 ? 'var(--ok-text)' : 'var(--danger-text)';
+  }
 }
 async function loadProducts() {
   const { data, error } = await _sb.from('products')
