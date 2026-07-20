@@ -418,9 +418,15 @@ input:checked + .slider:before{transform:translateX(18px)}
             <button class="btn btn-accent btn-sm" id="btnAddInv" onclick="openInvModal()" title="Add a new raw material or stock item and set its quantity and cost.">+ Add Item</button>
           </div>
         </div>
-        <div id="invTotalCostBanner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:0 0 12px">
-          <span style="font-size:13px;color:var(--muted);font-weight:600">&#128176; Total Inventory Cost (all items)</span>
-          <span id="invTotalCostVal" style="font-size:32px;font-weight:800;color:var(--accent)">&#8369;0.00</span>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px">
+          <div id="invTotalCostBanner" style="flex:1;min-width:220px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 20px">
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">&#128176; Total Inventory Cost</div>
+            <div id="invTotalCostVal" style="font-size:28px;font-weight:800;color:var(--accent)">&#8369;0.00</div>
+          </div>
+          <div id="invPossibleIncomeBanner" style="flex:1;min-width:220px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 20px">
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">&#128200; Possible Income <span style="font-weight:400">(if all stock sold)</span></div>
+            <div id="invPossibleIncomeVal" style="font-size:28px;font-weight:800;color:var(--ok-text)">&#8369;0.00</div>
+          </div>
         </div>
         <div id="invExpiryBanner" style="display:none;background:var(--danger-bg);border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;margin:0 0 10px;font-size:13px;color:var(--text);line-height:1.6"></div>
           <table>
@@ -4043,6 +4049,44 @@ function downloadReport() {
 }
 
 // ── Products ────────────────────────────────────────────────────────────────────
+// "Possible Income" — revenue if every product's currently resolvable stock
+// sold at its listed price. Mirrors the exact stock-resolution order the
+// cashier POS uses (inv_links > products.stock column > name/SKU
+// auto-match against inventory_items), so this always matches what the POS
+// would actually let a cashier sell. Untracked products (no stock signal
+// at all) are excluded rather than counted as unlimited.
+function updatePossibleIncome() {
+  const el = document.getElementById('invPossibleIncomeVal');
+  if (!el) return;
+  const invById = {}, invByName = {};
+  (invItems || []).forEach(i => {
+    invById[i.id] = i;
+    if (i.name) invByName[i.name.toLowerCase().trim()] = i;
+    if (i.sku && i.sku.trim()) invByName[i.sku.toLowerCase().trim()] = i;
+  });
+  let total = 0;
+  (allProds || []).forEach(p => {
+    let links = []; try { links = p.inv_links ? JSON.parse(p.inv_links) : []; } catch (_) {}
+    let stock = parseFloat(p.stock) || 0;
+    if (links.length > 0) {
+      let eff = Infinity;
+      links.forEach(link => {
+        const invId = typeof link === 'string' ? link : link.id;
+        const useQty = typeof link === 'object' ? (link.qty || 1) : 1;
+        const inv = invById[invId];
+        if (inv) eff = Math.min(eff, Math.floor((inv.stock || 0) / (useQty || 1)));
+      });
+      stock = eff;
+    } else if (!(stock > 0)) {
+      const key = (p.name || '').toLowerCase().trim();
+      const skuKey = (p.sku || '').toLowerCase().trim();
+      const inv = invByName[key] || (skuKey ? invByName[skuKey] : null);
+      if (inv) stock = Math.floor((inv.stock || 0) / 1);
+    }
+    if (isFinite(stock) && stock > 0) total += parseFloat(p.price || 0) * stock;
+  });
+  el.textContent = CUR + total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 async function loadProducts() {
   const { data, error } = await _sb.from('products')
     .select('*').eq('store_id', STORE.id).order('category').order('name').abortSignal(_sig());
@@ -4051,6 +4095,7 @@ async function loadProducts() {
   frozenProdIds = computeFrozenIds(allProds, FREE_PROD_LIMIT, IS_PRO);
   renderProds(allProds);
   updateAddBtnLabels();
+  updatePossibleIncome();
 }
 function filterProds() {
   const q = document.getElementById('prodSearch').value.toLowerCase();
@@ -6068,6 +6113,7 @@ async function loadInventory() {
   frozenInvIds = computeFrozenIds(invItems, FREE_INV_LIMIT, IS_PRO);
   const _invTotalCostEl=document.getElementById('invTotalCostVal');
   if(_invTotalCostEl){const _invTotalCost=invItems.reduce((s,i)=>s+parseFloat(i.cost_price||0)*parseFloat(i.stock||0),0);_invTotalCostEl.textContent=CUR+_invTotalCost.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  updatePossibleIncome();
   const cats=[...new Set(invItems.map(i=>i.category).filter(Boolean))].sort();
   const sel=document.getElementById('invCatFilter');
   sel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
