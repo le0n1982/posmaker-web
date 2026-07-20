@@ -2024,7 +2024,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.6.3';
+const POS_BUILD = '1.7.1';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2831,6 +2831,22 @@ function getCartTotals() {
 }
 
 function redrawCart() {
+  // A cashier who clears the cart without completing checkout (customer
+  // changed their mind, wrong order, etc.) never goes through newOrder()'s
+  // reset — so an emptied-out cart could silently carry the previous
+  // customer's discount into whatever gets added next. Reset the instant
+  // the cart becomes empty instead of waiting for a full sale to complete.
+  if (!Object.keys(cart).length && (discPct > 0 || discAmt > 0 || discScope !== 'all' || discSelectedKeys.size > 0)) {
+    discPct = 0; discAmt = 0; discScope = 'all'; discSelectedKeys = new Set();
+    const _dp = document.getElementById('discPct'); if (_dp) _dp.value = '';
+    const _da = document.getElementById('discAmt'); if (_da) _da.value = '';
+    const _dip = document.getElementById('discItemPicker'); if (_dip) _dip.style.display = 'none';
+    const _allBtn = document.getElementById('discScopeAllBtn');
+    const _specBtn = document.getElementById('discScopeSpecificBtn');
+    if (_allBtn)  { _allBtn.style.background = 'var(--accent)'; _allBtn.style.color = '#fff'; }
+    if (_specBtn) { _specBtn.style.background = 'transparent'; _specBtn.style.color = 'var(--muted)'; }
+    updateDiscTriggerLabel();
+  }
   const { items, raw, disc, total, tax, sub } = getCartTotals();
   const hasItems = items.length > 0;
   const _discPanelEl = document.getElementById('discPanel');
