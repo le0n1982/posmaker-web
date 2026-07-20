@@ -2008,7 +2008,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.6.2';
+const POS_BUILD = '1.6.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2364,15 +2364,15 @@ function getCartTotals() {
   // subtotal of the checked items, not the whole cart — a stray key left
   // over from a removed item is harmless since it just won't match anything
   // in the current cart.
-  const discSelectedItems = discScope === 'specific' ? items.filter(i => discSelectedKeys.has(i._key || i.id)) : [];
+  const discSelectedItems = discScope === 'specific' ? items.filter(i => discSelectedKeys.has(i._key || i.id)) : items;
   const discBase = discScope === 'specific'
     ? parseFloat(discSelectedItems.reduce((s, i) => s + i.price * i.qty, 0).toFixed(2))
     : raw;
-  // A peso Amount discount on "Specific Items" is per unit, not a flat
-  // subtraction — 2 sacks of the same product with a ₱5 discount means ₱5
-  // off EACH sack (₱10 total), not ₱5 off the line no matter the quantity.
+  // A peso Amount discount is always per unit, never a flat subtraction —
+  // 2 sacks of the same product with a ₱5 discount means ₱5 off EACH sack
+  // (₱10 total), same whether that's "All Purchases" or "Specific Items".
   const disc = discAmt > 0
-    ? parseFloat(Math.min(discScope === 'specific' ? discAmt * discSelectedItems.reduce((s, i) => s + i.qty, 0) : discAmt, discBase).toFixed(2))
+    ? parseFloat(Math.min(discAmt * discSelectedItems.reduce((s, i) => s + i.qty, 0), discBase).toFixed(2))
     : parseFloat((discBase * discPct / 100).toFixed(2));
   const total = parseFloat((raw - disc).toFixed(2));
   const tax   = parseFloat((total * TAX / (100 + TAX)).toFixed(2));
@@ -2507,9 +2507,8 @@ function updateDiscTriggerLabel() {
   const label = document.getElementById('discTriggerLabel');
   const btn   = document.getElementById('discTrigger');
   const scopeNote = discScope === 'specific' ? ` (${discSelectedKeys.size} item${discSelectedKeys.size === 1 ? '' : 's'})` : '';
-  const perUnit = discScope === 'specific' ? '/item' : '';
   if (discPct > 0)      label.textContent = 'Discount: ' + discPct + '%' + scopeNote;
-  else if (discAmt > 0) label.textContent = 'Discount: ' + CUR + discAmt.toFixed(2) + perUnit + scopeNote;
+  else if (discAmt > 0) label.textContent = 'Discount: ' + CUR + discAmt.toFixed(2) + '/item' + scopeNote;
   else                   label.textContent = 'Discount';
   btn.classList.toggle('active', discPct > 0 || discAmt > 0);
 }
