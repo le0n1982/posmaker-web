@@ -2022,7 +2022,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.2';
+const POS_BUILD = '1.7.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3545,14 +3545,21 @@ async function openMySales() {
     // Structured remittance figures straight from the source table — reading
     // cash_on_hand/remit_amount/drawer_float/status directly instead of
     // trying to re-parse the activity log's pipe-delimited text summary.
+    // Exclude 'fund_transfer' rows here — those are just the automatic
+    // COH-credit side effect of a mid-shift Fund Transfer, not a real
+    // end-of-shift cash count, and are already shown as their own "Fund
+    // Transfer" expense card in this same feed.
     _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at')
-      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
       .gte('created_at', dayStart).order('created_at', { ascending: false }),
     // Just this cashier's most recent remit timestamp (any day) — needed to
     // scope the Cash Drawer figure below to "since last remit", not the
     // whole day (a mid-day remit already accounted for the sales before it).
+    // Same exclusion as above — a Fund Transfer must not count as "the
+    // last remit" for the cash-since-last-remit math below, or sales made
+    // before it get dropped from the Cash Drawer figure.
     _sb.from('cash_remittances').select('created_at')
-      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
       .order('created_at', { ascending: false }).limit(1)
   ]);
   if (error) {
