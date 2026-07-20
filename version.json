@@ -1,7 +1,8 @@
 {
-  "version": "1.6.3",
+  "version": "1.6.4",
   "date": "2026-07-20",
   "changes": [
+    "🧮 Owner Dashboard's floating Calculator redesigned — bigger panel and buttons, amber-tinted operator keys for clearer visual distinction, taller \"=\" and wider \"0\" like a standard calculator layout",
     "🎟️ Fixed: a peso Amount discount only took off a flat amount no matter the quantity, even on \"All Purchases\" (the default) — 2 of the same product with a ₱5 discount now correctly takes ₱5 off EACH one (₱10 total) in both discount scopes, same as how % discount already scaled with quantity",
     "🎟️ Removed the redundant \"Discount (all items)\" fields from the \"Add Items\" widget — Discount already lives in the main cart; adding items no longer overwrites whatever discount was already set there",
     "🏆 Best Sellers now has Daily / Weekly / Monthly / All-time filters — spot fast-moving products, not just all-time totals",

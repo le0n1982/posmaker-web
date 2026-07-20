@@ -7359,45 +7359,41 @@ async function saveSendPay(){
 
 <!-- ── FLOATING CALCULATOR WIDGET ── -->
 <div id="calcIcon" title="Calculator" style="position:fixed;bottom:90px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--s1);border:1px solid var(--border);display:none;align-items:center;justify-content:center;cursor:grab;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:600;font-size:22px;touch-action:none;user-select:none">&#129518;</div>
-<div id="calcPanel" style="display:none;position:fixed;bottom:148px;right:20px;width:220px;background:var(--s1);border:1px solid var(--border);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);z-index:600;padding:12px">
-  <div id="calcDragHandle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:move;touch-action:none;user-select:none">
-    <strong style="font-size:12px;color:var(--muted)">Calculator</strong>
-    <span style="cursor:pointer;color:var(--muted);font-size:14px" onclick="toggleCalc()">&#10005;</span>
+<div id="calcPanel" style="display:none;position:fixed;bottom:148px;right:20px;width:272px;background:var(--s1);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.5);z-index:600;padding:16px">
+  <div id="calcDragHandle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;cursor:move;touch-action:none;user-select:none">
+    <strong style="font-size:13px;color:var(--muted)">Calculator</strong>
+    <span style="cursor:pointer;color:var(--muted);font-size:16px" onclick="toggleCalc()">&#10005;</span>
   </div>
-  <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:right;font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;min-height:30px;overflow-x:auto;white-space:nowrap">0</div>
-  <div style="display:flex;flex-direction:column;gap:6px">
-    <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcClear()" style="flex:1;background:var(--danger-bg);color:var(--danger-text)">C</button>
-      <button type="button" class="calc-btn" onclick="calcInput('/')" style="flex:1">&#247;</button>
-      <button type="button" class="calc-btn" onclick="calcInput('*')" style="flex:1">&#215;</button>
-      <button type="button" class="calc-btn" onclick="calcInput('-')" style="flex:1">&#8722;</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcInput('7')" style="flex:1">7</button>
-      <button type="button" class="calc-btn" onclick="calcInput('8')" style="flex:1">8</button>
-      <button type="button" class="calc-btn" onclick="calcInput('9')" style="flex:1">9</button>
-      <button type="button" class="calc-btn" onclick="calcInput('+')" style="flex:1">+</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcInput('4')" style="flex:1">4</button>
-      <button type="button" class="calc-btn" onclick="calcInput('5')" style="flex:1">5</button>
-      <button type="button" class="calc-btn" onclick="calcInput('6')" style="flex:1">6</button>
-      <button type="button" class="calc-btn" onclick="calcEquals()" style="flex:1;background:var(--accent);color:#fff">=</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcInput('1')" style="flex:1">1</button>
-      <button type="button" class="calc-btn" onclick="calcInput('2')" style="flex:1">2</button>
-      <button type="button" class="calc-btn" onclick="calcInput('3')" style="flex:1">3</button>
-      <button type="button" class="calc-btn" onclick="calcInput('0')" style="flex:1">0</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button type="button" class="calc-btn" onclick="calcInput('.')" style="flex:1">.</button>
-    </div>
+  <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:10px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+    <button type="button" class="calc-btn" onclick="calcClear()" style="background:var(--danger-bg);color:var(--danger-text)">C</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('/')">&#247;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('*')">&#215;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('-')">&#8722;</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
+    <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
+    <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('+')">+</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
+    <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
+    <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
+    <button type="button" class="calc-btn" onclick="calcEquals()" style="background:var(--accent);color:#fff;grid-row:span 2">=</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
+    <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
+    <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('0')" style="grid-column:span 2">0</button>
+    <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
   </div>
 </div>
 <style>
-.calc-btn{padding:10px 0;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer}
-.calc-btn:active{opacity:.7}
+.calc-btn{padding:15px 0;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:18px;font-weight:600;cursor:pointer;transition:filter .1s}
+.calc-btn:hover{filter:brightness(.96)}
+.calc-btn:active{filter:brightness(.9);transform:scale(.97)}
+.calc-btn-op{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.3);color:#f59e0b}
 </style>
 <script>
 let _calcExpr = '';
