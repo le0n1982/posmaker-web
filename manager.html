@@ -2314,7 +2314,7 @@ async function loadCashSummary() {
     .order('created_at', { ascending: false });
 
   const rows = data || [];
-  const adjStatuses = ['purchase','deposit','coh_to_staff','refund'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
@@ -2344,7 +2344,7 @@ async function loadCashSummary() {
   // List only the adjustment types actually present, in plain words — a
   // static "(stock/deposit/refunds)" label was misleading when e.g. no
   // stock was ever bought with drawer cash, just refunds.
-  const ADJ_TYPE_LABELS = { purchase: 'added stocks', deposit: 'owner deposits', coh_to_staff: 'staff cash out', refund: 'refunds' };
+  const ADJ_TYPE_LABELS = { purchase: 'added stocks', deposit: 'owner deposits', coh_to_staff: 'staff cash out', refund: 'refunds', fund_transfer: 'cashier fund transfers' };
   const adjTypesPresent = [...new Set(adjRows.map(r => r.status))].map(t => ADJ_TYPE_LABELS[t] || t);
 
   // Store for modal display, and a structured snapshot (not just HTML) so a
