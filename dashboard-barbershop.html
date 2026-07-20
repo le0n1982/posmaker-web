@@ -697,7 +697,12 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
         <div class="tbl-wrap" style="grid-area:bestsellers">
           <div class="tbl-head"><h3>&#127942; Best Sellers</h3></div>
-          <div style="padding:8px 14px 0;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">All-time</div>
+          <div style="padding:8px 14px 0;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" id="bsDaily" onclick="setBestSellerPeriod('daily')">Daily</button>
+            <button class="btn btn-ghost btn-sm" id="bsWeekly" onclick="setBestSellerPeriod('weekly')">Weekly</button>
+            <button class="btn btn-ghost btn-sm" id="bsMonthly" onclick="setBestSellerPeriod('monthly')">Monthly</button>
+            <button class="btn btn-accent btn-sm" id="bsAll" onclick="setBestSellerPeriod('all')">All-time</button>
+          </div>
           <div id="bestSellerList" style="padding:14px;max-height:320px;overflow-y:auto">Loading...</div>
         </div>
         <div class="tbl-wrap" style="grid-area:summary">
@@ -3711,10 +3716,29 @@ async function loadReport(period) {
 // Best Sellers — all-time since the store started, independent of the
 // Daily/Custom period filter above (so it doesn't say "no sales" just
 // because today happens to have none yet).
+let _bsPeriod = 'all';
+function setBestSellerPeriod(period) {
+  _bsPeriod = period;
+  ['bsDaily','bsWeekly','bsMonthly','bsAll'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const active = id === 'bs' + period.charAt(0).toUpperCase() + period.slice(1);
+    btn.classList.toggle('btn-accent', active);
+    btn.classList.toggle('btn-ghost', !active);
+  });
+  loadBestSellers();
+}
 async function loadBestSellers() {
   if (!STORE?.id) return;
   const el = document.getElementById('bestSellerList');
-  const { data: orders } = await _sb.from('orders').select('id').eq('store_id', STORE.id);
+  let q = _sb.from('orders').select('id').eq('store_id', STORE.id);
+  if (_bsPeriod !== 'all') {
+    const since = new Date();
+    if (_bsPeriod !== 'daily') since.setDate(since.getDate() - (_bsPeriod === 'weekly' ? 7 : 30));
+    since.setHours(0, 0, 0, 0);
+    q = q.gte('timestamp', since.toISOString());
+  }
+  const { data: orders } = await q;
   const ids = (orders || []).map(o => o.id);
   _rptItemAgg = {};
   if (ids.length) {
