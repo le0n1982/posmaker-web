@@ -2046,7 +2046,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.3';
+const POS_BUILD = '1.7.4';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3434,13 +3434,28 @@ async function openMySales() {
   document.getElementById('mMySales').classList.add('show');
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const [{ data: orders, error }, { data: logs }, { data: remits }, { data: lastRemit }] = await Promise.all([
+  // Look up the last real remit FIRST — a cashier who hasn't remitted since
+  // before midnight still has that cash sitting in the drawer, so the query
+  // window below must reach back that far too, not just "today". Otherwise
+  // Total Sales / Cash Drawer / the whole feed silently zero out the moment
+  // the calendar flips, even with real unremitted cash still in the till.
+  const { data: lastRemit } = await _sb.from('cash_remittances').select('created_at')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
+    .order('created_at', { ascending: false }).limit(1);
+  let _sinceRemit;
+  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
+  const _dbLastRemit = lastRemit?.[0]?.created_at;
+  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
+  if (!_sinceRemit) _sinceRemit = dayStart;
+  const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
+  const carriedFromPrevDay = queryStart < dayStart;
+  const [{ data: orders, error }, { data: logs }, { data: remits }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
-      .gte('timestamp', dayStart).order('timestamp', { ascending: false }),
+      .gte('timestamp', queryStart).order('timestamp', { ascending: false }),
     _sb.from('activity_logs').select('action,details,created_at')
       .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME)
-      .gte('created_at', dayStart).order('created_at', { ascending: false }),
+      .gte('created_at', queryStart).order('created_at', { ascending: false }),
     // Structured remittance figures straight from the source table — reading
     // cash_on_hand/remit_amount/drawer_float/status directly instead of
     // trying to re-parse the activity log's pipe-delimited text summary.
@@ -3450,16 +3465,7 @@ async function openMySales() {
     // Transfer" expense card in this same feed.
     _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
-      .gte('created_at', dayStart).order('created_at', { ascending: false }),
-    // Just this cashier's most recent remit timestamp (any day) — needed to
-    // scope the Cash Drawer figure below to "since last remit", not the
-    // whole day (a mid-day remit already accounted for the sales before it).
-    // Same exclusion as above — a Fund Transfer must not count as "the
-    // last remit" for the cash-since-last-remit math below, or sales made
-    // before it get dropped from the Cash Drawer figure.
-    _sb.from('cash_remittances').select('created_at')
-      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
-      .order('created_at', { ascending: false }).limit(1)
+      .gte('created_at', queryStart).order('created_at', { ascending: false })
   ]);
   if (error) {
     document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
@@ -3468,17 +3474,11 @@ async function openMySales() {
   const rows = orders || [];
   const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
   document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
-  document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + ' today';
+  document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + (carriedFromPrevDay ? ' unremitted' : ' today');
   // "Cash Drawer" = starting float carried over from the last remit + only
-  // the cash collected SINCE that remit (not the whole day — a mid-day
-  // remit already accounted for everything before it, so re-including
-  // those earlier sales here would double-count them) minus any expenses
-  // paid out of the drawer in that same window.
-  let _sinceRemit;
-  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
-  const _dbLastRemit = lastRemit?.[0]?.created_at;
-  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
-  if (!_sinceRemit) _sinceRemit = dayStart;
+  // the cash collected SINCE that remit (which may be from before today, if
+  // the cashier hasn't remitted yet) minus any expenses paid out of the
+  // drawer in that same window.
   const _cashPortion = o => {
     const t = parseFloat(o.total) || 0;
     if ((o.payment_method || 'Cash') === 'Cash') return t;
@@ -3490,10 +3490,8 @@ async function openMySales() {
     .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
     .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
   document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit - expensesSinceRemit).toFixed(2);
-  // E-Pay is just today's total, not scoped to "since last remit" like Cash
-  // Drawer — e-pay never touches the physical till, so there's nothing to
-  // reconcile there; it's purely informational (how much came in via GCash/
-  // card/etc. today).
+  // E-Pay mirrors the same window as Total Sales above — informational only,
+  // e-pay never touches the physical till so there's nothing to reconcile.
   const epayToday = rows.reduce((s, o) => s + ((parseFloat(o.total) || 0) - _cashPortion(o)), 0);
   document.getElementById('myEpayTotal').textContent = CUR + epayToday.toFixed(2);
   // Merge today's sales with this cashier's own remittances, expenses, and

@@ -1,7 +1,8 @@
 {
-  "version": "1.7.3",
-  "date": "2026-07-20",
+  "version": "1.7.4",
+  "date": "2026-07-21",
   "changes": [
+    "🔧 CRITICAL FIX: \"My Activity Today\" (Total Sales, Cash Drawer, and the whole activity feed) reset to zero the moment the calendar day changed, even if the cashier still had un-remitted cash from before midnight — it now looks back to the last actual remit instead of hard-resetting at midnight, so unremitted cash never silently disappears from the count.",
     "🔧 Fixed: after the previous Fund Transfer → Cash on Hand update, \"My Activity Today\" started showing the wrong Cash Drawer total (and a confusing duplicate \"Remittance\" entry) whenever a cashier did a Fund Transfer — sales made before the transfer were being dropped from the expected drawer amount. Fund Transfers no longer count as an end-of-shift remit for this calculation.",
     "💸 \"Fund Transfer to Manager\" now adds the amount to the manager's Cash on Hand pool (shows as \"Cashier Transfer\" in Cash Remit, and correctly counted in the owner's \"Net Cash with Manager\") — previously it only deducted from the cashier's Cash Drawer without the cash landing anywhere",
     "💸 Fixed: \"Fund Transfer to Manager\" had no visible record for either the manager or the owner — managers now see a \"Fund Transfers Received from Cashiers\" list on the Cash Remit page; owners no longer see it counted in Other Expenses / Net Profit / Potential Profit (it's an internal cash handoff, not a real business cost)",
