@@ -18,7 +18,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--accent:#00b4d8;--bg:#09090f;--s1:#111120;--s2:#191929;--border:#252540;--text:#f0f0f8;--radius:8px}
-body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
 
 /* ── LOGIN ─────────────────────────────────────────────── */
 #loginWrap{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column}
@@ -886,6 +886,15 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 </div>
 
 <script>
+// Some Android WebView versions don't support the `dvh` unit (falls back to
+// treating `height:100dvh` as invalid and un-bounding body's height), which
+// breaks the whole app's scroll chain — panels that should scroll internally
+// just get silently clipped instead, with no way to reach what's below the
+// fold. Measuring the real height in JS sidesteps any CSS unit support gap.
+function _fixAppHeight() { document.body.style.height = window.innerHeight + 'px'; }
+_fixAppHeight();
+window.addEventListener('resize', _fixAppHeight);
+
 const { createClient } = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -2065,7 +2074,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.5.8';
+const POS_BUILD = '1.5.9';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

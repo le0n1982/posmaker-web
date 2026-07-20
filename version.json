@@ -1,7 +1,8 @@
 {
-  "version": "1.5.8",
-  "date": "2026-07-19",
+  "version": "1.5.9",
+  "date": "2026-07-20",
   "changes": [
+    "🔧 CRITICAL FIX: on some Android devices, the whole app's internal scrolling (product list, cart, etc.) silently stopped working once content got long enough — older Android WebView versions don't support the \"dvh\" CSS unit this app relied on for its layout height. Added an older-unit fallback plus a JS-measured height as a safety net",
     "🔧 Fixed: switching Discount to \"Specific Items\" could push the item checklist off the top of the screen on smaller/tablet screens, making it look like it wasn't there — the panel now repositions itself after it grows",
     "🔧 Fixed: the product list (and cart, on some screens) could stop scrolling once it had enough items — a flexbox quirk clipped anything past what fit on screen instead of letting you scroll down to it",
     "💸 \"Fund Transfer to Manager\" is now owner-toggled — new \"Let cashiers transfer funds to manager\" setting (off by default) controls whether the \"Transfer\" button shows in the POS",
