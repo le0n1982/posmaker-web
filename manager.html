@@ -269,8 +269,8 @@ button{cursor:pointer}
       <div class="card-title" id="salesTableTitle">Today's Orders</div>
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th>#</th><th>Date &amp; Time</th><th>Cashier</th><th>Total</th><th>Method</th></tr></thead>
-          <tbody id="salesTbody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr></tbody>
+          <thead><tr><th>#</th><th>Date &amp; Time</th><th>Cashier</th><th>Items</th><th>Total</th><th>Method</th></tr></thead>
+          <tbody id="salesTbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1351,6 +1351,16 @@ async function loadSales(){
   const { data: orders } = await q;
 
   _salesAllData = orders || [];
+  if (_salesAllData.length) {
+    const ids = _salesAllData.map(o => o.id);
+    const { data: items } = await _sb.from('order_items').select('order_id,name,qty').in('order_id', ids);
+    const imap = {};
+    (items || []).forEach(i => {
+      if (!imap[i.order_id]) imap[i.order_id] = [];
+      imap[i.order_id].push(i.qty > 1 ? `${i.name} x${i.qty}` : i.name);
+    });
+    _salesAllData.forEach(o => { o._items = imap[o.id] || []; });
+  }
   // Enrich "Split" orders with which two payment methods actually made up
   // the total — orders.payment_method only ever stores the generic 'Split'
   // value (several places do an exact === 'Split' check that must keep
@@ -1399,14 +1409,16 @@ function renderSalesData() {
   document.getElementById('salesRev').textContent   = CUR + totalRev.toFixed(2);
   document.getElementById('salesAvg').textContent   = CUR + avg.toFixed(2);
   const tb = document.getElementById('salesTbody');
-  if (!_salesData.length) { tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No orders for this period.</td></tr>'; return; }
+  if (!_salesData.length) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No orders for this period.</td></tr>'; return; }
   tb.innerHTML = _salesData.map(o => {
     const dt = new Date(o.timestamp);
     const ds = dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const itemsStr = (o._items || []).join(', ') || '—';
     return `<tr>
       <td style="color:var(--muted);font-size:12px">#${o.id}</td>
       <td style="font-size:12px;white-space:nowrap">${ds}</td>
       <td>${o.cashier_name||'—'}</td>
+      <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
       <td style="font-weight:700;color:var(--accent)">&#8369;${(o.total||0).toFixed(2)}</td>
       <td><span class="act-chip">${o._splitDetail || o.payment_method || 'Cash'}</span></td>
     </tr>`;
@@ -1416,10 +1428,10 @@ function renderSalesData() {
 function downloadSalesCSV(){
   if (!_salesData.length) { showToast('No data to export.', true); return; }
   const title = document.getElementById('salesTableTitle').textContent;
-  const rows = [['Order #','Date & Time','Cashier','Total','Method']];
+  const rows = [['Order #','Date & Time','Cashier','Items','Total','Method']];
   _salesData.forEach(o => {
     const dt = new Date(o.timestamp).toLocaleString('en-PH');
-    rows.push([`#${o.id}`, dt, o.cashier_name||'', (o.total||0).toFixed(2), o._splitDetail || o.payment_method || 'Cash']);
+    rows.push([`#${o.id}`, dt, o.cashier_name||'', (o._items||[]).join('; '), (o.total||0).toFixed(2), o._splitDetail || o.payment_method || 'Cash']);
   });
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');

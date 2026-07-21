@@ -2147,7 +2147,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.1';
+const POS_BUILD = '1.9.2';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2543,7 +2543,7 @@ function getCartTotals() {
   // 2 sacks of the same product with a ₱5 discount means ₱5 off EACH sack
   // (₱10 total), same whether that's "All Purchases" or "Specific Items".
   const disc = discAmt > 0
-    ? parseFloat(Math.min(discAmt * discSelectedItems.reduce((s, i) => s + i.qty, 0), discBase).toFixed(2))
+    ? parseFloat(Math.min(discAmt * discSelectedItems.reduce((s, i) => s + (i.isWeight ? 1 : i.qty), 0), discBase).toFixed(2))
     : parseFloat((discBase * discPct / 100).toFixed(2));
   const total = parseFloat((raw - disc).toFixed(2));
   const tax   = parseFloat((total * TAX / (100 + TAX)).toFixed(2));
