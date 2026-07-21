@@ -3671,5 +3671,152 @@ _updateThemeIcon();
     </div>
   </div>
 </div>
+
+<!-- ── FLOATING CALCULATOR WIDGET (same widget as the Owner Dashboard) ── -->
+<div id="calcIcon" title="Calculator" style="position:fixed;bottom:90px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--s1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:600;font-size:22px;touch-action:none;user-select:none">&#129518;</div>
+<div id="calcPanel" style="display:none;position:fixed;bottom:148px;right:20px;width:272px;background:var(--s1);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.5);z-index:600;padding:16px">
+  <div id="calcDragHandle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;cursor:move;touch-action:none;user-select:none">
+    <strong style="font-size:13px;color:var(--muted)">Calculator</strong>
+    <span style="cursor:pointer;color:var(--muted);font-size:16px" onclick="toggleCalc()">&#10005;</span>
+  </div>
+  <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:10px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+    <button type="button" class="calc-btn" onclick="calcClear()" style="background:var(--danger-bg);color:var(--danger-text)">C</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('/')">&#247;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('*')">&#215;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('-')">&#8722;</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
+    <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
+    <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('+')">+</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
+    <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
+    <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
+    <button type="button" class="calc-btn" onclick="calcEquals()" style="background:var(--accent);color:#fff;grid-row:span 2">=</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
+    <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
+    <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('0')" style="grid-column:span 2">0</button>
+    <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
+  </div>
+</div>
+<style>
+.calc-btn{padding:15px 0;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:18px;font-weight:600;cursor:pointer;transition:filter .1s}
+.calc-btn:hover{filter:brightness(.96)}
+.calc-btn:active{filter:brightness(.9);transform:scale(.97)}
+.calc-btn-op{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.3);color:#f59e0b}
+</style>
+<script>
+let _calcExpr = '';
+
+function calcUpdateDisplay() {
+  document.getElementById('calcDisplay').textContent = _calcExpr || '0';
+}
+function calcInput(val) {
+  _calcExpr += val;
+  calcUpdateDisplay();
+}
+function calcClear() {
+  _calcExpr = '';
+  calcUpdateDisplay();
+}
+function calcEquals() {
+  if (!_calcExpr) return;
+  try {
+    const safe = _calcExpr.replace(/[^0-9+\-*/.]/g, '');
+    const result = Function('"use strict";return (' + safe + ')')();
+    _calcExpr = Number.isFinite(result) ? String(result) : 'Error';
+  } catch (_) {
+    _calcExpr = 'Error';
+  }
+  calcUpdateDisplay();
+}
+
+function toggleCalc() {
+  const panel = document.getElementById('calcPanel');
+  const opening = panel.style.display !== 'block';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) repositionCalcPanel();
+}
+
+// Keeps the open panel anchored near wherever the icon currently sits,
+// flipping above/below the icon so it never runs off the top/bottom edge.
+function repositionCalcPanel() {
+  const icon = document.getElementById('calcIcon');
+  const panel = document.getElementById('calcPanel');
+  const ir = icon.getBoundingClientRect();
+  const pw = panel.offsetWidth || 220;
+  const ph = panel.offsetHeight || 320;
+  let top = ir.top - ph - 10;
+  if (top < 10) top = Math.min(ir.bottom + 10, window.innerHeight - ph - 10);
+  panel.style.top    = Math.max(10, top) + 'px';
+  panel.style.left   = Math.max(10, Math.min(window.innerWidth - pw - 10, ir.left)) + 'px';
+  panel.style.bottom = 'auto';
+  panel.style.right  = 'auto';
+}
+
+// Drag-anywhere on screen: the small icon when closed, the panel's title
+// bar when open. A press+release with no real movement still counts as a
+// click (so tapping the icon still opens/closes it).
+function makeDraggable(handle, target, onClick) {
+  let dragging = false, moved = false, offX = 0, offY = 0, startX = 0, startY = 0;
+  function start(e) {
+    const pt = e.touches ? e.touches[0] : e;
+    const rect = target.getBoundingClientRect();
+    dragging = true; moved = false;
+    startX = pt.clientX; startY = pt.clientY;
+    offX = pt.clientX - rect.left; offY = pt.clientY - rect.top;
+    target.style.top = rect.top + 'px';
+    target.style.left = rect.left + 'px';
+    target.style.bottom = 'auto'; target.style.right = 'auto';
+    e.preventDefault();
+  }
+  function move(e) {
+    if (!dragging) return;
+    const pt = e.touches ? e.touches[0] : e;
+    if (Math.abs(pt.clientX - startX) > 4 || Math.abs(pt.clientY - startY) > 4) moved = true;
+    let x = pt.clientX - offX, y = pt.clientY - offY;
+    x = Math.max(0, Math.min(window.innerWidth  - target.offsetWidth,  x));
+    y = Math.max(0, Math.min(window.innerHeight - target.offsetHeight, y));
+    target.style.left = x + 'px';
+    target.style.top  = y + 'px';
+    e.preventDefault();
+  }
+  function end() {
+    if (dragging && !moved && onClick) onClick();
+    dragging = false;
+  }
+  handle.addEventListener('mousedown', start);
+  handle.addEventListener('touchstart', start, { passive: false });
+  document.addEventListener('mousemove', move);
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('mouseup', end);
+  document.addEventListener('touchend', end);
+}
+makeDraggable(document.getElementById('calcIcon'), document.getElementById('calcIcon'), toggleCalc);
+makeDraggable(document.getElementById('calcDragHandle'), document.getElementById('calcPanel'), null);
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('calcPanel').style.display === 'block') repositionCalcPanel();
+});
+
+// Keyboard + numpad input — only while the panel is open and no other field
+// on the page is focused, so it never hijacks typing elsewhere.
+document.addEventListener('keydown', function (e) {
+  const panel = document.getElementById('calcPanel');
+  if (!panel || panel.style.display !== 'block') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key >= '0' && e.key <= '9') { calcInput(e.key); e.preventDefault(); }
+  else if (['+', '-', '*', '/', '.'].includes(e.key)) { calcInput(e.key); e.preventDefault(); }
+  else if (e.key === 'Enter' || e.key === '=') { calcEquals(); e.preventDefault(); }
+  else if (e.key === 'Backspace') { _calcExpr = _calcExpr.slice(0, -1); calcUpdateDisplay(); e.preventDefault(); }
+  else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') { calcClear(); e.preventDefault(); }
+});
+</script>
 </body>
 </html>
