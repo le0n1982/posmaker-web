@@ -775,6 +775,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div class="mtitle">&#128184; Fund Transfer to Manager</div>
     <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Cash you're handing over to the manager mid-shift — deducted from your Cash Drawer, same as an expense.</p>
     <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Amount</label>
+    <div id="ftDrawerNote" style="font-size:11px;color:var(--muted);margin:-4px 0 6px">&#8212;</div>
     <input class="inp" id="ftAmount" type="number" min="0" step="0.01" placeholder="0.00">
     <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Reason</label>
     <input class="inp" id="ftReason" type="text" placeholder="e.g. Need change for another till">
@@ -1563,17 +1564,64 @@ function _localToday() {
 // EXPENSE_PAID activity-log action — so it automatically flows through the
 // existing "Cash Drawer" deduction math (My Activity Today + Cash
 // Remittance modal) without needing separate reconciliation logic.
-function openFundTransfer() {
+// Computes the cashier's current expected Cash Drawer balance — same
+// formula as "My Activity Today" (starting float from the last remit +
+// cash collected since then, minus expenses paid from the drawer since
+// then) — so a Fund Transfer can never be typed for more cash than is
+// actually expected to be sitting in the drawer, even if the manager's
+// verbal request was for a bigger amount than the cashier actually has.
+async function _calcCashDrawerBalance() {
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const { data: lastRemit } = await _sb.from('cash_remittances').select('created_at')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
+    .order('created_at', { ascending: false }).limit(1);
+  let _sinceRemit;
+  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
+  const _dbLastRemit = lastRemit?.[0]?.created_at;
+  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
+  if (!_sinceRemit) _sinceRemit = dayStart;
+  const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
+  const [{ data: orders }, { data: logs }] = await Promise.all([
+    _sb.from('orders').select('timestamp,total,payment_method,amount_tendered')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).gte('timestamp', queryStart),
+    _sb.from('activity_logs').select('action,details,created_at')
+      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart)
+  ]);
+  const _cashPortion = o => {
+    const t = parseFloat(o.total) || 0;
+    if ((o.payment_method || 'Cash') === 'Cash') return t;
+    if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
+    return 0;
+  };
+  const cashSinceRemit = (orders || []).filter(o => o.timestamp >= _sinceRemit).reduce((s, o) => s + _cashPortion(o), 0);
+  const expensesSinceRemit = (logs || [])
+    .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
+    .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
+  return _remitCarriedFloat + cashSinceRemit - expensesSinceRemit;
+}
+async function openFundTransfer() {
   document.getElementById('ftAmount').value = '';
   document.getElementById('ftReason').value = '';
   document.getElementById('mFundTransfer').classList.add('show');
+  const noteEl = document.getElementById('ftDrawerNote');
+  noteEl.textContent = 'Checking Cash Drawer…';
+  const balance = await _calcCashDrawerBalance();
+  noteEl.textContent = `Cash Drawer: ${CUR||'₱'}${balance.toFixed(2)} available`;
 }
 async function saveFundTransfer() {
   const amount = parseFloat(document.getElementById('ftAmount').value);
   const reason = document.getElementById('ftReason').value.trim();
   if (!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
   const btn = document.getElementById('ftSaveBtn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Checking…';
+  const drawerBalance = await _calcCashDrawerBalance();
+  if (amount > drawerBalance + 0.01) {
+    btn.disabled = false; btn.innerHTML = '&#10003; Confirm Transfer';
+    showToast(`Cash Drawer only has ${CUR||'₱'}${drawerBalance.toFixed(2)} — cannot transfer more than that.`);
+    return;
+  }
+  btn.innerHTML = '<span class="spinner"></span>Saving…';
   const today = _localToday();
   const name = 'Fund Transfer to Manager';
   const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer', expense_date: today, notes: reason, added_by: CASHIER_NAME };
@@ -2048,7 +2096,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.2';
+const POS_BUILD = '1.9.3';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

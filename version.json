@@ -1,7 +1,8 @@
 {
-  "version": "1.9.2",
+  "version": "1.9.3",
   "date": "2026-07-21",
   "changes": [
+    "💸 \"Fund Transfer to Manager\" now checks the cashier's actual Cash Drawer balance first — the modal shows how much is available, and the transfer is blocked (with a clear message) if the amount typed is more than what's really in the drawer, instead of letting the drawer go negative.",
     "🔧 CRITICAL FIX: a peso Amount discount applied to a weight-sold (per-kilo) item was being multiplied by the kilo count instead of applying once to that item — e.g. a ₱5 discount on 15kg of rice took off ₱75.00 instead of ₱5.00. Now applies as a flat amount per weight-sold line, same as the discount already worked correctly for counted items.",
     "💳 \"My Activity Today\" now shows which bank/e-wallet (or Split breakdown) each E-Pay sale actually used, right under the sale amount — instead of just showing the total with no payment detail.",
     "💳 \"Split\" payment (Cash + E-Pay, or now two DIFFERENT E-Pay methods) is now available on ALL business types — the 11 store types that only had basic Cash/Card/GCash buttons (Bakery, Barbershop, Buffet, Carinderya, Coffee Shop, Fast Food, Lechon, Milk Tea, Pizza/Pasta, Seafood, Snack Bar) now have the full E-Pay system: real QR codes from your configured payment methods, photo proof of payment, and the new E-Pay + E-Pay split option.",
