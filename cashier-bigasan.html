@@ -3873,6 +3873,17 @@ async function openMySales() {
     return;
   }
   const rows = orders || [];
+  const orderIds = rows.map(o => o.id);
+  const { data: itemRows } = orderIds.length
+    ? await _sb.from('order_items').select('order_id,name,qty').in('order_id', orderIds)
+    : { data: [] };
+  const itemsByOrder = {};
+  (itemRows || []).forEach(i => { (itemsByOrder[i.order_id] = itemsByOrder[i.order_id] || []).push(i); });
+  const _orderItemsLabel = id => (itemsByOrder[id] || []).map(i => {
+    const q = parseFloat(i.qty) || 0;
+    const qStr = q > 0 && q !== 1 ? ' ×' + (Number.isInteger(q) ? q : q.toFixed(2)) : '';
+    return i.name + qStr;
+  }).join(', ');
   const total = rows.reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
   document.getElementById('mySalesTotal').textContent = CUR + total.toFixed(2);
   document.getElementById('mySalesCount').textContent = rows.length + ' order' + (rows.length !== 1 ? 's' : '') + (carriedFromPrevDay ? ' unremitted' : ' today');
@@ -3925,7 +3936,7 @@ async function openMySales() {
     return pm;
   };
   const feed = [];
-  rows.forEach(o => feed.push({ type: 'order', t: new Date(o.timestamp), id: o.id, amount: parseFloat(o.total) || 0, paymentLabel: _orderPaymentLabel(o) }));
+  rows.forEach(o => feed.push({ type: 'order', t: new Date(o.timestamp), id: o.id, amount: parseFloat(o.total) || 0, paymentLabel: _orderPaymentLabel(o), itemsLabel: _orderItemsLabel(o.id) }));
   (logs || []).forEach(l => {
     if (l.action === 'EXPENSE_PAID') {
       let d = {}; try { d = JSON.parse(l.details); } catch(_) {}
@@ -3961,6 +3972,7 @@ function _myActivityItemHtml(f) {
         <span style="color:var(--muted)">&#129534; Sale #${f.id} &middot; ${time}</span>
         <span style="font-weight:700;color:#10b981">+${CUR}${f.amount.toFixed(2)}</span>
       </div>
+      ${f.itemsLabel ? `<div style="color:var(--muted);font-size:11px;margin-top:2px">${f.itemsLabel}</div>` : ''}
       ${f.paymentLabel ? `<div style="color:var(--purple-text);font-size:11px;margin-top:2px">${f.paymentLabel}</div>` : ''}
     </div>`;
   }
@@ -5348,7 +5360,7 @@ function confirmWeightAdd() {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.3';
+const POS_BUILD = '1.9.4';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

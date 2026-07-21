@@ -658,6 +658,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     </div>
     <div id="apBluetoothSection" style="display:none">
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Pick from devices already paired in Android Bluetooth settings.</div>
+      <button type="button" class="btn-cancel" onclick="requestAndroidBtPermission()" style="width:100%;margin-bottom:8px;font-size:12px">&#128274; Allow Bluetooth Access</button>
       <select id="apBtDeviceSelect" class="inp" style="margin-bottom:14px"></select>
     </div>
     <div id="apNetworkSection" style="display:none">
@@ -2095,7 +2096,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.3';
+const POS_BUILD = '1.9.4';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3445,6 +3446,14 @@ function setApType(type) {
   document.getElementById('apUsbSection').style.display       = type === 'usb'       ? '' : 'none';
   ['apTypeBt','apTypeNet','apTypeUsb'].forEach(id => document.getElementById(id).classList.remove('btn-confirm'));
   document.getElementById(type === 'bluetooth' ? 'apTypeBt' : type === 'network' ? 'apTypeNet' : 'apTypeUsb').classList.add('btn-confirm');
+}
+async function requestAndroidBtPermission() {
+  if (!window.AndroidBridge || !window.AndroidBridge.requestBluetoothPermission) {
+    showToast('Update the app to the latest version to allow Bluetooth access here — or turn it on manually: phone Settings > Apps > this app > Permissions > Nearby devices.', true);
+    return;
+  }
+  try { window.AndroidBridge.requestBluetoothPermission(); } catch (_) {}
+  setTimeout(() => { if (document.getElementById('mAndroidPrinter').classList.contains('show')) openAndroidPrinterSettings(); }, 1500);
 }
 async function openAndroidPrinterSettings() {
   document.getElementById('mAndroidPrinter').classList.add('show');
