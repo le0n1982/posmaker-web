@@ -1843,6 +1843,11 @@ function remitLogStep2() {
   const posText = document.getElementById('remitLogPOS').textContent;
   const pos  = parseFloat(posText.replace(/[^0-9.]/g,'')) || 0;
   const cash = parseFloat(document.getElementById('remitLogCOH').value) || 0;
+  // Physical cash counted can never be negative — without this guard a
+  // stray minus key (numpad, mistyped) silently produced a nonsensical
+  // negative "Cash on Hand" remittance that then showed as a confusing
+  // false "Short" to the manager, with no way to tell it was a bad entry.
+  if (cash < 0) { showToast('Cash on Hand can\'t be negative — check the amount you counted.', true); return; }
   const diff = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
   const name = document.getElementById('remitLogCashier').textContent;
   document.getElementById('remitCk1').textContent = name;
@@ -2112,7 +2117,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.5';
+const POS_BUILD = '1.9.6';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

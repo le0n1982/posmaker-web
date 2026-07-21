@@ -1,7 +1,8 @@
 {
-  "version": "1.9.5",
-  "date": "2026-07-21",
+  "version": "1.9.6",
+  "date": "2026-07-22",
   "changes": [
+    "🔧 CRITICAL FIX: the Cash Remit \"Cash on Hand\" field had no validation against a negative amount — a mistyped minus sign produced a nonsensical negative cash count that showed up as a confusing false \"Short\" to the manager/owner, with no way to tell it was a bad entry. Now blocked with a clear message before it can be submitted.",
     "🧾 \"My Activity Today\" now shows the actual items sold under each sale entry (e.g. \"Stick Rice ×2, Kalabasa\") — not just the total amount and payment method.",
     "🖨️ New \"Allow Bluetooth Access\" button in Printer Setup (Android) — taps the phone's Bluetooth permission directly from the app, for when a paired thermal printer doesn't show up in the device list because the app was never granted Bluetooth access.",
     "💸 \"Fund Transfer to Manager\" now checks the cashier's actual Cash Drawer balance first — the modal shows how much is available, and the transfer is blocked (with a clear message) if the amount typed is more than what's really in the drawer, instead of letting the drawer go negative.",
