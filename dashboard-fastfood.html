@@ -385,11 +385,11 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div style="padding:28px;text-align:center">
           <div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:6px">&#128188; My Wallet</div>
           <div id="walletBalanceVal" style="font-size:42px;font-weight:800;color:var(--ok-text)">&#8369;0.00</div>
-          <div style="font-size:11px;color:var(--dim);margin-top:4px">Total confirmed deposits from your managers</div>
+          <div id="walletBalanceSub" style="font-size:11px;color:var(--dim);margin-top:4px">Total confirmed deposits from your managers</div>
         </div>
       </div>
       <div class="tbl-wrap">
-        <div class="tbl-head"><h3>Deposit History</h3></div>
+        <div class="tbl-head"><h3>Wallet History</h3></div>
         <div id="walletHistoryList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
           <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>
         </div>
@@ -2155,10 +2155,16 @@ async function loadWallet() {
   const balEl = document.getElementById('walletBalanceVal');
   const listEl = document.getElementById('walletHistoryList');
   if (!balEl || !listEl) return;
-  const [{ data: crRows, error }, { data: logRows }] = await Promise.all([
+  const [{ data: crRows, error }, { data: logRows }, { data: sentRows }] = await Promise.all([
     _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description,owner_confirmed')
       .eq('store_id', STORE.id).eq('status', 'mgr_remit').order('created_at', { ascending: false }),
-    _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'MGR_REMIT')
+    _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'MGR_REMIT'),
+    // Money the owner sent OUT to staff via "Send Payment" (salary/advance/
+    // budget) — that cash actually left the owner's bank account, so it
+    // deducts from the same balance, regardless of whether the recipient is
+    // a manager or a cashier.
+    _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description')
+      .eq('store_id', STORE.id).eq('status', 'owner_payment').order('created_at', { ascending: false })
   ]);
   if (error) {
     listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message}</div>`;
@@ -2169,14 +2175,42 @@ async function loadWallet() {
     try { const d = JSON.parse(l.details || '{}'); if (d.cr_id) proofByCrId[d.cr_id] = d; } catch (_) {}
   });
   const rows = crRows || [];
-  const confirmedTotal = rows.filter(r => r.owner_confirmed).reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
-  balEl.textContent = CUR + confirmedTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sent = sentRows || [];
+  const receivedTotal = rows.filter(r => r.owner_confirmed).reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
+  const sentTotal = sent.reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
+  const balance = receivedTotal - sentTotal;
+  const fmt = n => CUR + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  balEl.textContent = fmt(balance);
+  balEl.style.color = balance < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
+  const subEl = document.getElementById('walletBalanceSub');
+  if (subEl) subEl.textContent = sentTotal > 0
+    ? `${fmt(receivedTotal)} received \u2212 ${fmt(sentTotal)} sent to staff`
+    : 'Total confirmed deposits from your managers';
   const pendingCount = rows.filter(r => !r.owner_confirmed).length;
   const badge = document.getElementById('walletPendingBadge');
   if (badge) { if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else badge.style.display = 'none'; }
-  if (!rows.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No deposits yet.</div>'; return; }
-  listEl.innerHTML = rows.map(r => {
+  // Combine deposits (incoming) and sends (outgoing) into one chronological
+  // history so the balance above is never a mystery number.
+  const combined = [
+    ...rows.map(r => Object.assign({}, r, { _kind: 'in' })),
+    ...sent.map(r => Object.assign({}, r, { _kind: 'out' }))
+  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  if (!combined.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No transactions yet.</div>'; return; }
+  listEl.innerHTML = combined.map(r => {
     const amount = Math.abs(parseFloat(r.cash_on_hand || 0));
+    if (r._kind === 'out') {
+      const note = (r.description || '').replace(/^Owner sent:?\s*/i, '').trim();
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <strong style="font-size:16px;color:var(--danger-text)">&minus;${CUR}${amount.toFixed(2)}</strong>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px">${note ? note + ' &middot; ' : ''}sent to ${r.cashier_name}</span>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">Sent</span>
+        </div>
+        <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      </div>`;
+    }
     const proof = proofByCrId[r.id] || {};
     const note = (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim();
     const statusColor = r.owner_confirmed ? 'var(--ok-text)' : 'var(--warn-text)';
