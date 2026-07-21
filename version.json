@@ -1,7 +1,8 @@
 {
-  "version": "1.9.4",
+  "version": "1.9.5",
   "date": "2026-07-21",
   "changes": [
+    "🧾 \"My Activity Today\" now shows the actual items sold under each sale entry (e.g. \"Stick Rice ×2, Kalabasa\") — not just the total amount and payment method.",
     "🖨️ New \"Allow Bluetooth Access\" button in Printer Setup (Android) — taps the phone's Bluetooth permission directly from the app, for when a paired thermal printer doesn't show up in the device list because the app was never granted Bluetooth access.",
     "💸 \"Fund Transfer to Manager\" now checks the cashier's actual Cash Drawer balance first — the modal shows how much is available, and the transfer is blocked (with a clear message) if the amount typed is more than what's really in the drawer, instead of letting the drawer go negative.",
     "🔧 CRITICAL FIX: a peso Amount discount applied to a weight-sold (per-kilo) item was being multiplied by the kilo count instead of applying once to that item — e.g. a ₱5 discount on 15kg of rice took off ₱75.00 instead of ₱5.00. Now applies as a flat amount per weight-sold line, same as the discount already worked correctly for counted items.",
