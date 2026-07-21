@@ -3723,7 +3723,7 @@ async function loadReport(period) {
   document.getElementById('rptContent').innerHTML = '<div style=”padding:20px;text-align:center;color:var(--muted)”><div class=”spinner” style=”width:20px;height:20px;border-width:2px;display:inline-block”></div> Loading...</div>';
 
   const {data, error} = await _sb.from('orders')
-    .select('id, timestamp, cashier_name, subtotal, tax, total, payment_method, discount_pct, order_type')
+    .select('id, timestamp, cashier_name, subtotal, tax, total, payment_method, discount_pct, order_type, amount_tendered')
     .eq('store_id', STORE.id)
     .gte('timestamp', from.toISOString())
     .lte('timestamp', to.toISOString())
@@ -3785,6 +3785,31 @@ async function loadReport(period) {
       capMap[i.order_id] = (capMap[i.order_id] || 0) + (costById[i.product_id] || 0) * (i.qty || 0);
     });
     _rptAllData.forEach(o => { o._items = imap[o.id] || []; o._capital = capMap[o.id] || 0; });
+  }
+  // Enrich "Split" orders with which two payment methods actually made up
+  // the total — orders.payment_method only ever stores the generic 'Split'
+  // value (several places do an exact === 'Split' check that must keep
+  // working), so the detail is looked up from the matching EPAY_PROOF
+  // log(s) instead of being stored on the order row itself.
+  const _rptSplitOrders = _rptAllData.filter(o => o.payment_method === 'Split');
+  if (_rptSplitOrders.length) {
+    const _rptTargetNames = _rptSplitOrders.map(o => `Order #${o.id}`);
+    const { data: _rptEpayRows } = await _sb.from('activity_logs').select('target_name,details')
+      .eq('store_id', STORE.id).eq('action', 'EPAY_PROOF').in('target_name', _rptTargetNames);
+    const _rptByOrder = {};
+    (_rptEpayRows || []).forEach(l => {
+      if (_rptByOrder[l.target_name]) return;
+      let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+      _rptByOrder[l.target_name] = d;
+    });
+    _rptSplitOrders.forEach(o => {
+      const d = _rptByOrder[`Order #${o.id}`];
+      if (!d) return;
+      const method1 = (d.method || '').replace(/\s*\(Split\)$/i, '').trim();
+      o._splitDetail = d.pairMethod
+        ? `Split (${method1} ${CUR}${parseFloat(d.amount).toFixed(2)} + ${d.pairMethod} ${CUR}${parseFloat(d.pairAmount).toFixed(2)})`
+        : `Split (Cash ${CUR}${(parseFloat(o.amount_tendered) || 0).toFixed(2)} + ${method1} ${CUR}${parseFloat(d.amount).toFixed(2)})`;
+    });
   }
   _rptFrom = from; _rptTo = to;
   const _cs = document.getElementById('rptCashier');
@@ -3934,7 +3959,7 @@ function renderReport(orders, from, to) {
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;font-weight:700;color:var(--accent)">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
             ${RESTAURANT_BIZ.has(STORE.business_type) ? `<td style="padding:5px 10px;text-align:center"><span style="background:${otBg};color:${otColor};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${otype}</span></td>` : ''}
-            <td style="padding:5px 10px;text-align:center"><span style="background:${payBg(o.payment_method)};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px">${o.payment_method||'Cash'}</span></td>
+            <td style="padding:5px 10px;text-align:center"><span style="background:${payBg(o.payment_method)};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px">${o._splitDetail||o.payment_method||'Cash'}</span></td>
           </tr>`;}).join('')}
         </tbody>
         <tfoot>
@@ -4250,7 +4275,7 @@ function downloadReport() {
         parseFloat(o.subtotal||0).toFixed(2),
         parseFloat(o.tax||0).toFixed(2),
         parseFloat(o.total||0).toFixed(2),
-        o.payment_method || 'Cash'
+        o._splitDetail || o.payment_method || 'Cash'
       ].join(',') + '\r\n';
     });
     csv += ',,,,' + cashier + ' Total:,' + cashTotal.toFixed(2) + ',\r\n\r\n';
@@ -6210,6 +6235,32 @@ async function loadOrders() {
     allOrders.forEach(o => { o._items = imap[o.id] || []; });
   }
 
+  // Enrich "Split" orders with which two payment methods actually made up
+  // the total — orders.payment_method only ever stores the generic 'Split'
+  // value (several places do an exact === 'Split' check that must keep
+  // working), so the detail is looked up from the matching EPAY_PROOF
+  // log(s) instead of being stored on the order row itself.
+  const splitOrders = allOrders.filter(o => o.payment_method === 'Split');
+  if (splitOrders.length) {
+    const targetNames = splitOrders.map(o => `Order #${o.id}`);
+    const { data: epayRows } = await _sb.from('activity_logs').select('target_name,details')
+      .eq('store_id', STORE.id).eq('action', 'EPAY_PROOF').in('target_name', targetNames);
+    const byOrder = {};
+    (epayRows || []).forEach(l => {
+      if (byOrder[l.target_name]) return;
+      let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+      byOrder[l.target_name] = d;
+    });
+    splitOrders.forEach(o => {
+      const d = byOrder[`Order #${o.id}`];
+      if (!d) return;
+      const method1 = (d.method || '').replace(/\s*\(Split\)$/i, '').trim();
+      o._splitDetail = d.pairMethod
+        ? `Split (${method1} ${CUR}${parseFloat(d.amount).toFixed(2)} + ${d.pairMethod} ${CUR}${parseFloat(d.pairAmount).toFixed(2)})`
+        : `Split (Cash ${CUR}${(parseFloat(o.amount_tendered) || 0).toFixed(2)} + ${method1} ${CUR}${parseFloat(d.amount).toFixed(2)})`;
+    });
+  }
+
   // Update header label
   const isToday = useFrom === todayISO && useTo === todayISO;
   const isAll   = !from && !to && false; // all mode only via clearOrdFilter
@@ -6253,7 +6304,7 @@ function renderOrders(orders) {
       <td style="color:var(--muted)">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
       <td style="color:${disc>0?'#f59e0b':'var(--muted)'}">${disc>0?disc+'%':'&#8212;'}</td>
       <td style="color:var(--accent);font-weight:700">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
-      <td><span class="badge ${bg}">${o.payment_method||'Cash'}</span></td>
+      <td><span class="badge ${bg}">${o._splitDetail || o.payment_method || 'Cash'}</span></td>
       <td>${CUR}${parseFloat(o.amount_tendered||0).toFixed(2)}</td>
       <td>${CUR}${parseFloat(o.change_given||0).toFixed(2)}</td>
     </tr>`;
@@ -6269,7 +6320,7 @@ async function viewOrder(ordId) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:16px;font-size:12px;color:var(--muted)">
       <span>Date</span><span style="color:var(--text)">${dt}</span>
       <span>Cashier</span><span style="color:var(--text)">${o.cashier_name || '&#8212;'}</span>
-      <span>Payment</span><span style="color:var(--text)">${o.payment_method || 'Cash'}</span>
+      <span>Payment</span><span style="color:var(--text)">${o._splitDetail || o.payment_method || 'Cash'}</span>
       ${disc > 0 ? `<span>Discount</span><span style="color:var(--warn-text)">${disc}%</span>` : ''}
     </div>
     <table style="margin-bottom:14px">
@@ -6314,6 +6365,32 @@ async function clearOrdFilter() {
     });
     allOrders.forEach(o => { o._items = imap[o.id] || []; });
   }
+
+  // Enrich "Split" orders with which two payment methods actually made up
+  // the total — orders.payment_method only ever stores the generic 'Split'
+  // value (several places do an exact === 'Split' check that must keep
+  // working), so the detail is looked up from the matching EPAY_PROOF
+  // log(s) instead of being stored on the order row itself.
+  const splitOrders = allOrders.filter(o => o.payment_method === 'Split');
+  if (splitOrders.length) {
+    const targetNames = splitOrders.map(o => `Order #${o.id}`);
+    const { data: epayRows } = await _sb.from('activity_logs').select('target_name,details')
+      .eq('store_id', STORE.id).eq('action', 'EPAY_PROOF').in('target_name', targetNames);
+    const byOrder = {};
+    (epayRows || []).forEach(l => {
+      if (byOrder[l.target_name]) return;
+      let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+      byOrder[l.target_name] = d;
+    });
+    splitOrders.forEach(o => {
+      const d = byOrder[`Order #${o.id}`];
+      if (!d) return;
+      const method1 = (d.method || '').replace(/\s*\(Split\)$/i, '').trim();
+      o._splitDetail = d.pairMethod
+        ? `Split (${method1} ${CUR}${parseFloat(d.amount).toFixed(2)} + ${d.pairMethod} ${CUR}${parseFloat(d.pairAmount).toFixed(2)})`
+        : `Split (Cash ${CUR}${(parseFloat(o.amount_tendered) || 0).toFixed(2)} + ${method1} ${CUR}${parseFloat(d.amount).toFixed(2)})`;
+    });
+  }
   renderOrders(allOrders);
 }
 function exportOrdCSV() {
@@ -6328,7 +6405,7 @@ function exportOrdCSV() {
     parseFloat(o.tax||0).toFixed(2),
     parseFloat(o.discount_pct||0).toFixed(2),
     parseFloat(o.total||0).toFixed(2),
-    o.payment_method || 'Cash',
+    o._splitDetail || o.payment_method || 'Cash',
     parseFloat(o.amount_tendered||0).toFixed(2),
     parseFloat(o.change_given||0).toFixed(2),
   ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));

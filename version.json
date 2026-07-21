@@ -1,7 +1,10 @@
 {
-  "version": "1.7.7",
+  "version": "1.9.0",
   "date": "2026-07-21",
   "changes": [
+    "💳 \"Split\" payment (Cash + E-Pay, or now two DIFFERENT E-Pay methods) is now available on ALL business types — the 11 store types that only had basic Cash/Card/GCash buttons (Bakery, Barbershop, Buffet, Carinderya, Coffee Shop, Fast Food, Lechon, Milk Tea, Pizza/Pasta, Seafood, Snack Bar) now have the full E-Pay system: real QR codes from your configured payment methods, photo proof of payment, and the new E-Pay + E-Pay split option.",
+    "💳 New: \"Split\" payment can now be between two DIFFERENT E-Pay methods (e.g. half GCash, half a different bank/e-wallet) instead of only Cash + one E-Pay method — new toggle in the Split screen.",
+    "💳 Owner's My Wallet \"By Payment Method\" now shows the pairing for a dual-E-Pay split (e.g. under GCash: \"GCash ₱1000 / GoTyme ₱2000\"), and the \"Split\" label in Transactions/Sales Report now shows which two methods and amounts made up the sale, instead of just the word \"Split\".",
     "🔧 Fixed: a product's stock badge could show the wrong unit next to a correct number — e.g. a rice sack product linked to a bag-tracked inventory item showed \"12 kg\" instead of \"12 bag\". The badge now uses the linked inventory item's actual unit when it's a direct 1-for-1 link.",
     "🔧 CRITICAL FIX: remittance and expense dates were computed using UTC time instead of local (Philippines) time — any remittance or cashier-recorded expense made between 12:00 AM and 7:59 AM was silently saved under YESTERDAY's date instead of today's. Now uses the actual local calendar date.",
     "🔧 CRITICAL FIX: submitting an actual end-of-shift Cash Remittance after doing a Fund Transfer could save the WRONG \"POS Sales\" figure (and therefore the wrong Over/Short \"Difference\") straight into the record — the Fund Transfer was mistakenly treated as if it were the last real remit, so any sales made before it were silently excluded from the count the manager sees when confirming the remittance.",

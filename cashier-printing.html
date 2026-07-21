@@ -422,6 +422,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <div class="chg" id="chgDisp"></div>
       </div>
       <div id="splitSection" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button type="button" class="btn btn-ghost btn-sm" id="splitModeCashBtn" onclick="setSplitMode('cash')" style="flex:1;font-weight:700">Cash + E-Pay</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="splitModeEpayBtn" onclick="setSplitMode('epay2')" style="flex:1">E-Pay + E-Pay</button>
+        </div>
         <div style="display:flex;gap:6px;margin-bottom:4px">
           <input class="inp" id="splitCashAmt" type="number" placeholder="Cash amount" oninput="calcSplitRemainder()" style="padding:8px 10px;flex:1">
           <button type="button" class="btn btn-ghost btn-sm" onclick="fillSplitHalf()">&#189; Half</button>
@@ -460,7 +464,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <div class="mtitle">&#128241; Choose Payment Method</div>
       <div id="epayPickerList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px"></div>
       <div class="m-actions">
-        <button class="btn-cancel" onclick="closeEpayModal()">Cancel</button>
+        <button class="btn-cancel" onclick="cancelEpayModal()">Cancel</button>
       </div>
     </div>
     <!-- QR view -->
@@ -474,7 +478,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <div style="font-size:28px;font-weight:800;color:var(--accent)" id="epayAmt">&#8212;</div>
       <div id="epayNote" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
       <div class="m-actions">
-        <button class="btn-cancel" onclick="closeEpayModal()">Cancel</button>
+        <button class="btn-cancel" onclick="cancelEpayModal()">Cancel</button>
         <button class="btn-confirm" onclick="_epayShowProofChoice()">&#128247; Upload Payment Proof</button>
       </div>
     </div>
@@ -2043,7 +2047,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.7';
+const POS_BUILD = '1.9.0';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -2650,6 +2654,10 @@ function _buildDynamicPayQr(staticPayload, amount) {
   } catch (_) { return null; }
 }
 let _epayPendingAmount = 0, _epaySplitCashAmt = null, _epayChosenLabel = null, _epayProofB64 = null;
+// "E-Pay + E-Pay" split state — leg1 (method+amount+proof) is captured
+// first, then the picker automatically reopens for leg2 (the remainder)
+// before the order actually gets confirmed with both legs recorded.
+let _epayDualActive = false, _epayDualLeg1 = null, _epayDualRemainder = 0;
 function openEpayModal(amount, splitCashAmt) {
   if (!PAYMENT_METHODS.length) {
     alert('No e-payment method set up yet. Ask the owner to add one in Settings.');
@@ -2693,6 +2701,14 @@ function closeEpayModal() {
   document.getElementById('mEpay').classList.remove('show');
   _epayStopCamera();
   _epayCloseQrUpload();
+}
+// Only for the Cancel button — the internal leg1-to-leg2 chaining in
+// _epayContinue() also closes/reopens this modal but must NOT wipe the
+// dual-split state that was just captured for leg1.
+function cancelEpayModal() {
+  closeEpayModal();
+  _epayDualActive = false;
+  _epayDualLeg1 = null;
 }
 
 function _epaySwitchView(id) {
@@ -2775,6 +2791,20 @@ function setMethod(m, btn) {
   btn.classList.add('active');
   document.getElementById('cashSection').style.display = m === 'Cash' ? '' : 'none';
   document.getElementById('splitSection').style.display = m === 'Split' ? '' : 'none';
+}
+// Split can be Cash + one E-Pay method (the original flow), or two
+// DIFFERENT E-Pay methods with no cash at all (e.g. half GCash, half a
+// different bank) — same amount input, just a different meaning for it.
+let _splitMode = 'cash';
+function setSplitMode(mode) {
+  _splitMode = mode;
+  const cashBtn = document.getElementById('splitModeCashBtn'), epayBtn = document.getElementById('splitModeEpayBtn');
+  cashBtn.style.background = mode === 'cash' ? 'var(--accent)' : 'transparent';
+  cashBtn.style.color = mode === 'cash' ? '#fff' : 'var(--muted)';
+  epayBtn.style.background = mode === 'epay2' ? 'var(--accent)' : 'transparent';
+  epayBtn.style.color = mode === 'epay2' ? '#fff' : 'var(--muted)';
+  document.getElementById('splitCashAmt').placeholder = mode === 'cash' ? 'Cash amount' : '1st bank amount';
+  calcSplitRemainder();
 }
 function fillSplitHalf() {
   const { total } = getCartTotals();
@@ -2939,21 +2969,41 @@ window.addEventListener('offline', ()=>{ updateNetStatus(); });
 async function confirmOrder() {
   const { total } = getCartTotals();
   if (payMeth === 'EPay' && !IS_DEMO) {
+    _epayDualActive = false;
     openEpayModal(total, null);
     return;
   }
   if (payMeth === 'Split' && !IS_DEMO) {
-    const cashAmt = parseFloat(document.getElementById('splitCashAmt').value) || 0;
-    if (cashAmt <= 0 || cashAmt >= total) { alert('Enter a cash amount between 0 and the total (or use Cash / E-Pay instead).'); return; }
-    openEpayModal(total - cashAmt, cashAmt);
+    const amt1 = parseFloat(document.getElementById('splitCashAmt').value) || 0;
+    if (amt1 <= 0 || amt1 >= total) { alert('Enter an amount between 0 and the total (or use Cash / E-Pay instead).'); return; }
+    if (_splitMode === 'epay2') {
+      // Two different E-Pay methods, no cash — capture leg1 now; leg2 (the
+      // remainder) gets picked automatically once leg1's proof is in.
+      _epayDualActive = true;
+      _epayDualLeg1 = null;
+      _epayDualRemainder = total - amt1;
+      openEpayModal(amt1, null);
+    } else {
+      _epayDualActive = false;
+      openEpayModal(total - amt1, amt1);
+    }
     return;
   }
   await _doConfirmOrder();
 }
 async function _epayContinue() {
   if (!_epayProofB64) { alert('Attach a photo of the payment confirmation first.'); return; }
+  if (_epayDualActive && !_epayDualLeg1) {
+    // Leg1 done — remember its method/amount/proof, then reopen the picker
+    // immediately for leg2 (the remainder). The order isn't confirmed yet.
+    _epayDualLeg1 = { method: _epayChosenLabel, amount: _epayPendingAmount, proofB64: _epayProofB64 };
+    closeEpayModal();
+    openEpayModal(_epayDualRemainder, null);
+    return;
+  }
   closeEpayModal();
-  if (_epaySplitCashAmt != null) { payMeth = 'Split'; _splitCashAmt = _epaySplitCashAmt; }
+  if (_epayDualActive) { payMeth = 'Split'; _splitCashAmt = 0; }
+  else if (_epaySplitCashAmt != null) { payMeth = 'Split'; _splitCashAmt = _epaySplitCashAmt; }
   else { payMeth = _epayChosenLabel; }
   await _doConfirmOrder();
 }
@@ -2985,7 +3035,11 @@ async function __doConfirmOrderImpl() {
 
   if (payMeth === 'Cash' && tender < total) { alert('Amount tendered is less than total.'); return; }
 
-  const receiptMethod = payMeth === 'Split' ? `Split (Cash ${CUR}${_splitCashAmt.toFixed(2)} + ${_epayChosenLabel} ${CUR}${(total - _splitCashAmt).toFixed(2)})` : payMeth;
+  const receiptMethod = payMeth === 'Split'
+    ? (_epayDualLeg1
+        ? `Split (${_epayDualLeg1.method} ${CUR}${_epayDualLeg1.amount.toFixed(2)} + ${_epayChosenLabel} ${CUR}${_epayPendingAmount.toFixed(2)})`
+        : `Split (Cash ${CUR}${_splitCashAmt.toFixed(2)} + ${_epayChosenLabel} ${CUR}${(total - _splitCashAmt).toFixed(2)})`)
+    : payMeth;
   const receiptData = { order_id: 'DEMO', items, sub, tax, total, disc, tender, change, method: receiptMethod, cashier: CASHIER_NAME, orderType, tableNo, isKOT };
 
   if (IS_DEMO) { showReceipt(receiptData); return; }
@@ -3041,7 +3095,25 @@ async function __doConfirmOrderImpl() {
   // Proof-of-payment photo (E-Pay/Split only) — logged the same way other
   // receipt/proof photos are (activity_logs.details.receipt_b64), so it
   // shows up automatically in the Staff Logs "View" button.
-  if (_epayProofB64) {
+  if (_epayDualLeg1) {
+    // Two different E-Pay methods, no cash at all — log BOTH proofs, each
+    // carrying the OTHER leg's method+amount as pairMethod/pairAmount, so
+    // the owner's Wallet "By Payment Method" breakdown can show the
+    // pairing (e.g. under GCash: "GCash ₱1000 / GoTyme ₱2000").
+    _sb.from('activity_logs').insert({
+      store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
+      action: 'EPAY_PROOF', target_name: `Order #${ord.id}`,
+      details: JSON.stringify({ method: `${_epayDualLeg1.method} (Split)`, amount: _epayDualLeg1.amount, receipt_b64: 'data:image/jpeg;base64,' + _epayDualLeg1.proofB64, pairMethod: _epayChosenLabel, pairAmount: _epayPendingAmount })
+    }).then(() => {});
+    if (_epayProofB64) {
+      _sb.from('activity_logs').insert({
+        store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
+        action: 'EPAY_PROOF', target_name: `Order #${ord.id}`,
+        details: JSON.stringify({ method: `${_epayChosenLabel} (Split)`, amount: _epayPendingAmount, receipt_b64: 'data:image/jpeg;base64,' + _epayProofB64, pairMethod: _epayDualLeg1.method, pairAmount: _epayDualLeg1.amount })
+      }).then(() => {});
+    }
+    _epayProofB64 = null; _epayDualLeg1 = null; _epayDualActive = false;
+  } else if (_epayProofB64) {
     const epayAmount = payMeth === 'Split' ? (total - (_splitCashAmt || 0)) : total;
     const epayMethodLabel = payMeth === 'Split' ? `${_epayChosenLabel} (Split)` : _epayChosenLabel;
     _sb.from('activity_logs').insert({
@@ -3390,7 +3462,9 @@ function newOrder() {
   document.getElementById('mConfirm').style.display = 'none';
   try {
   cart = {}; payMeth = 'Cash';
+  setSplitMode('cash');
   _splitCashAmt = null; _epaySplitCashAmt = null; _epayChosenLabel = null; _epayProofB64 = null;
+  _epayDualActive = false; _epayDualLeg1 = null;
   discPct = 0; discAmt = 0; discScope = 'all'; discSelectedKeys = new Set();
   document.getElementById('tendered').value = '';
   document.getElementById('chgDisp').textContent = '';
