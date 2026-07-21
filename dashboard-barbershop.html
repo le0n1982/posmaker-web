@@ -2144,6 +2144,31 @@ function nav(id) {
 function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sbOverlay').classList.add('show'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbOverlay').classList.remove('show'); }
 
+let _walletMethodEntries = [];
+function toggleWalletMethod(i) {
+  const body = document.getElementById('walletMethodBody_' + i);
+  const caret = document.getElementById('walletMethodCaret_' + i);
+  if (!body) return;
+  const opening = body.style.display === 'none';
+  if (opening && !body.dataset.rendered) {
+    const entries = (_walletMethodEntries[i] || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    body.innerHTML = entries.length ? entries.map(e => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="color:var(--text)">${e.order || 'E-Pay'}${e.cashier ? ' &middot; ' + e.cashier : ''}</div>
+          <div style="color:var(--dim);font-size:10px">${new Date(e.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}</strong>
+          ${_receiptCache[e.id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();viewReceipt('${e.id}')">View</button>` : ''}
+        </div>
+      </div>`).join('') : '<div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0">No transactions.</div>';
+    body.dataset.rendered = '1';
+  }
+  body.style.display = opening ? '' : 'none';
+  if (caret) caret.style.transform = opening ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
 // ── My Wallet — money managers have deposited to the owner's bank account ──
 // Reuses the existing "Deposit to Owner" mechanism (manager.html's
 // mgrDepositModal / saveMgrDeposit) instead of a separate system — those
@@ -2172,7 +2197,7 @@ async function loadWallet() {
     // customer scanned — same EPAY_PROOF log the "Unconfirmed E-Pay
     // Payments" banner already surfaces. Only proofs the owner has actually
     // confirmed count here, same as manager deposits above.
-    _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF'),
+    _sb.from('activity_logs').select('id,details,created_at,target_name,actor_name').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF'),
     _sb.from('payment_methods').select('label').eq('store_id', STORE.id).order('sort_order')
   ]);
   if (error) {
@@ -2190,6 +2215,8 @@ async function loadWallet() {
   // Group confirmed e-pay income by bank/e-wallet — a Split sale's proof
   // label carries a " (Split)" suffix that's stripped here so it still
   // groups under its actual method (e.g. "GCash"), not a separate bucket.
+  // Each method keeps its own transaction list too, so the breakdown card
+  // can expand to show exactly which sales made up that total.
   const epayByMethod = {};
   let epayTotal = 0;
   (epayLogs || []).forEach(l => {
@@ -2198,7 +2225,10 @@ async function loadWallet() {
     const amt = parseFloat(d.amount) || 0;
     if (!amt) return;
     const method = (d.method || 'Other').replace(/\s*\(Split\)$/i, '').trim();
-    epayByMethod[method] = (epayByMethod[method] || 0) + amt;
+    if (!epayByMethod[method]) epayByMethod[method] = { total: 0, entries: [] };
+    epayByMethod[method].total += amt;
+    epayByMethod[method].entries.push({ id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '' });
+    if (d.receipt_b64) _receiptCache[l.id] = { b64: d.receipt_b64, actorName: l.actor_name || '' };
     epayTotal += amt;
   });
   const balance = receivedTotal - sentTotal + epayTotal;
@@ -2218,13 +2248,23 @@ async function loadWallet() {
   if (methodWrap && methodListEl) {
     const configuredLabels = (payMethods || []).map(m => m.label);
     const allLabels = [...new Set([...configuredLabels, ...Object.keys(epayByMethod)])];
+    _walletMethodEntries = allLabels.map(label => (epayByMethod[label] && epayByMethod[label].entries) || []);
     if (allLabels.length) {
       methodWrap.style.display = '';
-      methodListEl.innerHTML = allLabels.map(label => `
-        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:8px;padding:10px 14px">
-          <span style="font-weight:600;font-size:13px">${label}</span>
-          <strong style="font-size:14px;color:var(--ok-text)">${fmt(epayByMethod[label] || 0)}</strong>
-        </div>`).join('');
+      methodListEl.innerHTML = allLabels.map((label, i) => {
+        const entries = _walletMethodEntries[i];
+        const total = (epayByMethod[label] && epayByMethod[label].total) || 0;
+        return `<div style="background:var(--s2);border-radius:8px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer" onclick="toggleWalletMethod(${i})">
+            <span style="font-weight:600;font-size:13px">${label}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong style="font-size:14px;color:var(--ok-text)">${fmt(total)}</strong>
+              <span id="walletMethodCaret_${i}" style="font-size:11px;color:var(--muted);transition:transform .15s">&#9656;</span>
+            </div>
+          </div>
+          <div id="walletMethodBody_${i}" style="display:none;border-top:1px solid var(--border);padding:6px 14px 10px"></div>
+        </div>`;
+      }).join('');
     } else {
       methodWrap.style.display = 'none';
     }
