@@ -1344,7 +1344,7 @@ async function loadSales(){
   document.getElementById('salesLabelRev').textContent    = label + ' REVENUE';
   document.getElementById('salesTableTitle').textContent  = tableTitle;
 
-  let q = _sb.from('orders').select('id,timestamp,cashier_name,total,payment_method,amount_tendered')
+  let q = _sb.from('orders').select('id,timestamp,cashier_name,total,payment_method,amount_tendered,order_type')
     .eq('store_id', MGR.store_id).order('timestamp', { ascending: false }).limit(500);
   if (periodStart) q = q.gte('timestamp', periodStart);
   if (periodEnd)   q = q.lte('timestamp', periodEnd);
@@ -1414,13 +1414,14 @@ function renderSalesData() {
     const dt = new Date(o.timestamp);
     const ds = dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     const itemsStr = (o._items || []).join(', ') || '—';
-    return `<tr>
+    const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+    return `<tr${isVoidRow ? ' style="background:rgba(239,68,68,.06)"' : ''}>
       <td style="color:var(--muted);font-size:12px">#${o.id}</td>
       <td style="font-size:12px;white-space:nowrap">${ds}</td>
       <td>${o.cashier_name||'—'}</td>
       <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
-      <td style="font-weight:700;color:var(--accent)">&#8369;${(o.total||0).toFixed(2)}</td>
-      <td><span class="act-chip">${o._splitDetail || o.payment_method || 'Cash'}</span></td>
+      <td style="font-weight:700;color:${isVoidRow ? '#ef4444' : 'var(--accent)'}">&#8369;${(o.total||0).toFixed(2)}</td>
+      <td>${isVoidRow ? `<span class="act-chip" style="background:rgba(239,68,68,.15);color:#ef4444">${o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED'}</span>` : `<span class="act-chip">${o._splitDetail || o.payment_method || 'Cash'}</span>`}</td>
     </tr>`;
   }).join('');
 }
@@ -1431,7 +1432,9 @@ function downloadSalesCSV(){
   const rows = [['Order #','Date & Time','Cashier','Items','Total','Method']];
   _salesData.forEach(o => {
     const dt = new Date(o.timestamp).toLocaleString('en-PH');
-    rows.push([`#${o.id}`, dt, o.cashier_name||'', (o._items||[]).join('; '), (o.total||0).toFixed(2), o._splitDetail || o.payment_method || 'Cash']);
+    const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+    const methodLabel = isVoidRow ? (o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED') : (o._splitDetail || o.payment_method || 'Cash');
+    rows.push([`#${o.id}`, dt, o.cashier_name||'', (o._items||[]).join('; '), (o.total||0).toFixed(2), methodLabel]);
   });
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -1933,6 +1936,18 @@ function renderRemit() {
     const diff = parseFloat(r.difference) || 0;
     const diffColor = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--muted)';
     const ADJ_STATUS_LABEL = { coh_to_staff: 'C.A.', purchase: 'Purchase', deposit: 'Deposit', refund: 'Refund', fund_transfer: 'Cashier Transfer' };
+    // 'coh_to_staff' covers three different real actions (Cash Advance
+    // disbursement, this page's Send Cash to Cashier, and the owner's
+    // Transfer to Staff Funds) and 'refund' covers both Void and Refund —
+    // tell them apart by their description prefix instead of adding new
+    // status values (which every existing adjStatuses filter across 24
+    // dashboard files would also need to learn).
+    const desc = r.description || '';
+    const adjLabel = r.status === 'coh_to_staff'
+      ? (/^Sent to /.test(desc) ? 'Cash Sent' : /^Transferred to Staff Funds/.test(desc) ? 'Staff Funds' : 'Cash Advance')
+      : r.status === 'refund'
+      ? (/^Void:/.test(desc) ? 'Void' : 'Refund')
+      : ADJ_STATUS_LABEL[r.status];
     const statusBadge = isPending
       ? `<span class="badge" style="background:var(--warn-bg);color:var(--warn-text);animation:pulse 1.5s infinite">&#9679; Pending</span>`
       : r.status === 'mgr_remit'
@@ -1941,8 +1956,8 @@ function renderRemit() {
           : `<span class="badge" style="background:var(--pending-badge-bg);color:var(--pending-badge-text)">&#9203; Under Review</span>`)
       // Manager-initiated adjustments (cash advance, stock purchase, deposit, refund) aren't
       // a cashier shift going over/short — label them by what they actually are instead.
-      : ADJ_STATUS_LABEL[r.status]
-      ? `<span class="badge" style="background:var(--info-bg);color:var(--info-text)">${ADJ_STATUS_LABEL[r.status]}</span>`
+      : adjLabel
+      ? `<span class="badge" style="background:var(--info-bg);color:var(--info-text)">${adjLabel}</span>`
       : diff > 0 ? `<span class="badge badge-ok">Over</span>`
       : diff < 0 ? `<span class="badge badge-out">Short</span>`
       : `<span style="font-size:11px;color:var(--muted)">Balanced</span>`;

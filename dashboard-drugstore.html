@@ -250,6 +250,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="sb-item" onclick="nav('categories')" title="Organize your products and inventory items into categories."><span class="ico">&#128194;</span> Categories</div>
     <div class="sb-item" id="navProducts"  onclick="nav('products')" title="Add, edit, or remove the items you sell &mdash; set price, photo, and category."><span class="ico">&#127991;</span> <span id="navProductsLbl">Products</span></div>
     <div class="sb-item" onclick="nav('staff')" title="Add your staff here &mdash; create their accounts, set name, password, and control access. Also includes their activity log &mdash; actions and submitted receipts."><span class="ico">&#128101;</span> Staff</div>
+    <div class="sb-item" onclick="nav('voidrefund')" title="Approve or decline void/refund requests submitted by cashiers, with photo proof."><span class="ico">&#8630;</span> Void &amp; Refund <span id="vrBadge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:auto"></span></div>
     <div class="sb-item" onclick="nav('messages')" id="sbMessages" title="Send and receive messages with your staff."><span class="ico">&#128172;</span> Messages <span id="msgUnreadBadge" style="display:none;margin-left:auto;font-size:10px;background:#ef4444;color:#fff;padding:1px 7px;border-radius:8px;font-weight:700"></span></div>
     <div class="sb-item" onclick="nav('salesreport')" title="View your sales totals, best sellers, and reports by day or date range."><span class="ico">&#128202;</span> Sales Report</div>
     <div class="sb-item" onclick="nav('checklist')" title="Set tasks your staff must complete when opening or closing the store."><span class="ico">&#9989;</span> Daily Checklist</div>
@@ -627,6 +628,45 @@ input:checked + .slider:before{transform:translateX(18px)}
           <thead><tr><th>Cashier</th><th>Date</th><th>POS Sales</th><th>Cash on Hand</th><th>Difference</th><th>Submitted</th></tr></thead>
           <tbody id="unconfirmedRemitTbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- VOID & REFUND -->
+    <div class="section" id="sec-voidrefund">
+      <div class="tbl-wrap">
+        <div class="tbl-head"><h3>&#8630; Pending Requests</h3></div>
+        <div id="vrPendingList" style="padding:16px 20px">
+          <div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>
+        </div>
+      </div>
+      <div class="tbl-wrap" style="margin-top:16px">
+        <div class="tbl-head"><h3>History</h3></div>
+        <div id="vrHistoryList" style="padding:16px 20px">
+          <div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOID/REFUND PROOF VIEWER -->
+    <div class="modal" id="vrProofModal">
+      <div class="mbox" style="width:min(420px,100%)">
+        <h3>&#128247; Void / Refund Proof</h3>
+        <div style="text-align:center;margin:12px 0;background:var(--bg);border-radius:8px;padding:8px">
+          <img id="vrProofImg" src="" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:6px">
+        </div>
+        <div class="m-actions">
+          <button class="btn btn-ghost" onclick="closeModal('vrProofModal')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="vrReceiptModal">
+      <div class="mbox" style="width:min(380px,100%)">
+        <div id="vrReceiptBody" style="background:var(--bg);border-radius:8px;padding:14px"></div>
+        <div class="m-actions">
+          <button class="btn btn-ghost" onclick="closeModal('vrReceiptModal')">Close</button>
+          <button class="btn btn-accent" onclick="printVoidRefundReceipt()">&#128424; Print</button>
+        </div>
       </div>
     </div>
 
@@ -1983,12 +2023,13 @@ function _sig(ms = 25000) {
   loadStaff();
   loadPOSTerminals();
   loadWallet();
+  checkPendingVoidRefund();
   checkSetupBanner();
   checkTrialBanner();
 })();
 
 // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const SECTION_TITLES = {dashboard:'Dashboard',wallet:'My Wallet',orders:'Orders',inventory:'Inventory',categories:'Categories',products:'Products',staff:'Staff',activitylog:'Activity Log',messages:'Staff Messages',salesreport:'Sales Report',checklist:'Daily Checklist',expenses:'Other Expenses',payroll:'Payroll',settings:'Settings',access:'Cashier Link',pos:'My POS Terminals'};
+const SECTION_TITLES = {dashboard:'Dashboard',wallet:'My Wallet',orders:'Orders',inventory:'Inventory',categories:'Categories',products:'Products',staff:'Staff',activitylog:'Activity Log',voidrefund:'Void & Refund',messages:'Staff Messages',salesreport:'Sales Report',checklist:'Daily Checklist',expenses:'Other Expenses',payroll:'Payroll',settings:'Settings',access:'Cashier Link',pos:'My POS Terminals'};
 // ── Business-type adaptation ───────────────────────────────────────────────────
 const RESTAURANT_BIZ = new Set(['Fast Food','Carinderya','Coffee Shop','Bakery','Lechon',
   'Pizza / Pasta','Seafood','Milk Tea / Drinks','Karinderya / Buffet','Snack Bar']);
@@ -2064,6 +2105,7 @@ function nav(id) {
   if (id === 'salesreport') { loadReport('daily'); loadCandleChart(); loadBestSellers(); }
   if (id === 'inventory')  loadInventory();
   if (id === 'staff')        { loadStaff(); updateMgrLink(); loadPerformance(); loadHelperStaff(); loadManagerCash(); loadCashAdvanceAdmin(); loadActivityLog(); loadUnconfirmedRemits(); }
+  if (id === 'voidrefund') loadVoidRefund();
   if (id === 'messages')     loadMessages();
   if (id === 'categories') { loadDbCategories().then(() => Promise.all([loadProducts(), loadInventory()]).then(loadCategories)); }
   if (id === 'checklist')  loadChecklist();
@@ -2074,6 +2116,245 @@ function nav(id) {
 }
 function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sbOverlay').classList.add('show'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbOverlay').classList.remove('show'); }
+
+// ── Void / Refund (cashiers request with proof, owner approves) ──────────
+let _vrCache = [];
+async function checkPendingVoidRefund() {
+  const { data } = await _sb.from('void_refund_requests')
+    .select('id').eq('store_id', STORE.id).eq('status', 'pending');
+  const count = (data || []).length;
+  const badge = document.getElementById('vrBadge');
+  if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
+}
+
+async function loadVoidRefund() {
+  const pendingEl = document.getElementById('vrPendingList');
+  const histEl = document.getElementById('vrHistoryList');
+  const { data } = await _sb.from('void_refund_requests')
+    .select('*').eq('store_id', STORE.id).order('created_at', { ascending: false }).limit(100);
+  _vrCache = data || [];
+
+  const pending = _vrCache.filter(r => r.status === 'pending');
+  pendingEl.innerHTML = !pending.length
+    ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No pending requests.</div>'
+    : pending.map(r => `<div style="border:1px solid #f59e0b55;background:#2a1a0022;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <strong>Order #${r.order_id}</strong> — <strong style="color:#f59e0b">${r.type === 'void' ? 'VOID' : 'REFUND'}</strong> <span style="color:var(--muted)">${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${r.reason || ''}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:2px">Requested by ${r.requested_by_name} &middot; ${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${r.proof_b64 ? `<button class="btn btn-ghost btn-sm" onclick="viewVoidRefundProof('${r.id}')">&#128247; View Proof</button>` : ''}
+            <button class="btn btn-accent btn-sm" onclick="approveVoidRefund('${r.id}')">&#10003; Approve</button>
+            <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="declineVoidRefund('${r.id}')">&#10005; Decline</button>
+          </div>
+        </div>
+      </div>`).join('');
+
+  const rest = _vrCache.filter(r => r.status !== 'pending');
+  histEl.innerHTML = !rest.length
+    ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No history yet.</div>'
+    : rest.map(r => {
+        const color = r.status === 'declined' ? '#ef4444' : '#10b981';
+        const label = r.status === 'declined' ? 'Declined' : 'Approved';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px">
+          <div>
+            <strong>Order #${r.order_id}</strong> <span style="color:var(--muted)">${r.type === 'void' ? 'VOID' : 'REFUND'} &middot; ${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
+            ${r.status === 'declined' && r.decline_note ? `<div style="font-size:11px;color:#ef4444;margin-top:2px">${r.decline_note}</div>` : ''}
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-weight:700;color:${color}">${label}</div>
+            <div style="font-size:10px;color:var(--dim)">${new Date(r.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</div>
+          </div>
+        </div>`;
+      }).join('');
+}
+
+function viewVoidRefundProof(id) {
+  const r = _vrCache.find(x => x.id === id);
+  if (!r || !r.proof_b64) return;
+  document.getElementById('vrProofImg').src = r.proof_b64;
+  document.getElementById('vrProofModal').classList.add('show');
+}
+
+// For retail stores, a refund puts the physical item back on the shelf, so
+// stock is restored. For restaurant/food types the stock was already
+// cooked/consumed and can't be un-made, so only the money is reversed.
+async function restoreStockForOrder(orderId, changeType) {
+  if (RESTAURANT_BIZ.has(STORE.business_type)) return;
+  const { data: orderItems } = await _sb.from('order_items').select('product_id,qty').eq('order_id', orderId);
+  if (!orderItems || !orderItems.length) return;
+  const prodIds = orderItems.map(i => i.product_id).filter(Boolean);
+  if (!prodIds.length) return;
+  const { data: prodRows } = await _sb.from('products').select('id,inv_links').in('id', prodIds);
+  const linksMap = {};
+  (prodRows || []).forEach(p => { linksMap[p.id] = p.inv_links; });
+
+  const restores = {};
+  for (const item of orderItems) {
+    let links = []; try { links = linksMap[item.product_id] ? JSON.parse(linksMap[item.product_id]) : []; } catch (_) {}
+    for (const link of links) {
+      const invId = typeof link === 'string' ? link : link.id;
+      const useQty = typeof link === 'object' ? (link.qty || 1) : 1;
+      restores[invId] = (restores[invId] || 0) + useQty * item.qty;
+    }
+  }
+  const invIds = Object.keys(restores);
+  if (!invIds.length) return;
+  const { data: invRows } = await _sb.from('inventory_items').select('id,stock').in('id', invIds);
+  const stockMap = {};
+  (invRows || []).forEach(r => { stockMap[r.id] = r.stock; });
+  await Promise.all(invIds.map(invId => {
+    const cur = stockMap[invId];
+    if (cur == null) return Promise.resolve();
+    const newStock = (cur || 0) + restores[invId];
+    _sb.from('stock_history').insert({ store_id: STORE.id, inventory_item_id: invId, change_type: changeType || 'REFUND_RESTOCK', qty_change: restores[invId] }).then(() => {});
+    return _sb.from('inventory_items').update({ stock: newStock }).eq('id', invId);
+  }));
+}
+
+async function approveVoidRefund(id) {
+  const r = _vrCache.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`Approve this ${r.type} for Order #${r.order_id} (${CUR}${parseFloat(r.order_total || 0).toFixed(2)})?`)) return;
+
+  const { data: orig } = await _sb.from('orders').select('*').eq('id', r.order_id).maybeSingle();
+  if (!orig) { showToast('Original order not found.', true); return; }
+
+  const ownerName = STORE.owner_name || 'Owner';
+
+  // Insert a compensating negative order — every existing revenue total
+  // just sums orders.total, so this nets out automatically everywhere
+  // (Today's Revenue, Sales Report, etc.) without touching those queries
+  // or the original order record.
+  await _sb.from('orders').insert({
+    store_id: STORE.id,
+    cashier_name: ownerName,
+    subtotal: -(parseFloat(orig.subtotal) || 0),
+    tax: -(parseFloat(orig.tax) || 0),
+    total: -(parseFloat(orig.total) || 0),
+    payment_method: orig.payment_method,
+    amount_tendered: 0,
+    change_given: 0,
+    discount_pct: 0,
+    order_type: r.type === 'void' ? 'VOID' : 'REFUND',
+    table_no: `Order #${r.order_id}`,
+  });
+
+  // A void means the sale is being erased as if it never happened — the
+  // stock deducted at sale time must come back just as much as (arguably
+  // more than) a refund, where the goods may have already left with the
+  // customer. Both restore stock; only the stock_history label differs.
+  await restoreStockForOrder(r.order_id, r.type === 'void' ? 'VOID_RESTOCK' : 'REFUND_RESTOCK');
+
+  // Cash-on-hand deduction: only the cash actually collected ever hit a
+  // physical drawer, so pure e-pay originals don't move anyone's COH — the
+  // payment network reverses those on its own. A Split sale only put its
+  // cash portion (amount_tendered) in the drawer, not the full order total.
+  const orderTotal = parseFloat(orig.total) || 0;
+  const cashPortion = orig.payment_method === 'Cash' ? orderTotal
+                     : orig.payment_method === 'Split' ? (parseFloat(orig.amount_tendered) || 0)
+                     : 0;
+  if (cashPortion > 0) {
+    // Where is this order's cash right now? If the cashier's shift that
+    // included it has already been received by the manager (status is
+    // over/short/balanced, not still 'pending'), the money is in the
+    // manager's hands — deduct it there. Otherwise the cashier is still
+    // holding it, uncounted — deduct from what they'll eventually hand over.
+    const { data: coveringRemit } = await _sb.from('cash_remittances')
+      .select('status')
+      .eq('store_id', STORE.id).eq('cashier_name', orig.cashier_name)
+      .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,payment_confirmed,refund)')
+      .gt('created_at', orig.timestamp)
+      .order('created_at', { ascending: true }).limit(1).maybeSingle();
+
+    const today = _localToday();
+    const desc = `${r.type === 'void' ? 'Void' : 'Refund'}: Order #${r.order_id}`;
+    if (coveringRemit && coveringRemit.status !== 'pending') {
+      // Already remitted — comes out of the manager's own cash.
+      await _sb.from('cash_remittances').insert({
+        store_id: STORE.id, cashier_name: ownerName, shift_date: today,
+        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
+        status: 'refund', description: desc
+      });
+    } else {
+      // Not remitted yet (or no remittance found at all) — still with the
+      // cashier, so reduce what they owe instead of the manager's cash.
+      await _sb.from('cash_remittances').insert({
+        store_id: STORE.id, cashier_name: orig.cashier_name, shift_date: today,
+        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
+        status: 'pending', description: desc
+      });
+    }
+  }
+
+  await _sb.from('void_refund_requests').update({
+    status: 'approved', decided_by: ownerName, decided_at: new Date().toISOString()
+  }).eq('id', id);
+
+  await _sb.from('activity_logs').insert({
+    store_id: STORE.id, actor_name: ownerName, actor_role: 'owner',
+    action: r.type === 'void' ? 'ORDER_VOIDED' : 'ORDER_REFUNDED', target_name: `Order #${r.order_id}`,
+    details: JSON.stringify({ amount: r.order_total, reason: r.reason })
+  }).then(() => {});
+  showToast(`${r.type === 'void' ? 'Void' : 'Refund'} approved.`);
+  loadVoidRefund();
+  checkPendingVoidRefund();
+  showVoidRefundReceipt(r, orig);
+}
+
+// Printable record of what was voided/refunded — the owner can print or
+// screenshot this to attach to the physical returned item.
+async function showVoidRefundReceipt(r, orig) {
+  const { data: items } = await _sb.from('order_items').select('name,price,qty').eq('order_id', r.order_id);
+  const CUR2 = orig.currency || CUR;
+  const rows = (items || []).map(i => `<tr>
+      <td style="padding:4px 0">${i.name}</td>
+      <td style="padding:4px 0;text-align:center">${i.qty}</td>
+      <td style="padding:4px 0;text-align:right">${CUR2}${(parseFloat(i.price)||0).toFixed(2)}</td>
+      <td style="padding:4px 0;text-align:right">${CUR2}${((parseFloat(i.price)||0)*(i.qty||1)).toFixed(2)}</td>
+    </tr>`).join('');
+  document.getElementById('vrReceiptBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:10px">
+      <div style="font-weight:800;font-size:16px">${r.type === 'void' ? 'VOID' : 'REFUND'} RECEIPT</div>
+      <div style="font-size:12px;color:var(--muted)">Order #${r.order_id} &middot; ${new Date().toLocaleString('en-PH')}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:4px 0">Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" style="padding:8px 0;color:var(--muted)">No item detail on this order.</td></tr>'}</tbody>
+    </table>
+    <div style="border-top:1px solid var(--border);padding-top:8px;font-size:13px">
+      <div style="display:flex;justify-content:space-between"><span>Cashier</span><strong>${orig.cashier_name || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Payment method</span><strong>${orig.payment_method || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Reason</span><strong>${r.reason || ''}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span>Approved by</span><strong>${STORE.owner_name || 'Owner'}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:16px;margin-top:6px"><span>TOTAL ${r.type === 'void' ? 'VOIDED' : 'REFUNDED'}</span><strong>${CUR2}${(parseFloat(orig.total)||0).toFixed(2)}</strong></div>
+    </div>`;
+  document.getElementById('vrReceiptModal').classList.add('show');
+}
+function printVoidRefundReceipt() {
+  const html = document.getElementById('vrReceiptBody').innerHTML;
+  const w = window.open('', '_blank', 'width=380,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
+    <style>body{font-family:'Courier New',monospace;padding:16px;color:#000}</style>
+    </head><body>${html}<script>window.onload=function(){window.print();};<\/script></body></html>`);
+  w.document.close();
+}
+
+async function declineVoidRefund(id) {
+  const note = prompt('Reason for declining (the cashier will see this):');
+  if (note === null) return;
+  const { error } = await _sb.from('void_refund_requests').update({
+    status: 'declined', decline_note: note.trim() || null, decided_by: STORE.owner_name || 'Owner', decided_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  showToast('Request declined.');
+  loadVoidRefund();
+  checkPendingVoidRefund();
+}
 
 let _walletMethodEntries = [];
 function toggleWalletMethod(i) {
@@ -3444,7 +3725,7 @@ async function openMgrCohModal() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
-  const adjStatuses = ['purchase','deposit','coh_to_staff','fund_transfer'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
@@ -3544,7 +3825,7 @@ async function loadManagerCash() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
-  const adjStatuses = ['purchase','deposit','coh_to_staff','fund_transfer'];
+  const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
@@ -3985,19 +4266,20 @@ function renderReport(orders, from, to) {
         </tr></thead>
         <tbody>
           ${rows.map((o,ri) => {
-            const otype = o.order_type || 'Dine In';
-            const otBg  = otype==='Dine In'?'#0a2a1a':otype==='Take Out'?'#1a1a00':'#1a0a2a';
-            const otColor = otype==='Dine In'?'#10b981':otype==='Take Out'?'#f59e0b':'#a78bfa';
-            return `<tr style="border-top:1px solid rgba(255,255,255,.04);${ri%2?'background:rgba(255,255,255,.025)':''}">
+            const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+            const otype = isVoidRow ? o.order_type : (o.order_type || 'Dine In');
+            const otBg  = isVoidRow ? 'rgba(239,68,68,.15)' : otype==='Dine In'?'#0a2a1a':otype==='Take Out'?'#1a1a00':'#1a0a2a';
+            const otColor = isVoidRow ? '#ef4444' : otype==='Dine In'?'#10b981':otype==='Take Out'?'#f59e0b':'#a78bfa';
+            return `<tr style="border-top:1px solid rgba(255,255,255,.04);${isVoidRow ? 'background:rgba(239,68,68,.06)' : ri%2?'background:rgba(255,255,255,.025)':''}">
             <td style="padding:5px 10px;color:var(--dim);font-size:11px">#${o.id}</td>
             <td style="padding:5px 10px;white-space:nowrap;font-size:12px">${fmtTime(o.timestamp)}</td>
             <td style="padding:5px 10px;font-weight:500;font-size:12px">${o.cashier_name||'—'}</td>
             <td style="padding:5px 10px;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--teal-text)" title="${(o._items||[]).join(', ')}">${(o._items||[]).slice(0,3).join(', ')||'—'}${o._items&&o._items.length>3?' <span style=\'color:var(--purple-text);font-size:10px;font-weight:700\'>+${o._items.length-3}</span>':''}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
             <td style="padding:5px 10px;text-align:right;color:var(--muted);font-size:12px">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
-            <td style="padding:5px 10px;text-align:right;font-weight:700;color:var(--accent)">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
+            <td style="padding:5px 10px;text-align:right;font-weight:700;color:${isVoidRow ? '#ef4444' : 'var(--accent)'}">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
             ${RESTAURANT_BIZ.has(STORE.business_type) ? `<td style="padding:5px 10px;text-align:center"><span style="background:${otBg};color:${otColor};padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${otype}</span></td>` : ''}
-            <td style="padding:5px 10px;text-align:center"><span style="background:${payBg(o.payment_method)};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px">${o._splitDetail||o.payment_method||'Cash'}</span></td>
+            <td style="padding:5px 10px;text-align:center">${isVoidRow ? `<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700">${o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED'}</span>` : `<span style="background:${payBg(o.payment_method)};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px">${o._splitDetail||o.payment_method||'Cash'}</span>`}</td>
           </tr>`;}).join('')}
         </tbody>
         <tfoot>
@@ -6333,7 +6615,8 @@ function renderOrders(orders) {
     const bg   = m === 'cash' ? 'bg-cash' : m === 'card' ? 'bg-card' : 'bg-gcash';
     const disc = parseFloat(o.discount_pct || 0);
     const itms = (o._items || []).join(', ') || '&#8212;';
-    return `<tr style="cursor:pointer" onclick="viewOrder(${o.id})">
+    const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+    return `<tr style="cursor:pointer${isVoidRow ? ';background:rgba(239,68,68,.06)' : ''}" onclick="viewOrder(${o.id})">
       <td style="font-weight:600">#${o.id}</td>
       <td>${dt}</td>
       <td>${o.cashier_name || ''}</td>
@@ -6341,8 +6624,8 @@ function renderOrders(orders) {
       <td>${CUR}${parseFloat(o.subtotal||0).toFixed(2)}</td>
       <td style="color:var(--muted)">${CUR}${parseFloat(o.tax||0).toFixed(2)}</td>
       <td style="color:${disc>0?'#f59e0b':'var(--muted)'}">${disc>0?disc+'%':'&#8212;'}</td>
-      <td style="color:var(--accent);font-weight:700">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
-      <td><span class="badge ${bg}">${o._splitDetail || o.payment_method || 'Cash'}</span></td>
+      <td style="color:${isVoidRow ? '#ef4444' : 'var(--accent)'};font-weight:700">${CUR}${parseFloat(o.total||0).toFixed(2)}</td>
+      <td>${isVoidRow ? `<span class="badge" style="background:rgba(239,68,68,.15);color:#ef4444">${o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED'}</span>` : `<span class="badge ${bg}">${o._splitDetail || o.payment_method || 'Cash'}</span>`}</td>
       <td>${CUR}${parseFloat(o.amount_tendered||0).toFixed(2)}</td>
       <td>${CUR}${parseFloat(o.change_given||0).toFixed(2)}</td>
     </tr>`;
@@ -6434,7 +6717,10 @@ async function clearOrdFilter() {
 function exportOrdCSV() {
   if (!allOrders.length) { showToast('No orders to export.', true); return; }
   const hdr = ['ID','Date','Cashier','Items','Subtotal','Tax','Discount%','Total','Method','Tendered','Change'];
-  const rows = allOrders.map(o => [
+  const rows = allOrders.map(o => {
+    const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+    const methodLabel = isVoidRow ? (o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED') : (o._splitDetail || o.payment_method || 'Cash');
+    return [
     o.id,
     new Date(o.timestamp).toLocaleString('en-PH'),
     o.cashier_name || '',
@@ -6443,10 +6729,11 @@ function exportOrdCSV() {
     parseFloat(o.tax||0).toFixed(2),
     parseFloat(o.discount_pct||0).toFixed(2),
     parseFloat(o.total||0).toFixed(2),
-    o._splitDetail || o.payment_method || 'Cash',
+    methodLabel,
     parseFloat(o.amount_tendered||0).toFixed(2),
     parseFloat(o.change_given||0).toFixed(2),
-  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
   const csv = [hdr.join(','), ...rows].join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('ï»¿' + csv);
