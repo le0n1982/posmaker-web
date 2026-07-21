@@ -392,8 +392,8 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="tbl-head"><h3>By Payment Method</h3></div>
         <div id="walletByMethodList" style="padding:16px 20px;display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      <div class="tbl-wrap">
-        <div class="tbl-head"><h3>Wallet History</h3></div>
+      <div class="tbl-wrap" id="walletSentWrap" style="display:none">
+        <div class="tbl-head"><h3>Sent to Staff</h3></div>
         <div id="walletHistoryList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
           <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading...</div>
         </div>
@@ -2083,17 +2083,38 @@ function toggleWalletMethod(i) {
   const opening = body.style.display === 'none';
   if (opening && !body.dataset.rendered) {
     const entries = (_walletMethodEntries[i] || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    body.innerHTML = entries.length ? entries.map(e => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
+    body.innerHTML = entries.length ? entries.map(e => {
+      if (e._kind === 'deposit') {
+        const statusColor = e.confirmed ? 'var(--ok-text)' : 'var(--warn-text)';
+        const statusLabel = e.confirmed ? 'Confirmed' : 'Pending';
+        return `<div style="padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="color:var(--text)">${e.note ? e.note + ' &middot; ' : ''}from ${e.cashier}</div>
+              <div style="color:var(--dim);font-size:10px">${new Date(e.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}</strong>
+              <span style="font-size:10px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            ${_receiptCache[e.id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();viewReceipt('${e.id}')">View Receipt</button>` : ''}
+            ${!e.confirmed ? `<button class="btn btn-accent btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();confirmWalletDeposit('${e.id}',this)">&#10003; Confirm Received</button>` : ''}
+          </div>
+        </div>`;
+      }
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
         <div>
           <div style="color:var(--text)">${e.order || 'E-Pay'}${e.cashier ? ' &middot; ' + e.cashier : ''}</div>
           <div style="color:var(--dim);font-size:10px">${new Date(e.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}</strong>
+          <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}${e.pairMethod ? ` / ${e.pairMethod} ${CUR}${e.pairAmount.toFixed(2)}` : ''}</strong>
           ${_receiptCache[e.id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();viewReceipt('${e.id}')">View</button>` : ''}
         </div>
-      </div>`).join('') : '<div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0">No transactions.</div>';
+      </div>`;
+    }).join('') : '<div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0">No transactions.</div>';
     body.dataset.rendered = '1';
   }
   body.style.display = opening ? '' : 'none';
@@ -2143,12 +2164,18 @@ async function loadWallet() {
   const sent = sentRows || [];
   const receivedTotal = rows.filter(r => r.owner_confirmed).reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
   const sentTotal = sent.reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
-  // Group confirmed e-pay income by bank/e-wallet — a Split sale's proof
-  // label carries a " (Split)" suffix that's stripped here so it still
-  // groups under its actual method (e.g. "GCash"), not a separate bucket.
-  // Each method keeps its own transaction list too, so the breakdown card
-  // can expand to show exactly which sales made up that total.
-  const epayByMethod = {};
+  // One combined "By Payment Method" breakdown: confirmed e-pay sales AND
+  // manager deposits, grouped under the same bank/e-wallet — a manager
+  // deposit only has a bank if they picked one in "Deposit To" (added
+  // later than this feature), so deposits without one fall under "Other".
+  // A Split sale's proof label carries a " (Split)" suffix that's stripped
+  // here so it still groups under its actual method, not a separate bucket.
+  const byMethod = {};
+  const _bump = (method, amt, entry) => {
+    if (!byMethod[method]) byMethod[method] = { total: 0, entries: [] };
+    byMethod[method].total += amt;
+    byMethod[method].entries.push(entry);
+  };
   let epayTotal = 0;
   (epayLogs || []).forEach(l => {
     let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
@@ -2156,11 +2183,16 @@ async function loadWallet() {
     const amt = parseFloat(d.amount) || 0;
     if (!amt) return;
     const method = (d.method || 'Other').replace(/\s*\(Split\)$/i, '').trim();
-    if (!epayByMethod[method]) epayByMethod[method] = { total: 0, entries: [] };
-    epayByMethod[method].total += amt;
-    epayByMethod[method].entries.push({ id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '' });
+    _bump(method, amt, { _kind: 'epay', id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '', pairMethod: d.pairMethod || '', pairAmount: parseFloat(d.pairAmount) || 0 });
     if (d.receipt_b64) _receiptCache[l.id] = { b64: d.receipt_b64, actorName: l.actor_name || '' };
     epayTotal += amt;
+  });
+  rows.forEach(r => {
+    const d = proofByCrId[r.id] || {};
+    const method = d.bank || 'Other';
+    const amt = Math.abs(parseFloat(r.cash_on_hand || 0));
+    _bump(method, r.owner_confirmed ? amt : 0, { _kind: 'deposit', id: r.id, amount: amt, created_at: r.created_at, cashier: r.cashier_name, note: (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim(), confirmed: r.owner_confirmed });
+    if (d.receipt_b64) _receiptCache[r.id] = { b64: d.receipt_b64, actorName: r.cashier_name };
   });
   const balance = receivedTotal - sentTotal + epayTotal;
   const fmt = n => CUR + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2178,16 +2210,17 @@ async function loadWallet() {
   const methodListEl = document.getElementById('walletByMethodList');
   if (methodWrap && methodListEl) {
     const configuredLabels = (payMethods || []).map(m => m.label);
-    const allLabels = [...new Set([...configuredLabels, ...Object.keys(epayByMethod)])];
-    _walletMethodEntries = allLabels.map(label => (epayByMethod[label] && epayByMethod[label].entries) || []);
+    const allLabels = [...new Set([...configuredLabels, ...Object.keys(byMethod)])];
+    _walletMethodEntries = allLabels.map(label => (byMethod[label] && byMethod[label].entries) || []);
     if (allLabels.length) {
       methodWrap.style.display = '';
       methodListEl.innerHTML = allLabels.map((label, i) => {
         const entries = _walletMethodEntries[i];
-        const total = (epayByMethod[label] && epayByMethod[label].total) || 0;
+        const total = (byMethod[label] && byMethod[label].total) || 0;
+        const pendingHere = entries.filter(e => e._kind === 'deposit' && !e.confirmed).length;
         return `<div style="background:var(--s2);border-radius:8px;overflow:hidden">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer" onclick="toggleWalletMethod(${i})">
-            <span style="font-weight:600;font-size:13px">${label}</span>
+            <span style="font-weight:600;font-size:13px">${label}${pendingHere ? ` <span style="color:var(--warn-text);font-weight:700;font-size:11px">&middot; ${pendingHere} pending</span>` : ''}</span>
             <div style="display:flex;align-items:center;gap:8px">
               <strong style="font-size:14px;color:var(--ok-text)">${fmt(total)}</strong>
               <span id="walletMethodCaret_${i}" style="font-size:11px;color:var(--muted);transition:transform .15s">&#9656;</span>
@@ -2203,43 +2236,25 @@ async function loadWallet() {
   const pendingCount = rows.filter(r => !r.owner_confirmed).length;
   const badge = document.getElementById('walletPendingBadge');
   if (badge) { if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else badge.style.display = 'none'; }
-  // Combine deposits (incoming) and sends (outgoing) into one chronological
-  // history so the balance above is never a mystery number.
-  const combined = [
-    ...rows.map(r => Object.assign({}, r, { _kind: 'in' })),
-    ...sent.map(r => Object.assign({}, r, { _kind: 'out' }))
-  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  if (!combined.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No transactions yet.</div>'; return; }
-  listEl.innerHTML = combined.map(r => {
+  // Deposits (incoming) now live inside "By Payment Method" above, grouped
+  // by bank — showing them again here would just be the same numbers twice.
+  // This list is only for money that went OUT to staff.
+  const sentWrap = document.getElementById('walletSentWrap');
+  if (sentWrap) sentWrap.style.display = sent.length ? '' : 'none';
+  if (!sent.length) { listEl.innerHTML = ''; return; }
+  const sentSorted = sent.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  listEl.innerHTML = sentSorted.map(r => {
     const amount = Math.abs(parseFloat(r.cash_on_hand || 0));
-    if (r._kind === 'out') {
-      const note = (r.description || '').replace(/^Owner sent:?\s*/i, '').trim();
-      return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <strong style="font-size:16px;color:var(--danger-text)">&minus;${CUR}${amount.toFixed(2)}</strong>
-            <span style="font-size:11px;color:var(--muted);margin-left:6px">${note ? note + ' &middot; ' : ''}sent to ${r.cashier_name}</span>
-          </div>
-          <span style="font-size:11px;font-weight:700;color:var(--muted)">Sent</span>
-        </div>
-        <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-      </div>`;
-    }
-    const proof = proofByCrId[r.id] || {};
-    const note = (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim();
-    const statusColor = r.owner_confirmed ? 'var(--ok-text)' : 'var(--warn-text)';
-    const statusLabel = r.owner_confirmed ? 'Confirmed' : 'Pending';
+    const note = (r.description || '').replace(/^Owner sent:?\s*/i, '').trim();
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <div>
-          <strong style="font-size:16px">${CUR}${amount.toFixed(2)}</strong>
-          <span style="font-size:11px;color:var(--muted);margin-left:6px">${note ? note + ' &middot; ' : ''}from ${r.cashier_name}</span>
+          <strong style="font-size:16px;color:var(--danger-text)">&minus;${CUR}${amount.toFixed(2)}</strong>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px">${note ? note + ' &middot; ' : ''}sent to ${r.cashier_name}</span>
         </div>
-        <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--muted)">Sent</span>
       </div>
-      ${proof.receipt_b64 ? `<div style="margin-top:8px"><img src="${proof.receipt_b64}" style="max-width:180px;max-height:140px;border-radius:8px;border:1px solid var(--border);cursor:pointer" onclick="window.open('${proof.receipt_b64}','_blank')"></div>` : ''}
       <div style="font-size:10px;color:var(--dim);margin-top:6px">${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-      ${!r.owner_confirmed ? `<button class="btn btn-accent btn-sm" style="margin-top:8px" onclick="confirmWalletDeposit('${r.id}',this)">&#10003; Confirm Received</button>` : ''}
     </div>`;
   }).join('');
 }
