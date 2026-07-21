@@ -2194,7 +2194,7 @@ async function loadWallet() {
     if (!amt) return;
     const method = (d.method || 'Other').replace(/\s*\(Split\)$/i, '').trim();
     _bump(method, amt, { _kind: 'epay', id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '', pairMethod: d.pairMethod || '', pairAmount: parseFloat(d.pairAmount) || 0 });
-    if (d.receipt_b64) _receiptCache[l.id] = { b64: d.receipt_b64, actorName: l.actor_name || '' };
+    if (d.receipt_b64) _receiptCache[l.id] = { b64: d.receipt_b64, actorName: l.actor_name || '', label: `${l.target_name || 'E-Pay'} · ${method} · ${CUR}${amt.toFixed(2)}` };
     epayTotal += amt;
   });
   rows.forEach(r => {
@@ -2202,7 +2202,7 @@ async function loadWallet() {
     const method = d.bank || 'Other';
     const amt = Math.abs(parseFloat(r.cash_on_hand || 0));
     _bump(method, r.owner_confirmed ? amt : 0, { _kind: 'deposit', id: r.id, amount: amt, created_at: r.created_at, cashier: r.cashier_name, note: (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim(), confirmed: r.owner_confirmed });
-    if (d.receipt_b64) _receiptCache[r.id] = { b64: d.receipt_b64, actorName: r.cashier_name };
+    if (d.receipt_b64) _receiptCache[r.id] = { b64: d.receipt_b64, actorName: r.cashier_name, label: `Deposit from ${r.cashier_name} · ${method} · ${CUR}${amt.toFixed(2)}` };
   });
   const balance = receivedTotal - sentTotal + epayTotal;
   const fmt = n => CUR + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5765,7 +5765,7 @@ function viewReceipt(logId) {
   const invalidBtn = document.getElementById('receiptInvalidBtn');
   const acceptBtn  = document.getElementById('receiptAcceptBtn');
   document.getElementById('receiptDownloadBtn').style.display = 'none';
-  document.getElementById('receiptMeta').textContent = 'Uploaded by: ' + (r.actorName || '—');
+  document.getElementById('receiptMeta').textContent = r.label ? r.label : ('Uploaded by: ' + (r.actorName || '—'));
 
   banner.style.display = 'none';
   imgWrap.style.display = '';

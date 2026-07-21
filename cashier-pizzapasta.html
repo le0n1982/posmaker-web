@@ -2062,7 +2062,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.0';
+const POS_BUILD = '1.9.1';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3682,7 +3682,7 @@ async function openMySales() {
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('timestamp', queryStart).order('timestamp', { ascending: false }),
-    _sb.from('activity_logs').select('action,details,created_at')
+    _sb.from('activity_logs').select('action,details,created_at,target_name')
       .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME)
       .gte('created_at', queryStart).order('created_at', { ascending: false }),
     // Structured remittance figures straight from the source table — reading
@@ -3726,8 +3726,34 @@ async function openMySales() {
   // Merge today's sales with this cashier's own remittances, expenses, and
   // login/logout into one chronological feed — a scannable self-check of
   // the whole shift, not just a sales total.
+  // Look up which bank/e-wallet (or split breakdown) each E-Pay/Split sale
+  // actually used — the order row itself only stores 'Split' generically,
+  // the real method+amount(s) live in this cashier's own EPAY_PROOF logs.
+  const epayByOrder = {};
+  (logs || []).forEach(l => {
+    if (l.action !== 'EPAY_PROOF' || epayByOrder[l.target_name]) return;
+    let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) { d = {}; }
+    epayByOrder[l.target_name] = {
+      method: (d.method || '').replace(/\s*\(Split\)$/i, '').trim(),
+      amount: parseFloat(d.amount) || 0,
+      pairMethod: d.pairMethod || '',
+      pairAmount: parseFloat(d.pairAmount) || 0
+    };
+  });
+  const _orderPaymentLabel = o => {
+    const pm = o.payment_method || 'Cash';
+    if (pm === 'Cash') return null;
+    if (pm === 'Split') {
+      const d = epayByOrder['Order #' + o.id];
+      if (!d) return 'Split';
+      if (d.pairMethod) return `${d.method} ${CUR}${d.amount.toFixed(2)} / ${d.pairMethod} ${CUR}${d.pairAmount.toFixed(2)}`;
+      const cashAmt = parseFloat(o.amount_tendered) || 0;
+      return `Cash ${CUR}${cashAmt.toFixed(2)} + ${d.method} ${CUR}${d.amount.toFixed(2)}`;
+    }
+    return pm;
+  };
   const feed = [];
-  rows.forEach(o => feed.push({ type: 'order', t: new Date(o.timestamp), id: o.id, amount: parseFloat(o.total) || 0 }));
+  rows.forEach(o => feed.push({ type: 'order', t: new Date(o.timestamp), id: o.id, amount: parseFloat(o.total) || 0, paymentLabel: _orderPaymentLabel(o) }));
   (logs || []).forEach(l => {
     if (l.action === 'EXPENSE_PAID') {
       let d = {}; try { d = JSON.parse(l.details); } catch(_) {}
@@ -3758,9 +3784,12 @@ async function openMySales() {
 function _myActivityItemHtml(f) {
   const time = f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
   if (f.type === 'order') {
-    return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(16,185,129,.08);border-left:3px solid #10b981;border-radius:8px;padding:9px 12px;font-size:13px">
-      <span style="color:var(--muted)">&#129534; Sale #${f.id} &middot; ${time}</span>
-      <span style="font-weight:700;color:#10b981">+${CUR}${f.amount.toFixed(2)}</span>
+    return `<div style="background:rgba(16,185,129,.08);border-left:3px solid #10b981;border-radius:8px;padding:9px 12px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--muted)">&#129534; Sale #${f.id} &middot; ${time}</span>
+        <span style="font-weight:700;color:#10b981">+${CUR}${f.amount.toFixed(2)}</span>
+      </div>
+      ${f.paymentLabel ? `<div style="color:var(--purple-text);font-size:11px;margin-top:2px">${f.paymentLabel}</div>` : ''}
     </div>`;
   }
   if (f.type === 'expense') {
