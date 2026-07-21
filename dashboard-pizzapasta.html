@@ -898,7 +898,22 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
         <div class="field"><label>Address</label><input id="sAddress" type="text"></div>
         <div class="row2">
-          <div class="field"><label>Currency Symbol</label><input id="sCurrency" type="text" maxlength="4"></div>
+          <div class="field"><label>Currency Symbol</label>
+            <select id="sCurrency">
+              <option value="₱">₱ &mdash; Philippine Peso</option>
+              <option value="$">$ &mdash; US Dollar</option>
+              <option value="€">€ &mdash; Euro</option>
+              <option value="£">£ &mdash; British Pound</option>
+              <option value="¥">¥ &mdash; Japanese Yen</option>
+              <option value="Rp">Rp &mdash; Indonesian Rupiah</option>
+              <option value="RM">RM &mdash; Malaysian Ringgit</option>
+              <option value="₹">₹ &mdash; Indian Rupee</option>
+              <option value="₩">₩ &mdash; Korean Won</option>
+              <option value="฿">฿ &mdash; Thai Baht</option>
+              <option value="₫">₫ &mdash; Vietnamese Dong</option>
+              <option value="A$">A$ &mdash; Australian Dollar</option>
+            </select>
+          </div>
           <div class="field"><label>Tax Rate (%)</label><input id="sTax" type="number" min="0" max="100" step="0.5"></div>
         </div>
         <div class="row2">
@@ -1912,7 +1927,15 @@ function _sig(ms = 25000) {
   document.getElementById('sName').value     = store.name || '';
   document.getElementById('sPhone').value    = store.phone || '';
   document.getElementById('sAddress').value  = store.address || '';
-  document.getElementById('sCurrency').value = store.currency || '&#8369;';
+  {
+    // If the store's saved currency isn't one of the preset options (e.g. it
+    // was hand-typed before this became a dropdown), add it as its own
+    // option instead of silently falling back to Peso and losing it on Save.
+    const _curSel = document.getElementById('sCurrency');
+    const _curVal = store.currency || '₱';
+    _curSel.value = _curVal;
+    if (_curSel.value !== _curVal) _curSel.add(new Option(_curVal + ' — Custom', _curVal, true, true));
+  }
   document.getElementById('sTax').value      = store.tax_rate ?? 12;
   document.getElementById('sOpenTime').value  = store.open_time  || '08:00';
   document.getElementById('sCloseTime').value = store.close_time || '20:00';
@@ -6119,7 +6142,7 @@ async function saveSettings() {
     name:           document.getElementById('sName').value.trim(),
     phone:          document.getElementById('sPhone').value.trim(),
     address:        document.getElementById('sAddress').value.trim(),
-    currency:       document.getElementById('sCurrency').value.trim() || '&#8369;',
+    currency:       document.getElementById('sCurrency').value.trim() || '₱',
     tax_rate:       parseFloat(document.getElementById('sTax').value) || 0,
     open_time:      document.getElementById('sOpenTime').value || '08:00',
     close_time:     document.getElementById('sCloseTime').value || '20:00',
