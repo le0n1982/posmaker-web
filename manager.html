@@ -1499,6 +1499,7 @@ function renderMgrStaff(staff) {
       <td style="font-size:12px;color:var(--muted)">${lastLogin}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="viewMgrStaffLogs('${s.id}','${(s.full_name||s.username).replace(/'/g,"\\'")}','${s.role}')">Logs</button>
+        ${s.role==='cashier'?`<button class="btn btn-sm" style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)" onclick="openSendCash('${s.username}','${(s.full_name||s.username).replace(/'/g,"\\'")}')">&#128176; Send</button>`:''}
         ${(_isOnline && s.role!=='manager')?`<button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)" onclick="forceLogoutMgrStaff('${s.id}','${(s.full_name||s.username).replace(/'/g,"\\'")}')">&#128274; Force Logout</button>`:''}
       </td>
     </tr>`;
@@ -1509,6 +1510,54 @@ async function forceLogoutMgrStaff(id, name) {
   await _sb.from('store_users').update({ last_seen: null }).eq('id', id);
   await loadMgrStaff();
   showToast(`"${name}" logged out.`);
+}
+
+// ── Send Cash to Cashier (from Net Cash with Manager) ──────────────────────
+let _scCashierName = '', _scCashierUsername = '';
+function openSendCash(username, name) {
+  _scCashierUsername = username;
+  _scCashierName = name;
+  document.getElementById('scRecipient').textContent = name;
+  document.getElementById('scAvail').textContent = '₱' + (_cashNetTotal || 0).toFixed(2);
+  document.getElementById('scAmt').value = '';
+  document.getElementById('scNote').value = '';
+  const btn = document.getElementById('scBtn');
+  btn.disabled = false; btn.innerHTML = '&#128176; Send';
+  document.getElementById('sendCashModal').classList.add('show');
+}
+async function saveSendCash() {
+  const amt = parseFloat(document.getElementById('scAmt').value);
+  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
+  const btn = document.getElementById('scBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Sending…';
+  if (amt > (_cashNetTotal || 0) + 0.01) {
+    btn.disabled = false; btn.innerHTML = '&#128176; Send';
+    showToast(`Net Cash with Manager only has ₱${(_cashNetTotal || 0).toFixed(2)} — cannot send more than that.`, true);
+    return;
+  }
+  const note = document.getElementById('scNote').value.trim();
+  const today = _localToday();
+  const desc = 'Sent to ' + _scCashierName + (note ? ': ' + note : '');
+  const { error } = await _sb.from('cash_remittances').insert({
+    store_id: MGR.store_id, cashier_name: MGR.name, shift_date: today,
+    pos_sales: 0, cash_on_hand: -amt, difference: -amt,
+    status: 'coh_to_staff', description: desc
+  });
+  if (error) { showToast('Error: ' + error.message, true); btn.disabled = false; btn.innerHTML = '&#128176; Send'; return; }
+  await _sb.from('activity_logs').insert({
+    store_id: MGR.store_id, actor_name: MGR.name, actor_role: 'manager',
+    action: 'MGR_SEND_TO_CASHIER', target_name: _scCashierName,
+    details: JSON.stringify(Object.assign({ amount: amt }, note ? { note } : {}))
+  }).then(() => {});
+  var _nl = String.fromCharCode(10);
+  await _sb.from('store_messages').insert({
+    store_id: MGR.store_id, from_name: MGR.name, from_role: 'manager',
+    to_username: _scCashierUsername, to_name: _scCashierName,
+    body: '₱' + amt.toFixed(2) + ' cash from Manager' + (note ? _nl + note : ''), read: false
+  }).then(() => {});
+  closeModal('sendCashModal');
+  showToast('₱' + amt.toFixed(2) + ' sent to ' + _scCashierName + '.');
+  loadCashSummary();
 }
 let _mgrStaffLogsPoll = null, _mgrStaffLogsCur = null;
 function closeMgrStaffLogsModal() {
@@ -3706,6 +3755,30 @@ _updateThemeIcon();
     <img id="caDisbQRCode" style="width:190px;height:190px;border-radius:8px;background:#fff;padding:6px;margin:8px auto;display:block">
     <div id="caDisbQRStatus" style="font-size:12px;color:var(--muted);margin-bottom:14px">Waiting for photo&#8230;</div>
     <button class="btn btn-ghost" onclick="closeCaDisbQR()">Close</button>
+  </div>
+</div>
+
+<!-- SEND CASH TO CASHIER MODAL -->
+<div class="modal" id="sendCashModal">
+  <div class="mbox">
+    <h3 style="margin-bottom:8px">&#128176; Send Cash to Cashier</h3>
+    <div style="background:var(--s2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+      <span style="color:var(--muted)">Para kay: </span>
+      <strong id="scRecipient" style="color:var(--accent)">—</strong>
+      <div style="margin-top:4px;font-size:11px;color:var(--muted)">Net Cash with Manager available: <strong id="scAvail" style="color:#10b981">₱0.00</strong></div>
+    </div>
+    <div class="field">
+      <label>Amount (&#8369;)</label>
+      <input id="scAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:var(--ok-text)">
+    </div>
+    <div class="field">
+      <label>Note / Reason (optional)</label>
+      <input id="scNote" type="text" placeholder="e.g. Change fund, Reimbursement">
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('sendCashModal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-accent" id="scBtn" onclick="saveSendCash()">&#128176; Send</button>
+    </div>
   </div>
 </div>
 
