@@ -1924,14 +1924,20 @@ async function loadProds() {
       let links = [];
       try { links = p.inv_links ? JSON.parse(p.inv_links) : []; } catch {}
       if (links.length > 0) {
-        let eff = Infinity;
+        let eff = Infinity, effUnit = null, effIsDirect = false;
         for (const link of links) {
           const invId = typeof link === 'string' ? link : link.id;
           const useQty = typeof link === 'object' ? (link.qty || 1) : 1;
           const inv = invById[invId];
-          if (inv) eff = Math.min(eff, _resolveSupplyStock(inv.stock, useQty));
+          if (inv) {
+            const resolved = _resolveSupplyStock(inv.stock, useQty);
+            if (resolved < eff) { eff = resolved; effUnit = inv.unit; effIsDirect = (useQty === 1); }
+          }
         }
         p.stock = eff; p._invResolved = true;
+        // Only borrow the inventory item's unit for a direct 1:1 link — see
+        // comment above this block for why a recipe-style link must not.
+        if (effIsDirect && effUnit) p.unit = effUnit;
       } else if (!(p.stock > 0)) {
         const key = (p.name || '').toLowerCase().trim();
         const skuKey = (p.sku || '').toLowerCase().trim();
@@ -1939,6 +1945,7 @@ async function loadProds() {
         if (inv) {
           const resolved = _resolveSupplyStock(inv.stock, 1);
           p.stock = resolved; p._invResolved = true; p._autoInvLink = inv.id;
+          if (inv.unit) p.unit = inv.unit;
         }
       }
     });
@@ -2038,7 +2045,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.7.6';
+const POS_BUILD = '1.7.7';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
