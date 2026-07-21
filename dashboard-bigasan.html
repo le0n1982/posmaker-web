@@ -2077,7 +2077,7 @@ function toggleWalletMethod(i) {
           <div style="color:var(--dim);font-size:10px">${new Date(e.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}</strong>
+          <strong style="color:var(--ok-text)">${CUR}${e.amount.toFixed(2)}${e.pairMethod ? ` / ${e.pairMethod} ${CUR}${e.pairAmount.toFixed(2)}` : ''}</strong>
           ${_receiptCache[e.id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();viewReceipt('${e.id}')">View</button>` : ''}
         </div>
       </div>`).join('') : '<div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0">No transactions.</div>';
@@ -2145,7 +2145,7 @@ async function loadWallet() {
     const method = (d.method || 'Other').replace(/\s*\(Split\)$/i, '').trim();
     if (!epayByMethod[method]) epayByMethod[method] = { total: 0, entries: [] };
     epayByMethod[method].total += amt;
-    epayByMethod[method].entries.push({ id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '' });
+    epayByMethod[method].entries.push({ id: l.id, amount: amt, created_at: l.created_at, order: l.target_name || '', cashier: l.actor_name || '', pairMethod: d.pairMethod || '', pairAmount: parseFloat(d.pairAmount) || 0 });
     if (d.receipt_b64) _receiptCache[l.id] = { b64: d.receipt_b64, actorName: l.actor_name || '' };
     epayTotal += amt;
   });
