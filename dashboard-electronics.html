@@ -6671,10 +6671,38 @@ function renderStockHistoryFiltered() {
     </div>`;
   }).join('');
 }
+// Mirrors the POS's own 3-tier stock resolution (inv_links first, then
+// name/SKU auto-match for products with no explicit link and no legacy
+// stock of their own) so "still in use" here means the same thing it means
+// at the register.
+function _productsUsingInvItem(invItem){
+  const matches=[];
+  const key=(invItem.name||'').toLowerCase().trim();
+  const skuKey=(invItem.sku||'').toLowerCase().trim();
+  allProds.forEach(p=>{
+    let links=[];
+    try{links=p.inv_links?JSON.parse(p.inv_links):[];}catch(_){}
+    if(links.length>0){
+      const used=links.some(l=>(typeof l==='string'?l:l.id)===invItem.id);
+      if(used)matches.push(p.name);
+    }else if(!(parseFloat(p.stock)>0)){
+      const pName=(p.name||'').toLowerCase().trim();
+      const pSku=(p.sku||'').toLowerCase().trim();
+      if((key&&pName===key)||(skuKey&&pSku===skuKey))matches.push(p.name);
+    }
+  });
+  return matches;
+}
 async function deleteInvItem(id){
   const i=invItems.find(x=>x.id===id);if(!i)return;
+  const usedBy=_productsUsingInvItem(i);
+  if(usedBy.length){
+    showToast(`Cannot delete "${i.name}" — still used by: ${usedBy.join(', ')}. Unlink or delete ${usedBy.length>1?'those products':'that product'} first.`,true);
+    return;
+  }
   if(!confirm(`Delete "${i.name}"?`))return;
-  await _sb.from('inventory_items').delete().eq('id',id);
+  const {error}=await _sb.from('inventory_items').delete().eq('id',id);
+  if(error){showToast(`Could not delete "${i.name}": ${error.message}`,true);return;}
   await loadInventory();showToast(`"${i.name}" deleted.`);
 }
 
