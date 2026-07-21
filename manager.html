@@ -1600,7 +1600,12 @@ async function renderMgrStaffLogsBody(staffId, displayName, role) {
           epayCell = shiftEpay.length ? shiftEpay.map(p => {
             let d = {}; try { d = JSON.parse(p.details || '{}'); } catch(_) {}
             const amt = d.amount != null ? '₱' + parseFloat(d.amount).toFixed(2) : '';
-            return `<div style="margin-bottom:2px">${d.method||''} ${amt} ${d.confirmed
+            // A Split sale between two DIFFERENT E-Pay methods logs one entry
+            // per leg — each already carries the other leg's method+amount,
+            // so show the pairing (e.g. "GCash ₱500 / GoTyme ₱1000") instead
+            // of a bare amount with no context.
+            const pairInfo = d.pairMethod ? ` / ${d.pairMethod} ₱${parseFloat(d.pairAmount||0).toFixed(2)}` : '';
+            return `<div style="margin-bottom:2px">${d.method||''} ${amt}${pairInfo} ${d.confirmed
               ? '<span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003;</span>'
               : `<button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${p.id}',this)">Confirm</button>`}</div>`;
           }).join('') : '—';

@@ -5273,7 +5273,8 @@ async function renderStaffLogsBody(staffId, displayName, role) {
           if (l.action === 'EPAY_PROOF') {
             let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
             const amt = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
-            detailText = `${d.method || ''} ${amt}`.trim();
+            const pairInfo = d.pairMethod ? ` / ${d.pairMethod} ${CUR||'₱'}${parseFloat(d.pairAmount||0).toFixed(2)}` : '';
+            detailText = `${d.method || ''} ${amt}${pairInfo}`.trim();
             confirmBtn = d.confirmed
               ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003;</span>'
               : ` <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
@@ -5693,7 +5694,8 @@ function renderActivityLog() {
           details = filtered.filter(([k]) => ['result','note'].includes(k)).map(([k,v]) => k+': '+v).join(', ');
         } else if (l.action === 'EPAY_PROOF') {
           const _amt = d.amount != null ? CUR + parseFloat(d.amount).toFixed(2) : '';
-          details = `${d.method || ''} ${_amt}`.trim();
+          const _pairInfo = d.pairMethod ? ` / ${d.pairMethod} ${CUR}${parseFloat(d.pairAmount||0).toFixed(2)}` : '';
+          details = `${d.method || ''} ${_amt}${_pairInfo}`.trim();
           details += d.confirmed
             ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text);margin-left:6px">&#10003; Confirmed</span>'
             : ' <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;margin-left:6px" onclick="confirmEpayProof(\'' + l.id + '\',this)">&#10003; Confirm Received</button>';
