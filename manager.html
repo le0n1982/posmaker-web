@@ -3321,7 +3321,8 @@ init();
 // ── Manager Deposit to Owner ────────────────────────────────────────────────
 let _mgrDepQRPoll = null, _mgrDepQRToken = null;
 let _cashNetTotal = 0, _cashBreakdown = '', _cashBreakdownData = null;
-function openMgrDepositModal() {
+let _mgrDepPayMethods = [];
+async function openMgrDepositModal() {
   document.getElementById('mgrDepAmt').value = '';
   document.getElementById('mgrDepNote').value = '';
   document.getElementById('mgrDepReceipt').value = '';
@@ -3332,6 +3333,28 @@ function openMgrDepositModal() {
   document.getElementById('mgrDepCOH').textContent = '₱' + _cashNetTotal.toFixed(2);
   document.getElementById('mgrDepBreakdown').innerHTML = _cashBreakdown;
   document.getElementById('mgrDepositModal').classList.add('show');
+  // Let the manager pick which of the owner's configured bank/e-wallet QRs
+  // (Settings → Payment Methods) this deposit is going to, and see the QR
+  // to scan, instead of guessing/typing a bank name into a free-text note.
+  const bankSel = document.getElementById('mgrDepBank');
+  bankSel.innerHTML = '<option value="">Loading...</option>';
+  document.getElementById('mgrDepBankQrWrap').style.display = 'none';
+  const { data } = await _sb.from('payment_methods').select('*').eq('store_id', MGR.store_id).order('sort_order');
+  _mgrDepPayMethods = data || [];
+  bankSel.innerHTML = '<option value="">' + (_mgrDepPayMethods.length ? 'Select bank/e-wallet...' : 'No banks set up yet') + '</option>' +
+    _mgrDepPayMethods.map(m => `<option value="${m.label.replace(/"/g,'&quot;')}">${m.label}</option>`).join('');
+  onMgrDepBankChange();
+}
+function onMgrDepBankChange() {
+  const label = document.getElementById('mgrDepBank').value;
+  const m = _mgrDepPayMethods.find(x => x.label === label);
+  const wrap = document.getElementById('mgrDepBankQrWrap');
+  if (m && m.qr_b64) {
+    document.getElementById('mgrDepBankQrImg').src = 'data:image/png;base64,' + m.qr_b64;
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+  }
 }
 function previewMgrDepReceipt() {
   const file = document.getElementById('mgrDepReceipt').files[0];
@@ -3380,13 +3403,14 @@ function closeMgrDepQR() {
 async function saveMgrDeposit() {
   const amt = parseFloat(document.getElementById('mgrDepAmt').value);
   if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
+  const bank = document.getElementById('mgrDepBank').value;
   const note = document.getElementById('mgrDepNote').value.trim();
   const receiptImg = document.getElementById('mgrDepReceiptImg');
   const receiptB64 = receiptImg.src && receiptImg.src.startsWith('data:') ? receiptImg.src : null;
   const btn = document.getElementById('mgrDepSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
   const today = _localToday();
-  const desc = 'Deposit to owner' + (note ? ': ' + note : '');
+  const desc = 'Deposit to owner' + (bank ? ': ' + bank : '') + (note ? (bank ? ' — ' : ': ') + note : '');
   const { data: crRow, error } = await _sb.from('cash_remittances').insert({
     store_id: MGR.store_id, cashier_name: MGR.name, shift_date: today,
     pos_sales: 0, cash_on_hand: -amt, difference: -amt,
@@ -3398,7 +3422,7 @@ async function saveMgrDeposit() {
     return;
   }
   await logAction('MGR_REMIT', MGR.name, {
-    amount: amt, ...(note ? { note } : {}), ...(receiptB64 ? { receipt_b64: receiptB64 } : {}),
+    amount: amt, ...(bank ? { bank } : {}), ...(note ? { note } : {}), ...(receiptB64 ? { receipt_b64: receiptB64 } : {}),
     ...(_cashBreakdownData ? { breakdown: _cashBreakdownData } : {}), cr_id: crRow.id
   });
   closeModal('mgrDepositModal');
@@ -3489,6 +3513,16 @@ _updateThemeIcon();
     <div class="field">
       <label>Amount to Deposit (&#8369;)</label>
       <input id="mgrDepAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:var(--purple-text)">
+    </div>
+    <div class="field">
+      <label>Deposit To</label>
+      <select id="mgrDepBank" onchange="onMgrDepBankChange()">
+        <option value="">Select bank/e-wallet...</option>
+      </select>
+      <div id="mgrDepBankQrWrap" style="display:none;text-align:center;margin-top:8px">
+        <img id="mgrDepBankQrImg" style="width:150px;height:150px;border-radius:8px;background:#fff;padding:6px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Scan to send</div>
+      </div>
     </div>
     <div class="field">
       <label>Receipt (optional)</label>
