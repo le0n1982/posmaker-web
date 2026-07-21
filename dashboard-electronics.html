@@ -388,6 +388,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <div id="walletBalanceSub" style="font-size:11px;color:var(--dim);margin-top:4px">Total confirmed deposits from your managers</div>
         </div>
       </div>
+      <div class="tbl-wrap" id="walletByMethodWrap" style="margin-bottom:16px;display:none">
+        <div class="tbl-head"><h3>By Payment Method</h3></div>
+        <div id="walletByMethodList" style="padding:16px 20px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
       <div class="tbl-wrap">
         <div class="tbl-head"><h3>Wallet History</h3></div>
         <div id="walletHistoryList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
@@ -2079,7 +2083,7 @@ async function loadWallet() {
   const balEl = document.getElementById('walletBalanceVal');
   const listEl = document.getElementById('walletHistoryList');
   if (!balEl || !listEl) return;
-  const [{ data: crRows, error }, { data: logRows }, { data: sentRows }] = await Promise.all([
+  const [{ data: crRows, error }, { data: logRows }, { data: sentRows }, { data: epayLogs }, { data: payMethods }] = await Promise.all([
     _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description,owner_confirmed')
       .eq('store_id', STORE.id).eq('status', 'mgr_remit').order('created_at', { ascending: false }),
     _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'MGR_REMIT'),
@@ -2088,7 +2092,13 @@ async function loadWallet() {
     // deducts from the same balance, regardless of whether the recipient is
     // a manager or a cashier.
     _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description')
-      .eq('store_id', STORE.id).eq('status', 'owner_payment').order('created_at', { ascending: false })
+      .eq('store_id', STORE.id).eq('status', 'owner_payment').order('created_at', { ascending: false }),
+    // E-Pay sales settle straight into whichever bank/e-wallet QR the
+    // customer scanned — same EPAY_PROOF log the "Unconfirmed E-Pay
+    // Payments" banner already surfaces. Only proofs the owner has actually
+    // confirmed count here, same as manager deposits above.
+    _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF'),
+    _sb.from('payment_methods').select('label').eq('store_id', STORE.id).order('sort_order')
   ]);
   if (error) {
     listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message}</div>`;
@@ -2102,14 +2112,48 @@ async function loadWallet() {
   const sent = sentRows || [];
   const receivedTotal = rows.filter(r => r.owner_confirmed).reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
   const sentTotal = sent.reduce((s, r) => s + Math.abs(parseFloat(r.cash_on_hand || 0)), 0);
-  const balance = receivedTotal - sentTotal;
+  // Group confirmed e-pay income by bank/e-wallet — a Split sale's proof
+  // label carries a " (Split)" suffix that's stripped here so it still
+  // groups under its actual method (e.g. "GCash"), not a separate bucket.
+  const epayByMethod = {};
+  let epayTotal = 0;
+  (epayLogs || []).forEach(l => {
+    let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+    if (!d.confirmed) return;
+    const amt = parseFloat(d.amount) || 0;
+    if (!amt) return;
+    const method = (d.method || 'Other').replace(/\s*\(Split\)$/i, '').trim();
+    epayByMethod[method] = (epayByMethod[method] || 0) + amt;
+    epayTotal += amt;
+  });
+  const balance = receivedTotal - sentTotal + epayTotal;
   const fmt = n => CUR + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   balEl.textContent = fmt(balance);
   balEl.style.color = balance < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
   const subEl = document.getElementById('walletBalanceSub');
-  if (subEl) subEl.textContent = sentTotal > 0
-    ? `${fmt(receivedTotal)} received \u2212 ${fmt(sentTotal)} sent to staff`
-    : 'Total confirmed deposits from your managers';
+  if (subEl) {
+    const subParts = [];
+    if (receivedTotal > 0) subParts.push(`${fmt(receivedTotal)} from managers`);
+    if (epayTotal > 0) subParts.push(`${fmt(epayTotal)} from e-pay`);
+    if (sentTotal > 0) subParts.push(`\u2212 ${fmt(sentTotal)} sent to staff`);
+    subEl.textContent = subParts.length ? subParts.join('  ') : 'Confirmed deposits from managers and e-pay sales';
+  }
+  const methodWrap = document.getElementById('walletByMethodWrap');
+  const methodListEl = document.getElementById('walletByMethodList');
+  if (methodWrap && methodListEl) {
+    const configuredLabels = (payMethods || []).map(m => m.label);
+    const allLabels = [...new Set([...configuredLabels, ...Object.keys(epayByMethod)])];
+    if (allLabels.length) {
+      methodWrap.style.display = '';
+      methodListEl.innerHTML = allLabels.map(label => `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:8px;padding:10px 14px">
+          <span style="font-weight:600;font-size:13px">${label}</span>
+          <strong style="font-size:14px;color:var(--ok-text)">${fmt(epayByMethod[label] || 0)}</strong>
+        </div>`).join('');
+    } else {
+      methodWrap.style.display = 'none';
+    }
+  }
   const pendingCount = rows.filter(r => !r.owner_confirmed).length;
   const badge = document.getElementById('walletPendingBadge');
   if (badge) { if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else badge.style.display = 'none'; }
