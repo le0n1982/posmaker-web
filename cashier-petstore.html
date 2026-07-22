@@ -181,6 +181,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .modal{display:none;position:fixed;inset:0;background:transparent;z-index:500;align-items:center;justify-content:center;padding:12px}
 .modal.show{display:flex}
 .mbox{background:var(--s1);border-radius:14px;padding:20px;width:min(420px,96vw);border:1px solid var(--border);max-height:90dvh;overflow-y:auto}
+/* Floating (not a full-screen overlay like .modal) so it can stay open and
+   clickable alongside whatever other screen/modal is already up — e.g.
+   checking the Calculator while "My Activity Today" is also open. */
+.calc-float{display:none;position:fixed;bottom:74px;right:16px;z-index:601;max-height:85vh}
+.calc-float.show{display:block}
+.calc-float .mbox{max-height:85vh}
 .mtitle{font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)}
 .mtotal{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:10px}
 .m-actions{display:flex;gap:7px;margin-top:10px}
@@ -571,8 +577,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 </div>
 
 <!-- ── CALCULATOR ── -->
-<div class="modal" id="mCalc">
-  <div class="mbox" style="max-width:300px">
+<div class="calc-float" id="mCalc">
+  <div class="mbox" style="max-width:300px;box-shadow:0 10px 40px rgba(0,0,0,.6)">
     <div class="mtitle">&#129518; Calculator</div>
     <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:12px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
@@ -2191,7 +2197,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.12';
+const POS_BUILD = '1.9.13';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
