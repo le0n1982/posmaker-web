@@ -1,7 +1,8 @@
 {
-  "version": "1.9.7",
+  "version": "1.9.8",
   "date": "2026-07-22",
   "changes": [
+    "🔧 Fixed: \"My Activity Today\" and Fund Transfer could show a stale (sometimes missing) carried-over drawer float on a device left open for a long time — the figure now refreshes live the moment you actually open either screen, instead of only updating on a 20-second background timer that could stall.",
     "💰 New \"Funds\" button in the POS (owner-toggled in Settings: \"Let cashiers receive fund transfers\") — shows cash sent to the cashier by the manager or owner, with a \"Did you get the funds?\" confirmation. Once confirmed, the amount is added to their Cash Drawer and shows up in \"My Activity Today\".",
     "🔧 CRITICAL FIX: the Cash Remit \"Cash on Hand\" field had no validation against a negative amount — a mistyped minus sign produced a nonsensical negative cash count that showed up as a confusing false \"Short\" to the manager/owner, with no way to tell it was a bad entry. Now blocked with a clear message before it can be submitted.",
     "🧾 \"My Activity Today\" now shows the actual items sold under each sale entry (e.g. \"Stick Rice ×2, Kalabasa\") — not just the total amount and payment method.",

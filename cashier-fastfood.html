@@ -1676,6 +1676,10 @@ function _localToday() {
 // actually expected to be sitting in the drawer, even if the manager's
 // verbal request was for a bigger amount than the cashier actually has.
 async function _calcCashDrawerBalance() {
+  // See openMySales() for why this is refreshed here too, not just left to
+  // the 20s permissions poll — a stale carried float would let a Fund
+  // Transfer under- or over-estimate what's really available.
+  await refreshCarriedFloat();
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   const { data: lastRemit } = await _sb.from('cash_remittances').select('created_at')
@@ -2265,7 +2269,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.7';
+const POS_BUILD = '1.9.8';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -4291,6 +4295,12 @@ document.addEventListener('keydown', function(e) {
 async function openMySales() {
   document.getElementById('mySalesList').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Loading...</div>';
   document.getElementById('mMySales').classList.add('show');
+  // _remitCarriedFloat is normally kept fresh by the 20s permissions poll,
+  // but a long-lived session (device left open for days) can miss updates
+  // if that poll stalls — refresh it here too so a shift-over petty cash
+  // handoff (e.g. from a previous cashier) is never silently missing from
+  // what's shown the moment someone actually opens this screen.
+  await refreshCarriedFloat();
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   // Look up the last real remit FIRST — a cashier who hasn't remitted since
