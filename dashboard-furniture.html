@@ -269,6 +269,12 @@ input:checked + .slider:before{transform:translateX(18px)}
 </div>
 <div class="sb-overlay" id="sbOverlay" onclick="closeSidebar()"></div>
 
+<!-- Floating "Unconfirmed E-Pay" notification — fixed position so it stays
+     visible no matter which page the owner navigates to, not just Dashboard. -->
+<button id="floatEpayBtn" onclick="openPendingEpayCashierLog()" title="Unconfirmed E-Pay Payments" style="display:none;position:fixed;bottom:22px;right:22px;z-index:500;background:#3b82f6;color:#fff;border:none;border-radius:50%;width:56px;height:56px;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer;font-size:22px;align-items:center;justify-content:center">
+  &#128241;<span id="floatEpayBadge" style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;border-radius:10px;padding:1px 6px;font-weight:800;min-width:18px;text-align:center"></span>
+</button>
+
 <!-- MAIN -->
 <div class="main" style="flex:1;min-width:0">
   <div class="topbar">
@@ -323,6 +329,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <!-- Pending cash advance requests -->
       <div id="caPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:var(--text)"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
+      </div>
+      <!-- Unconfirmed E-Pay proofs -->
+      <div id="epayPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #60a5fa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="openPendingEpayCashierLog()">
+        <strong style="color:var(--info-text)">&#128241; Unconfirmed E-Pay Payments</strong> &#8212; <span id="epayPendingCount" style="color:var(--text)"></span> <span style="color:var(--info-text);text-decoration:underline">View Staff &#8594;</span>
       </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="sc-label">Today's Orders</div><div class="sc-val" id="tdOrders">&#8212;</div><div class="sc-sub">orders today</div></div>
@@ -1540,14 +1550,14 @@ input:checked + .slider:before{transform:translateX(18px)}
 
 <!-- STAFF LOGS MODAL -->
 <div class="modal" id="staffLogsModal">
-  <div class="mbox" style="width:min(720px,100%)">
+  <div class="mbox" style="width:min(960px,100%)">
     <h3 id="staffLogsTitle">Login History</h3>
     <div style="display:flex;gap:6px;margin:10px 0">
       <button class="btn btn-sm" id="slfDay"   onclick="setStaffLogsFilter('day')">Day</button>
       <button class="btn btn-sm" id="slfWeek"  onclick="setStaffLogsFilter('week')">Week</button>
       <button class="btn btn-sm" id="slfMonth" onclick="setStaffLogsFilter('month')">Month</button>
     </div>
-    <div id="staffLogsBody" style="max-height:420px;overflow-y:auto">
+    <div id="staffLogsBody" style="max-height:600px;overflow-y:auto">
       <div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>
     </div>
     <div class="m-actions">
@@ -3368,6 +3378,38 @@ async function checkPendingCashAdvance() {
     alertEl.style.display = 'none';
   }
 }
+let _pendingEpayStaffName = '';
+async function checkPendingEpayProofs() {
+  const alertEl = document.getElementById('epayPendingAlert');
+  const floatBtn = document.getElementById('floatEpayBtn');
+  if ((!alertEl && !floatBtn) || !STORE?.id) return;
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await _sb.from('activity_logs')
+    .select('id,details,actor_name').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF').gte('created_at', since);
+  const pending = (data || []).filter(l => {
+    try { return !JSON.parse(l.details || '{}').confirmed; } catch(_) { return true; }
+  });
+  if (pending.length) {
+    _pendingEpayStaffName = pending[0].actor_name || '';
+    if (alertEl) {
+      document.getElementById('epayPendingCount').textContent = pending.length + ' payment' + (pending.length > 1 ? 's' : '') + ' need review';
+      alertEl.style.display = 'block';
+    }
+    if (floatBtn) {
+      document.getElementById('floatEpayBadge').textContent = pending.length;
+      floatBtn.style.display = 'flex';
+    }
+  } else {
+    _pendingEpayStaffName = '';
+    if (alertEl) alertEl.style.display = 'none';
+    if (floatBtn) floatBtn.style.display = 'none';
+  }
+}
+function openPendingEpayCashierLog() {
+  const staffRec = (allStaff || []).find(s => (s.full_name || s.username) === _pendingEpayStaffName);
+  if (staffRec) { nav('staff'); viewStaffLogs(staffRec.id, _pendingEpayStaffName); }
+  else { nav('staff'); }
+}
 
 // ── Cash Advance (staff-requested, owner-approved) ────────────────────────
 let _caAdvancesCache = [];
@@ -3673,6 +3715,7 @@ async function loadDashboard() {
     checkLateRemittances();
     checkStaleRemittances();
     checkPendingCashAdvance();
+    checkPendingEpayProofs();
 
     // Auto-send Telegram low stock alert once per day
     if (lowItems.length && STORE.telegram_bot_token && STORE.telegram_chat_id) {
@@ -5465,7 +5508,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   else                                  { from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0,0,0,0); }
   const fromISO = from.toISOString();
   const actionWhitelist = isCashier
-    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED']
+    ? ['REMITTANCE', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'EPAY_PROOF']
     : ['RECEIVED_COH', 'ORDER_VOIDED', 'ORDER_REFUNDED', 'ADD_STOCK', 'MGR_REMIT', 'CASH_ADVANCE_GIVEN'];
 
   const [{ data: logins }, { data: logoutData }, remitRes, { data: actData }, { data: caData }, { data: cohData }] = await Promise.all([
@@ -5574,7 +5617,23 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     }
 
     const actionsHtml = dayActions.length
-      ? dayActions.map(l => `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span></div>`).join('')
+      ? dayActions.map(l => {
+          if (l.action === 'EPAY_PROOF') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            const amt = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
+            const pairInfo = d.pairMethod ? ` / ${d.pairMethod} ${CUR||'₱'}${parseFloat(d.pairAmount||0).toFixed(2)}` : '';
+            const detailText = `${d.method || ''} ${amt}${pairInfo}`.trim();
+            const isUnconfirmedEpay = !d.confirmed;
+            const confirmBtn = d.confirmed
+              ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003;</span>'
+              : ` <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
+            return `<div style="margin-bottom:5px${isUnconfirmedEpay ? ';background:rgba(245,158,11,.15);border:1px solid #f59e0b55;border-radius:6px;padding:4px 6px' : ''}">
+              <span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}
+              ${detailText ? `<div style="color:var(--muted);font-size:11px;margin-top:1px">${detailText}</div>` : ''}
+            </div>`;
+          }
+          return `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span></div>`;
+        }).join('')
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
@@ -5627,6 +5686,24 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       <thead><tr><th>Date</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}<th>Actions</th><th>Receipt</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>${unconfirmedHtml}`;
+}
+async function confirmEpayProof(logId, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Confirming…'; }
+  let log = _activityLogs.find(l => l.id === logId);
+  if (!log) {
+    const { data } = await _sb.from('activity_logs').select('id,details').eq('id', logId).maybeSingle();
+    log = data;
+  }
+  if (!log) { showToast('Could not find this entry.', true); return; }
+  let d = {}; try { d = JSON.parse(log.details || '{}'); } catch(_) {}
+  d.confirmed = true;
+  const { error } = await _sb.from('activity_logs').update({ details: JSON.stringify(d) }).eq('id', logId);
+  if (error) { showToast('Error: ' + error.message, true); if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Confirm Received'; } return; }
+  log.details = JSON.stringify(d);
+  showToast('Payment confirmed as received.');
+  renderActivityLog();
+  checkPendingEpayProofs();
+  if (_staffLogsCur) renderStaffLogsBody(_staffLogsCur.staffId, _staffLogsCur.displayName, _staffLogsCur.role);
 }
 function openStaffModal(s) {
   if (!IS_PRO && !s && allStaff.length >= FREE_STAFF_LIMIT) { showUpgradeModal('staff', allStaff.length, FREE_STAFF_LIMIT); return; }
@@ -5883,7 +5960,7 @@ async function loadActivityLog() {
   }
   renderActivityLog();
 }
-const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given' };
+const ACTION_LABEL = { ADD_STOCK: '+ Add Stock', EDIT_ITEM: 'Edit Item', ADD_ITEM: '+ New Item', SALE: '💰 Sale', REMITTANCE: '🪙 Remittance', RECEIVED_COH: '✅ Received COH', MGR_REMIT: '⬆ Deposit', OWNER_SEND: '💸 Send', SALARY_GIVEN: '👤 Salary', EXPENSE_PAID: '📋 Expense', LOGIN: '🔓 Login', LOGOUT: '🔒 Logout', ORDER_VOIDED: '↩ Voided', ORDER_REFUNDED: '↩ Refunded', CASH_ADVANCE_APPROVED: '💵 Advance Approved', CASH_ADVANCE_GIVEN: '💵 Advance Given', EPAY_PROOF: '📱 E-Pay Proof' };
 const ACTION_COLOR = {
   ADD_STOCK:   'background:var(--ok-bg);color:var(--ok-text)',
   EDIT_ITEM:   'background:var(--info-bg);color:var(--info-text)',
