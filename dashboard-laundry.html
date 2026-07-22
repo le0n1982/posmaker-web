@@ -1393,7 +1393,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="field"><label>Amount to Add</label><input id="addStockAmt" type="number" min="1" step="1" placeholder="e.g. 50"></div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('addStockModal')">Cancel</button>
-      <button class="btn btn-accent" onclick="confirmAddStock()">Add Stock</button>
+      <button class="btn btn-accent" onclick="confirmAddStock(this)">Add Stock</button>
     </div>
   </div>
 </div>
@@ -3470,8 +3470,8 @@ async function loadCashAdvanceAdmin() {
             ${a.reason ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${a.reason}</div>` : ''}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','Online')">&#10003; Approve (Online)</button>
-            <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','COH')">&#10003; Approve (COH)</button>
+            <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','Online',this)">&#10003; Approve (Online)</button>
+            <button class="btn btn-accent btn-sm" onclick="approveCashAdvance('${a.id}','COH',this)">&#10003; Approve (COH)</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="declineCashAdvance('${a.id}')">&#10005; Decline</button>
           </div>
         </div>
@@ -3532,13 +3532,20 @@ async function saveCaSettings() {
   showToast('Cash advance limits saved.');
 }
 
-async function approveCashAdvance(id, method) {
-  const { data: adv } = await _sb.from('cash_advances').select('*').eq('id', id).single();
-  if (!adv) return;
-  const { error } = await _sb.from('cash_advances').update({
-    status: 'approved', disbursement_method: method, decided_at: new Date().toISOString()
-  }).eq('id', id);
-  if (error) { showToast('Error: ' + error.message, true); return; }
+async function approveCashAdvance(id, method, btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Approving…'; }
+  // Atomic claim — only proceeds if this request is still 'pending' right
+  // now, so a double-tap (or the two Approve buttons both getting hit)
+  // can't log the approval twice.
+  const { data: adv } = await _sb.from('cash_advances')
+    .update({ status: 'approved', disbursement_method: method, decided_at: new Date().toISOString() })
+    .eq('id', id).eq('status', 'pending')
+    .select('*').maybeSingle();
+  if (!adv) {
+    showToast('This request was already processed.', true);
+    loadCashAdvanceAdmin();
+    return;
+  }
   _sb.from('activity_logs').insert({
     store_id: STORE.id, actor_name: (STORE.owner_name || 'Owner'), actor_role: 'owner',
     action: 'CASH_ADVANCE_APPROVED', target_name: adv.staff_name,
@@ -7287,16 +7294,18 @@ function openAddStock(id){
   document.getElementById('addStockModal').classList.add('show');
   setTimeout(()=>document.getElementById('addStockAmt').focus(),50);
 }
-async function confirmAddStock(){
+async function confirmAddStock(btnEl){
   const id=document.getElementById('addStockId').value;
   const amt=parseFloat(document.getElementById('addStockAmt').value);
   if(!amt||amt<=0){showToast('Enter a valid amount.',true);return;}
   const i=invItems.find(x=>x.id===id);if(!i)return;
+  if(btnEl){ if(btnEl.disabled) return; btnEl.disabled=true; btnEl.textContent='Adding…'; }
   const newVal=parseFloat(i.stock??0)+amt;
   await _sb.from('inventory_items').update({stock:newVal}).eq('id',id);
   _sb.from('stock_history').insert({ store_id: STORE.id, inventory_item_id: id, change_type: 'MANUAL_ADD', qty_change: amt }).then(() => {});
   i.stock=newVal;closeModal('addStockModal');renderInv(invItems);
   showToast(`Added ${amt} ${i.unit||'pc'} to ${i.name}. New: ${newVal}`);
+  if(btnEl){ btnEl.disabled=false; btnEl.textContent='Add Stock'; }
 }
 let _stockHistoryData = [];
 async function openStockHistory(id) {
