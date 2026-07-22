@@ -335,6 +335,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <span class="ico">&#128172;<span id="cashierInboxBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span></span><span class="lbl">Chat</span>
   </button>
   <button id="btnFundTransfer" class="choc-btn" onclick="openFundTransfer()" title="Fund Transfer to Manager" style="display:none;background:#84cc16;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Fund transfer to manager"><span class="ico">&#128184;</span><span class="lbl">Transfer</span></button>
+  <button id="btnReceivedFunds" class="choc-btn" onclick="openReceivedFunds()" title="Received Fund" style="display:none;position:relative;background:#f97316;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Received fund">
+    <span class="ico">&#128181;<span id="receivedFundsBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center"></span></span><span class="lbl">Funds</span>
+  </button>
   <button class="btn-logout choc-btn" onclick="doLogout()"><span class="ico" style="font-size:15px">&#9211;</span><span class="lbl">Logout</span></button>
   </div>
 </div>
@@ -787,6 +790,18 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
+<!-- ── RECEIVED FUNDS MODAL ── -->
+<div class="modal" id="mReceivedFunds">
+  <div class="mbox" style="max-width:380px">
+    <div class="mtitle">&#128181; Received Fund</div>
+    <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Cash sent to you by your manager or the owner. Confirm once you actually have it in hand — it'll be added to your Cash Drawer.</p>
+    <div id="rfList" style="max-height:340px;overflow-y:auto"></div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeM('mReceivedFunds')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── DRAFT MODAL ── -->
 <div class="modal" id="mDraft">
   <div class="mbox">
@@ -1178,6 +1193,8 @@ function setStoreUI() {
   document.getElementById('btnMySales').style.display = STORE.show_sales_to_cashier ? '' : 'none';
   document.getElementById('btnAddExpense').style.display = STORE.allow_cashier_expenses ? '' : 'none';
   document.getElementById('btnFundTransfer').style.display = STORE.allow_fund_transfer ? '' : 'none';
+  document.getElementById('btnReceivedFunds').style.display = STORE.allow_receive_funds ? '' : 'none';
+  if (STORE.allow_receive_funds) checkReceivedFundsBadge();
 }
 
 function adaptCashierMode(bizType) {
@@ -1583,11 +1600,20 @@ async function _calcCashDrawerBalance() {
   if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
-  const [{ data: orders }, { data: logs }] = await Promise.all([
+  const [{ data: orders }, { data: logs }, { data: confirmedPayments }] = await Promise.all([
     _sb.from('orders').select('timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).gte('timestamp', queryStart),
     _sb.from('activity_logs').select('action,details,created_at')
-      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart)
+      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart),
+    // Confirmed "Received Fund" payments — these rows are keyed by the
+    // cashier's USERNAME (how the sender addressed them), not their full
+    // name like every other query on this page, since that's how the
+    // owner's Send Payment / manager's Send Cash features attribute them.
+    CASHIER?.username
+      ? _sb.from('cash_remittances').select('cash_on_hand,created_at')
+          .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username).eq('status', 'payment_confirmed')
+          .gte('created_at', queryStart)
+      : Promise.resolve({ data: [] })
   ]);
   const _cashPortion = o => {
     const t = parseFloat(o.total) || 0;
@@ -1599,7 +1625,10 @@ async function _calcCashDrawerBalance() {
   const expensesSinceRemit = (logs || [])
     .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
     .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
-  return _remitCarriedFloat + cashSinceRemit - expensesSinceRemit;
+  const receivedFundsSinceRemit = (confirmedPayments || [])
+    .filter(r => r.created_at >= _sinceRemit)
+    .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+  return _remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit - expensesSinceRemit;
 }
 async function openFundTransfer() {
   document.getElementById('ftAmount').value = '';
@@ -1609,6 +1638,52 @@ async function openFundTransfer() {
   noteEl.textContent = 'Checking Cash Drawer…';
   const balance = await _calcCashDrawerBalance();
   noteEl.textContent = `Cash Drawer: ${CUR||'₱'}${balance.toFixed(2)} available`;
+}
+// ── Received Fund (money sent by Manager/Owner, awaiting confirmation) ─────
+async function checkReceivedFundsBadge() {
+  if (!CASHIER?.username) return;
+  const { data } = await _sb.from('cash_remittances').select('id')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
+    .in('status', ['owner_payment', 'mgr_payment']);
+  const count = (data || []).length;
+  const badge = document.getElementById('receivedFundsBadge');
+  if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
+}
+async function openReceivedFunds() {
+  const listEl = document.getElementById('rfList');
+  listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading…</div>';
+  document.getElementById('mReceivedFunds').classList.add('show');
+  const { data } = await _sb.from('cash_remittances').select('id,cash_on_hand,status,description,created_at')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
+    .in('status', ['owner_payment', 'mgr_payment'])
+    .order('created_at', { ascending: false });
+  const rows = data || [];
+  if (!rows.length) {
+    listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No pending funds.</div>';
+    return;
+  }
+  listEl.innerHTML = rows.map(r => {
+    const amt = parseFloat(r.cash_on_hand) || 0;
+    const from = r.status === 'mgr_payment' ? 'Manager' : 'Owner';
+    const dt = new Date(r.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">From ${from} &middot; ${dt}</span>
+      </div>
+      <div style="font-size:20px;font-weight:800;color:#f97316;margin-bottom:4px">${CUR||'₱'}${amt.toFixed(2)}</div>
+      ${r.description ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${r.description}</div>` : ''}
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">Did you get the funds?</div>
+      <button class="btn-confirm" style="width:100%" onclick="confirmReceivedFund('${r.id}', this)">&#10003; Yes, I received it</button>
+    </div>`;
+  }).join('');
+}
+async function confirmReceivedFund(id, btn) {
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Confirming…';
+  const { error } = await _sb.from('cash_remittances').update({ status: 'payment_confirmed' }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message); btn.disabled = false; btn.innerHTML = '&#10003; Yes, I received it'; return; }
+  showToast('Confirmed — added to your Cash Drawer.');
+  openReceivedFunds();
+  checkReceivedFundsBadge();
 }
 async function saveFundTransfer() {
   const amount = parseFloat(document.getElementById('ftAmount').value);
@@ -2102,7 +2177,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.6';
+const POS_BUILD = '1.9.7';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3708,7 +3783,7 @@ async function openMySales() {
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const carriedFromPrevDay = queryStart < dayStart;
-  const [{ data: orders, error }, { data: logs }, { data: remits }] = await Promise.all([
+  const [{ data: orders, error }, { data: logs }, { data: remits }, { data: confirmedPayments }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('timestamp', queryStart).order('timestamp', { ascending: false }),
@@ -3724,7 +3799,14 @@ async function openMySales() {
     // Transfer" expense card in this same feed.
     _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
-      .gte('created_at', queryStart).order('created_at', { ascending: false })
+      .gte('created_at', queryStart).order('created_at', { ascending: false }),
+    // Confirmed "Received Fund" payments — keyed by USERNAME (how the
+    // sender addressed them), not full name like every other query here.
+    CASHIER?.username
+      ? _sb.from('cash_remittances').select('id,cash_on_hand,description,status,created_at')
+          .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username).eq('status', 'payment_confirmed')
+          .gte('created_at', queryStart).order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] })
   ]);
   if (error) {
     document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
@@ -3759,7 +3841,10 @@ async function openMySales() {
   const expensesSinceRemit = (logs || [])
     .filter(l => l.action === 'EXPENSE_PAID' && l.created_at >= _sinceRemit)
     .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; } }, 0);
-  document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit - expensesSinceRemit).toFixed(2);
+  const receivedFundsSinceRemit = (confirmedPayments || [])
+    .filter(r => r.created_at >= _sinceRemit)
+    .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+  document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit - expensesSinceRemit).toFixed(2);
   // E-Pay mirrors the same window as Total Sales above — informational only,
   // e-pay never touches the physical till so there's nothing to reconcile.
   const epayToday = rows.reduce((s, o) => s + ((parseFloat(o.total) || 0) - _cashPortion(o)), 0);
@@ -3803,6 +3888,9 @@ async function openMySales() {
       feed.push({ type: l.action.toLowerCase(), t: new Date(l.created_at) });
     }
   });
+  (confirmedPayments || []).forEach(r => {
+    feed.push({ type: 'received_fund', t: new Date(r.created_at), amount: parseFloat(r.cash_on_hand) || 0, note: r.description || '' });
+  });
   (remits || []).forEach(r => {
     const cash = parseFloat(r.cash_on_hand || 0);
     const drawerFloat = parseFloat(r.drawer_float || 0);
@@ -3838,6 +3926,15 @@ function _myActivityItemHtml(f) {
     return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(236,72,153,.08);border-left:3px solid #ec4899;border-radius:8px;padding:9px 12px;font-size:13px">
       <span style="color:var(--muted)">&#128179; ${f.category || 'Expense'} &middot; ${time}</span>
       <span style="font-weight:700;color:#ec4899">&minus;${CUR}${f.amount.toFixed(2)}</span>
+    </div>`;
+  }
+  if (f.type === 'received_fund') {
+    return `<div style="background:rgba(249,115,22,.08);border-left:3px solid #f97316;border-radius:8px;padding:9px 12px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--muted)">&#128181; Received Fund &middot; ${time}</span>
+        <span style="font-weight:700;color:#f97316">+${CUR}${f.amount.toFixed(2)}</span>
+      </div>
+      ${f.note ? `<div style="color:var(--muted);font-size:11px;margin-top:2px">${f.note}</div>` : ''}
     </div>`;
   }
   if (f.type === 'remit') {

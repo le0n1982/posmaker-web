@@ -1547,16 +1547,27 @@ async function saveSendCash() {
     status: 'coh_to_staff', description: desc
   });
   if (error) { showToast('Error: ' + error.message, true); btn.disabled = false; btn.innerHTML = '&#128176; Send'; return; }
+  // Second, separate row keyed to the RECIPIENT — this is what the cashier's
+  // own "Received Fund" confirm screen reads. Kept apart from the deduction
+  // row above (still keyed to the manager, for Net Cash with Manager) so the
+  // two concerns — "manager's pool went down" vs "does the cashier still
+  // need to confirm they physically got it" — don't have to share one row.
+  const { data: payRow } = await _sb.from('cash_remittances').insert({
+    store_id: MGR.store_id, cashier_name: _scCashierUsername, shift_date: today,
+    pos_sales: 0, cash_on_hand: amt, difference: 0,
+    status: 'mgr_payment', description: MGR.name + ' sent' + (note ? ': ' + note : '')
+  }).select('id').single();
   await _sb.from('activity_logs').insert({
     store_id: MGR.store_id, actor_name: MGR.name, actor_role: 'manager',
     action: 'MGR_SEND_TO_CASHIER', target_name: _scCashierName,
     details: JSON.stringify(Object.assign({ amount: amt }, note ? { note } : {}))
   }).then(() => {});
   var _nl = String.fromCharCode(10);
+  const payRefPrefix = payRow?.id ? ('PAYMENT_REF:' + payRow.id + _nl) : '';
   await _sb.from('store_messages').insert({
     store_id: MGR.store_id, from_name: MGR.name, from_role: 'manager',
     to_username: _scCashierUsername, to_name: _scCashierName,
-    body: '₱' + amt.toFixed(2) + ' cash from Manager' + (note ? _nl + note : ''), read: false
+    body: payRefPrefix + '₱' + amt.toFixed(2) + ' cash from Manager' + (note ? _nl + note : ''), read: false
   }).then(() => {});
   closeModal('sendCashModal');
   showToast('₱' + amt.toFixed(2) + ' sent to ' + _scCashierName + '.');
@@ -1954,6 +1965,10 @@ function renderRemit() {
       ? (r.owner_confirmed
           ? `<span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003; Confirmed</span>`
           : `<span class="badge" style="background:var(--pending-badge-bg);color:var(--pending-badge-text)">&#9203; Under Review</span>`)
+      : r.status === 'owner_payment' || r.status === 'mgr_payment'
+      ? `<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">&#9203; Awaiting Confirmation</span>`
+      : r.status === 'payment_confirmed'
+      ? `<span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003; Received</span>`
       // Manager-initiated adjustments (cash advance, stock purchase, deposit, refund) aren't
       // a cashier shift going over/short — label them by what they actually are instead.
       : adjLabel
@@ -2202,7 +2217,7 @@ async function approveVoidRefund(id) {
     const { data: coveringRemit } = await _sb.from('cash_remittances')
       .select('status')
       .eq('store_id', MGR.store_id).eq('cashier_name', orig.cashier_name)
-      .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,payment_confirmed,refund)')
+      .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,mgr_payment,payment_confirmed,refund)')
       .gt('created_at', orig.timestamp)
       .order('created_at', { ascending: true }).limit(1).maybeSingle();
 
@@ -2431,7 +2446,7 @@ async function loadCashSummary() {
   const rows = data || [];
   const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
-  const paymentStatuses = ['owner_payment','payment_confirmed'];
+  const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
   const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
