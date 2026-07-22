@@ -218,6 +218,23 @@ button{cursor:pointer}
 
   <!-- ACTIVITY LOG -->
   <div class="section" id="sec-log">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
+      <button class="tab-btn active" id="alDay"   onclick="setLogPeriod('day')">Daily</button>
+      <button class="tab-btn"        id="alWeek"  onclick="setLogPeriod('week')">Weekly</button>
+      <button class="tab-btn"        id="alMonth" onclick="setLogPeriod('month')">Monthly</button>
+      <input type="hidden" id="alFrom">
+      <input type="hidden" id="alTo">
+      <div class="datepick">
+        <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpAlFrom');event.stopPropagation()"><span id="dpAlFromLabel">From</span> &#9660;</button>
+        <div class="datepick-drop" id="dpAlFromDrop" data-input="alFrom" data-placeholder="From" data-cb="applyLogCustomDate"></div>
+      </div>
+      <span style="color:var(--muted);font-size:13px">to</span>
+      <div class="datepick">
+        <button class="btn btn-ghost btn-sm datepick-btn" onclick="toggleDP('dpAlTo');event.stopPropagation()"><span id="dpAlToLabel">To</span> &#9660;</button>
+        <div class="datepick-drop" id="dpAlToDrop" data-input="alTo" data-placeholder="To" data-cb="applyLogCustomDate"></div>
+      </div>
+      <button class="btn btn-accent btn-sm" onclick="downloadLogCSV()" style="margin-left:auto">&#8595; Download CSV</button>
+    </div>
     <div class="card">
       <div class="card-title">Your Activity Log</div>
       <div style="overflow-x:auto">
@@ -1288,12 +1305,51 @@ async function saveEditItem(){
 }
 
 // ── Activity Log ───────────────────────────────────────────────────────────
+let _logPeriod = 'day', _logAllData = [];
+function setLogPeriod(p) {
+  _logPeriod = p;
+  ['day','week','month'].forEach(x => {
+    const el = document.getElementById('al'+x.charAt(0).toUpperCase()+x.slice(1));
+    if (el) el.classList.toggle('active', x===p);
+  });
+  loadLog();
+}
+function applyLogCustomDate() {
+  _logPeriod = 'custom';
+  ['day','week','month'].forEach(x => document.getElementById('al'+x.charAt(0).toUpperCase()+x.slice(1)).classList.remove('active'));
+  loadLog();
+}
 async function loadLog(){
   const tb = document.getElementById('logTbody');
   tb.innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">Loading...</td></tr>';
-  const {data} = await _sb.from('activity_logs')
-    .select('*').eq('store_id', MGR.store_id).eq('actor_name', MGR.name)
-    .order('created_at',{ascending:false}).limit(100);
+  const now = new Date();
+  let periodStart, periodEnd = null;
+  if (_logPeriod === 'custom') {
+    const from = document.getElementById('alFrom').value;
+    const to   = document.getElementById('alTo').value;
+    if (!from && !to) { setLogPeriod('day'); return; }
+    periodStart = from ? new Date(from).toISOString() : null;
+    periodEnd   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
+  } else if (_logPeriod === 'week') {
+    const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0);
+    periodStart = d.toISOString();
+  } else if (_logPeriod === 'month') {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  } else {
+    const _bizDay = _bizDayBounds();
+    periodStart = _bizDay.start.toISOString();
+    periodEnd   = _bizDay.end.toISOString();
+  }
+  let q = _sb.from('activity_logs').select('*').eq('store_id', MGR.store_id).eq('actor_name', MGR.name)
+    .order('created_at',{ascending:false}).limit(500);
+  if (periodStart) q = q.gte('created_at', periodStart);
+  if (periodEnd)   q = q.lte('created_at', periodEnd);
+  const {data} = await q;
+  _logAllData = data || [];
+  renderLogTable(_logAllData);
+}
+function renderLogTable(data){
+  const tb = document.getElementById('logTbody');
   if(!data||!data.length){ tb.innerHTML='<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--muted)">No activity yet.</td></tr>'; return; }
   tb.innerHTML = data.map(l=>{
     const dt = new Date(l.created_at);
@@ -1317,6 +1373,29 @@ async function loadLog(){
       <td style="color:var(--muted);font-size:12px">${det}</td>
     </tr>`;
   }).join('');
+}
+function downloadLogCSV(){
+  if (!_logAllData.length) { showToast('No data to export.', true); return; }
+  const rows = [['Date & Time','Action','Item','Details']];
+  _logAllData.forEach(l => {
+    const dt = new Date(l.created_at).toLocaleString('en-PH');
+    const actionLabel = {ADD_STOCK:'Add Stock',EDIT_ITEM:'Edit Item',REMITTANCE:'Remittance',RECEIVED_COH:'Received COH',MGR_REMIT:'Deposit',OWNER_SEND:'Sent'};
+    const action = actionLabel[l.action] || l.action.replace(/_/g,' ');
+    let det = '';
+    try {
+      const d = JSON.parse(l.details || '{}');
+      if (l.action==='ADD_STOCK') det = `+${d.added} (${d.before}→${d.after})${d.note?' - '+d.note:''}`;
+      else if (l.action==='EDIT_ITEM') det = `Unit: ${d.unit}, Low alert: ${d.low_stock_threshold}`;
+      else if (l.action==='REMITTANCE') det = (d.result||'')+(d.note?' - '+d.note:'');
+      else if (l.action==='MGR_REMIT' || l.action==='OWNER_SEND') det = `amount: ${parseFloat(d.amount||0).toFixed(2)}${d.note?' - '+d.note:''}`;
+    } catch(_) { det = l.details || ''; }
+    rows.push([dt, action, l.target_name||'', det]);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
+  a.download = `ActivityLog_${_logPeriod}_${_localToday()}.csv`;
+  a.click();
 }
 
 // E-Pay proofs have no separate accounting row — the "confirmed" flag just
