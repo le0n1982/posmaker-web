@@ -1,7 +1,8 @@
 {
-  "version": "1.9.14",
+  "version": "1.9.15",
   "date": "2026-07-22",
   "changes": [
+    "🔧 CRITICAL FIX: Cash Drawer / \"Cash in Drawer (expected)\" never subtracted a Void or Refund that was charged to the cashier's own pending balance — the original sale's cash stayed counted forever with no offsetting deduction, overstating the drawer by the voided amount (and risking a false \"Over\" that then had to be handed over as if it were real). Now correctly subtracted in all three places (My Activity Today, Fund Transfer's balance check, and Cash Remittance), with a \"less voids/refunds\" note shown when it applies.",
     "🔧 CRITICAL FIX: the Cash Remittance (Logout) screen's \"Cash in Drawer (expected)\" and Over/Short calculation never accounted for confirmed \"Received Fund\" payments — a cashier who legitimately received money from the Owner/Manager mid-shift would see the wrong expected total and could show as Short/Over by exactly that amount for no reason. Now included, with a small \"incl. received funds\" note shown when it applies — matches the same fix already applied to \"My Activity Today\".",
     "🧮 Calculator is now a floating panel (bottom-right corner) instead of a full-screen popup — it can stay open and stay clickable at the same time as another screen like \"My Activity Today\", instead of covering it up.",
     "🔧 CRITICAL FIX: a Void/Refund's automatic cash adjustment could get mistaken for \"the last remittance\" when computing Cash Drawer / POS Sales-since-remit (in the Remit-Logout screen, \"My Activity Today\", and the carried-over float lookup) — this silently dropped real sales and the carried-over float made before the void from all three, understating Cash Drawer and risking a false \"Short\" on the next remit. Now correctly skips past Void/Refund adjustment rows to find the real last remit.",
