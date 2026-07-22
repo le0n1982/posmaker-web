@@ -2886,8 +2886,8 @@ async function loadExpenses(period) {
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">&#127919; Daily Target</div>
           <div style="font-size:22px;font-weight:900;color:var(--warn-text)">${CUR}${dailyTarget.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px">needed per day to break even</div>
-          ${period === 'daily' ? `<div style="margin-top:8px;font-size:12px;font-weight:700;color:${totalRev>=dailyTarget?'#10b981':'#e53e3e'}">
-            ${totalRev>=dailyTarget?'&#9989; Goal met today!':'&#9888;&#65039; '+CUR+(dailyTarget-totalRev).toFixed(2)+' more needed'}
+          ${period === 'daily' ? `<div style="margin-top:8px;font-size:12px;font-weight:700;color:${netProfit>=0?'#10b981':'#e53e3e'}">
+            ${netProfit>=0?'&#9989; Goal met today!':'&#9888;&#65039; '+CUR+Math.abs(netProfit).toFixed(2)+' more needed'}
           </div>` : ''}
         </div>` : ''}
       </div>
