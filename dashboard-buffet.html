@@ -314,6 +314,12 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="lateRemitAlert" style="display:none;background:var(--purple-bg);border:1px solid #a78bfa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:var(--purple-text)">&#8987; Late Remittance</strong> &#8212; <span id="lateRemitList" style="color:var(--text)"></span> <span style="color:var(--purple-text);text-decoration:underline">View Activity Log &#8594;</span>
       </div>
+      <!-- Stale remittance alert — a cashier hasn't remitted at all in a while,
+           regardless of whether they logged in today (unlike the "Unremitted
+           Cash" widget on the Staff page, which only looks at today). -->
+      <div id="staleRemitAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+        <strong style="color:#ef4444">&#9888; Hasn't Remitted</strong> &#8212; <span id="staleRemitList" style="color:var(--text)"></span> <span style="color:#ef4444;text-decoration:underline">View Staff &#8594;</span>
+      </div>
       <!-- Pending cash advance requests -->
       <div id="caPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #00b4d8;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
         <strong style="color:#00b4d8">&#128181; Pending Cash Advance</strong> &#8212; <span id="caPendingList" style="color:var(--text)"></span> <span style="color:#00b4d8;text-decoration:underline">View Staff &#8594;</span>
@@ -3517,6 +3523,50 @@ async function checkLateRemittances() {
   }
 }
 
+// ── Stale remittance alert ──────────────────────────────────────────────
+// "Unremitted Cash" (Staff page widget) only checks cashiers who logged in
+// TODAY — a cashier who simply stops remitting (no new login "today" either,
+// e.g. hasn't been scheduled since) silently disappears from that check the
+// moment the day rolls over, even with days-old unremitted cash still owed.
+// This looks back across ALL cashiers regardless of when they last logged
+// in, so nobody with real unremitted cash can go unnoticed indefinitely.
+async function checkStaleRemittances() {
+  const alertEl = document.getElementById('staleRemitAlert');
+  if (!alertEl || !STORE?.id) return;
+  const { data: cashiers } = await _sb.from('store_users')
+    .select('username,full_name').eq('store_id', STORE.id).eq('role', 'cashier').eq('active', true);
+  if (!cashiers?.length) { alertEl.style.display = 'none'; return; }
+
+  const { data: remits } = await _sb.from('cash_remittances')
+    .select('cashier_name,created_at').eq('store_id', STORE.id).neq('status', 'fund_transfer')
+    .order('created_at', { ascending: false });
+  const lastRemitByName = {};
+  (remits || []).forEach(r => { if (!lastRemitByName[r.cashier_name]) lastRemitByName[r.cashier_name] = r.created_at; });
+
+  const STALE_HOURS = 24;
+  const now = Date.now();
+  const flagged = [];
+  for (const c of cashiers) {
+    const name = c.full_name || c.username;
+    const lastRemit = lastRemitByName[name];
+    if (!lastRemit) continue; // never remitted at all — likely just never sold anything yet, not worth flagging
+    const hoursSince = (now - new Date(lastRemit).getTime()) / 3600000;
+    if (hoursSince <= STALE_HOURS) continue;
+    const { count } = await _sb.from('orders').select('id', { count: 'exact', head: true })
+      .eq('store_id', STORE.id).eq('cashier_name', name).gt('timestamp', lastRemit);
+    if (count && count > 0) flagged.push({ name, days: Math.floor(hoursSince / 24) });
+  }
+
+  if (flagged.length) {
+    const list = flagged.slice(0, 5).map(f => `${f.name} (${f.days} day${f.days !== 1 ? 's' : ''})`).join(', ')
+      + (flagged.length > 5 ? ` +${flagged.length - 5} more` : '');
+    document.getElementById('staleRemitList').textContent = list;
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
+}
+
 async function loadDashboard() {
   if (!STORE) return;
   const _tbody = document.getElementById('ordersTbody');
@@ -3599,6 +3649,7 @@ async function loadDashboard() {
 
     checkUnremittedCash();
     checkLateRemittances();
+    checkStaleRemittances();
     checkPendingCashAdvance();
 
     // Auto-send Telegram low stock alert once per day

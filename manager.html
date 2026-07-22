@@ -277,6 +277,11 @@ button{cursor:pointer}
   </div>
   <!-- CASH REMITTANCE -->
   <div class="section" id="sec-remit">
+    <!-- Stale remittance alert — a cashier hasn't remitted at all in a
+         while, regardless of whether they logged in today. -->
+    <div id="staleRemitAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px">
+      <strong style="color:#ef4444">&#9888; Hasn't Remitted</strong> &#8212; <span id="staleRemitList" style="color:var(--text)"></span>
+    </div>
     <div class="card">
       <div class="card-title">
         Cash Remittances
@@ -815,9 +820,11 @@ async function init(){
   checkPendingRemits();
   checkMgrInbox();
   checkPendingVoidRefund();
+  checkStaleRemittances();
   setInterval(checkPendingRemits, 30000);
   setInterval(checkMgrInbox, 60000);
   setInterval(checkPendingVoidRefund, 30000);
+  setInterval(checkStaleRemittances, 60000);
   if (MGR?.staff_id) {
     _sb.rpc('ping_staff_online', { p_staff_id: MGR.staff_id }).then(() => {});
     _pingInterval = setInterval(() => { if (MGR?.staff_id) _sb.rpc('ping_staff_online', { p_staff_id: MGR.staff_id }).then(() => {}); }, 30 * 1000);
@@ -2068,6 +2075,47 @@ async function checkPendingRemits() {
   const count = (data||[]).length;
   const badge = document.getElementById('remitBadge');
   if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
+}
+
+// A cashier who simply stops remitting altogether (no new remit AND no new
+// login) needs to still be visible here — otherwise days of unremitted cash
+// can sit unnoticed since nothing else on this page looks back further than
+// "today" or "currently pending."
+async function checkStaleRemittances() {
+  const alertEl = document.getElementById('staleRemitAlert');
+  if (!alertEl || !MGR?.store_id) return;
+  const { data: cashiers } = await _sb.from('store_users')
+    .select('username,full_name').eq('store_id', MGR.store_id).eq('role', 'cashier').eq('active', true);
+  if (!cashiers?.length) { alertEl.style.display = 'none'; return; }
+
+  const { data: remits } = await _sb.from('cash_remittances')
+    .select('cashier_name,created_at').eq('store_id', MGR.store_id).neq('status', 'fund_transfer')
+    .order('created_at', { ascending: false });
+  const lastRemitByName = {};
+  (remits || []).forEach(r => { if (!lastRemitByName[r.cashier_name]) lastRemitByName[r.cashier_name] = r.created_at; });
+
+  const STALE_HOURS = 24;
+  const now = Date.now();
+  const flagged = [];
+  for (const c of cashiers) {
+    const name = c.full_name || c.username;
+    const lastRemit = lastRemitByName[name];
+    if (!lastRemit) continue;
+    const hoursSince = (now - new Date(lastRemit).getTime()) / 3600000;
+    if (hoursSince <= STALE_HOURS) continue;
+    const { count } = await _sb.from('orders').select('id', { count: 'exact', head: true })
+      .eq('store_id', MGR.store_id).eq('cashier_name', name).gt('timestamp', lastRemit);
+    if (count && count > 0) flagged.push({ name, days: Math.floor(hoursSince / 24) });
+  }
+
+  if (flagged.length) {
+    const list = flagged.slice(0, 5).map(f => `${f.name} (${f.days} day${f.days !== 1 ? 's' : ''})`).join(', ')
+      + (flagged.length > 5 ? ` +${flagged.length - 5} more` : '');
+    document.getElementById('staleRemitList').textContent = list;
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
 }
 
 // ── Void / Refund (cashiers request with proof, manager approves) ────────
