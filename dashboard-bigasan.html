@@ -3961,7 +3961,7 @@ async function openMgrCohModal() {
   const el = document.getElementById('mgrCohModalContent');
   el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>';
   const { data } = await _sb.from('cash_remittances')
-    .select('cashier_name,cash_on_hand,pos_sales,online_sales,difference,status,shift_date')
+    .select('cashier_name,cash_on_hand,pos_sales,online_sales,difference,status,shift_date,description')
     .eq('store_id', STORE.id)
     .order('created_at', { ascending: false });
   const rows = data || [];
@@ -3969,11 +3969,16 @@ async function openMgrCohModal() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
+  // A void/refund cash adjustment is stored as 'pending' too (see
+  // approveVoidRefund), but it's an automatic ledger note, not a real
+  // cashier remittance in progress — without this it silently dropped out
+  // of Net Cash with Manager entirely.
+  const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
   const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
-  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
+  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   const confirmedStatuses = ['over','short','balanced'];
   const confirmedRows = cashierRows.filter(r => confirmedStatuses.includes(r.status));
@@ -4061,7 +4066,7 @@ async function loadManagerCash() {
   const el = document.getElementById('mgrCashContent');
   if (!el || !STORE) return;
   const { data } = await _sb.from('cash_remittances')
-    .select('cashier_name,cash_on_hand,pos_sales,online_sales,difference,status,shift_date')
+    .select('cashier_name,cash_on_hand,pos_sales,online_sales,difference,status,shift_date,description')
     .eq('store_id', STORE.id)
     .order('created_at', { ascending: false });
   const rows = data || [];
@@ -4069,11 +4074,16 @@ async function loadManagerCash() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No remittances recorded yet.</div>';
     return;
   }
+  // A void/refund cash adjustment is stored as 'pending' too (see
+  // approveVoidRefund), but it's an automatic ledger note, not a real
+  // cashier remittance in progress — without this it silently dropped out
+  // of Net Cash with Manager entirely.
+  const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
   const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
-  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
+  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   const confirmedStatuses = ['over','short','balanced'];
   const confirmedRows = cashierRows.filter(r => confirmedStatuses.includes(r.status));

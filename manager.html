@@ -2609,11 +2609,17 @@ async function loadCashSummary() {
     .order('created_at', { ascending: false });
 
   const rows = data || [];
+  // A void/refund cash adjustment is stored as 'pending' too (see
+  // approveVoidRefund), but it's an automatic ledger note, not a real
+  // cashier remittance in progress — without this it silently dropped out
+  // of Net Cash with Manager entirely (pendingRows isn't part of netTotal)
+  // AND showed up looking like an actual cashier "Pending confirmation."
+  const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
   const adjStatuses = ['purchase','deposit','coh_to_staff','refund','fund_transfer'];
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
-  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
+  const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
 
   // Today's entries only — for the per-cashier breakdown display
@@ -2639,8 +2645,9 @@ async function loadCashSummary() {
   // List only the adjustment types actually present, in plain words — a
   // static "(stock/deposit/refunds)" label was misleading when e.g. no
   // stock was ever bought with drawer cash, just refunds.
-  const ADJ_TYPE_LABELS = { purchase: 'added stocks', deposit: 'owner deposits', coh_to_staff: 'staff cash out', refund: 'refunds', fund_transfer: 'cashier fund transfers' };
-  const adjTypesPresent = [...new Set(adjRows.map(r => r.status))].map(t => ADJ_TYPE_LABELS[t] || t);
+  const ADJ_TYPE_LABELS = { purchase: 'added stocks', deposit: 'owner deposits', coh_to_staff: 'staff cash out', refund: 'refunds', fund_transfer: 'cashier fund transfers', void_refund_pending: 'voids/refunds' };
+  const _adjTypeKey = r => r.status === 'pending' && isVoidRefundAdj(r) ? 'void_refund_pending' : r.status;
+  const adjTypesPresent = [...new Set(adjRows.map(_adjTypeKey))].map(t => ADJ_TYPE_LABELS[t] || t);
 
   // Store for modal display, and a structured snapshot (not just HTML) so a
   // deposit can carry its own itemized justification with it — otherwise
@@ -2711,10 +2718,20 @@ async function loadCashSummary() {
     ${todayAdjRows.length ? `<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
       ${todayAdjRows.map(r=>{
         const amt=parseFloat(r.cash_on_hand||0);
-        const isPurchase=r.status==='purchase';
+        // Every adjustment status gets its own icon/label instead of just
+        // "Stock purchase" vs a catch-all "Owner deposit" — a Void/Refund,
+        // Cash Advance, Cash Sent, or Fund Transfer landing here previously
+        // all showed as if they were a generic deposit.
+        const ADJ_ICON_LABEL = r.status === 'purchase' ? ['&#128230;', 'Stock purchase']
+          : r.status === 'deposit' ? ['&#128176;', 'Owner deposit']
+          : r.status === 'fund_transfer' ? ['&#128184;', 'Cashier transfer']
+          : r.status === 'coh_to_staff' ? (/^Sent to /.test(r.description||'') ? ['&#128176;', 'Cash sent'] : /^Transferred to Staff Funds/.test(r.description||'') ? ['&#128176;', 'Staff Funds'] : ['&#128181;', 'Cash advance'])
+          : (r.status === 'refund' || (r.status === 'pending' && isVoidRefundAdj(r))) ? (/^Void:/.test(r.description||'') ? ['&#8630;', 'Void'] : ['&#8630;', 'Refund'])
+          : ['&#128176;', 'Adjustment'];
+        const [icon, label] = ADJ_ICON_LABEL;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px">
-          <span style="color:var(--muted)">${isPurchase?'&#128230; Stock purchase':'&#128176; Owner deposit'}: ${r.description?.replace(/^(Stock purchase|Owner deposit): /,'')?.slice(0,20)||''}</span>
-          <span style="font-weight:700;color:${isPurchase?'#ef4444':'#10b981'}">${amt>=0?'+':''}&#8369;${Math.abs(amt).toFixed(2)}</span>
+          <span style="color:var(--muted)">${icon} ${label}: ${r.description?.replace(/^(Stock purchase|Owner deposit): /,'')?.slice(0,24)||''}</span>
+          <span style="font-weight:700;color:${amt<0?'#ef4444':'#10b981'}">${amt>=0?'+':''}&#8369;${Math.abs(amt).toFixed(2)}</span>
         </div>`;
       }).join('')}
     </div>` : ''}
