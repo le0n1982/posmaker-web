@@ -181,12 +181,6 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .modal{display:none;position:fixed;inset:0;background:transparent;z-index:500;align-items:center;justify-content:center;padding:12px}
 .modal.show{display:flex}
 .mbox{background:var(--s1);border-radius:14px;padding:20px;width:min(420px,96vw);border:1px solid var(--border);max-height:90dvh;overflow-y:auto}
-/* Floating (not a full-screen overlay like .modal) so it can stay open and
-   clickable alongside whatever other screen/modal is already up — e.g.
-   checking the Calculator while "My Activity Today" is also open. */
-.calc-float{display:none;position:fixed;bottom:74px;right:16px;z-index:601;max-height:85vh}
-.calc-float.show{display:block}
-.calc-float .mbox{max-height:85vh}
 .mtitle{font-size:16px;font-weight:700;margin-bottom:12px;color:var(--text)}
 .mtotal{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:10px}
 .m-actions{display:flex;gap:7px;margin-top:10px}
@@ -351,7 +345,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   <button id="btnCam" class="choc-btn" onclick="toggleScanner()" title="Camera Scanner (barcode + AI visual)" style="background:#3b82f6;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Camera scanner"><span class="ico">&#128247;</span><span class="lbl">Scan</span></button>
   <button id="btnDualScreen" onclick="openDualScreen()" title="Open Customer Display (2nd window — drag to your second monitor)" style="display:none;background:rgba(255,255,255,.18);border:none;color:var(--hdr-text,#fff);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:17px;opacity:.85;margin-right:3px" aria-label="Open customer display">&#128421;</button>
   <button id="btnSync" class="choc-btn" onclick="syncProds()" title="Refresh products" style="background:#14b8a6;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Refresh products"><span class="ico">&#128260;</span><span class="lbl">Refresh</span></button>
-  <button id="btnCalc" class="choc-btn" onclick="openCalc()" title="Calculator" style="background:#06b6d4;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Calculator"><span class="ico">&#129518;</span><span class="lbl">Calc</span></button>
+  <button id="btnCalc" class="choc-btn" onclick="toggleCalc()" title="Calculator" style="background:#06b6d4;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Calculator"><span class="ico">&#129518;</span><span class="lbl">Calc</span></button>
   <button id="btnPrinterSettings" class="choc-btn" onclick="openPrinterSettings()" title="Printer Settings" style="display:none;background:#64748b;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Printer settings"><span class="ico">&#128424;</span><span class="lbl">Printer</span></button>
   <button id="btnWebPrinter" class="choc-btn" onclick="openWebPrinterSetup()" title="Install Thermal Printer" style="display:none;background:#64748b;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="Install thermal printer"><span class="ico">&#128424;</span><span class="lbl">Install</span></button>
   <button id="btnMySales" class="choc-btn" onclick="openMySales()" title="View My Sales Today" style="display:none;background:#10b981;border:none;color:#fff;padding:7px 9px;border-radius:14px;cursor:pointer;margin-right:6px;box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);" aria-label="View my sales today"><span class="ico">&#128200;</span><span class="lbl">Sales</span></button>
@@ -625,34 +619,37 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
-<!-- ── CALCULATOR ── -->
-<div class="calc-float" id="mCalc">
-  <div class="mbox" style="max-width:300px;box-shadow:0 10px 40px rgba(0,0,0,.6)">
-    <div class="mtitle">&#129518; Calculator</div>
-    <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:12px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcClear()">C</button>
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('/')">&#247;</button>
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('*')">&#215;</button>
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcBackspace()">&#9003;</button>
-      <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
-      <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
-      <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('-')">&#8722;</button>
-      <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
-      <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
-      <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
-      <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('+')">+</button>
-      <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
-      <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
-      <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
-      <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
-      <button type="button" class="calc-btn" onclick="calcInput('0')" style="grid-column:span 4">0</button>
-    </div>
-    <button type="button" onclick="calcEquals()" style="width:100%;margin-top:10px;padding:18px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:24px;font-weight:800;cursor:pointer">=</button>
-    <div class="m-actions" style="margin-top:12px">
-      <button class="btn-cancel" onclick="closeM('mCalc')">Close</button>
-    </div>
+<!-- ── FLOATING CALCULATOR WIDGET (same drag-anywhere icon + panel as the
+     Owner/Manager Dashboard, instead of a full-screen popup) ── -->
+<div id="calcIcon" title="Calculator" style="position:fixed;bottom:90px;right:16px;width:48px;height:48px;border-radius:50%;background:var(--s1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:601;font-size:22px;touch-action:none;user-select:none">&#129518;</div>
+<div id="calcPanel" style="display:none;position:fixed;bottom:148px;right:16px;width:272px;background:var(--s1);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.5);z-index:601;padding:16px">
+  <div id="calcDragHandle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;cursor:move;touch-action:none;user-select:none">
+    <strong style="font-size:13px;color:var(--muted)">Calculator</strong>
+    <span style="cursor:pointer;color:var(--muted);font-size:16px" onclick="toggleCalc()">&#10005;</span>
+  </div>
+  <div id="calcDisplay" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:right;font-size:28px;font-weight:700;color:var(--text);margin-bottom:10px;min-height:38px;overflow-x:auto;white-space:nowrap">0</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcClear()">C</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('/')">&#247;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('*')">&#215;</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('-')">&#8722;</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
+    <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
+    <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
+    <button type="button" class="calc-btn calc-btn-op" onclick="calcInput('+')">+</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
+    <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
+    <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
+    <button type="button" class="calc-btn" onclick="calcEquals()" style="background:var(--accent);color:#fff;grid-row:span 2">=</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
+    <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
+    <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
+
+    <button type="button" class="calc-btn" onclick="calcInput('0')" style="grid-column:span 2">0</button>
+    <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
   </div>
 </div>
 
@@ -2390,7 +2387,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.15';
+const POS_BUILD = '1.9.16';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -4535,11 +4532,6 @@ async function deleteDraft(id) {
 
 // ── Calculator ─────────────────────────────────────────────────────────
 let _calcExpr = '';
-function openCalc() {
-  _calcExpr = '';
-  calcUpdateDisplay();
-  document.getElementById('mCalc').classList.add('show');
-}
 function calcUpdateDisplay() {
   document.getElementById('calcDisplay').textContent = _calcExpr || '0';
 }
@@ -4566,11 +4558,79 @@ function calcEquals() {
   }
   calcUpdateDisplay();
 }
+// Keeps the open panel anchored near wherever the icon currently sits,
+// flipping above/below the icon so it never runs off the top/bottom edge —
+// same behavior as the Owner/Manager Dashboard's floating calculator.
+function repositionCalcPanel() {
+  const icon = document.getElementById('calcIcon');
+  const panel = document.getElementById('calcPanel');
+  const ir = icon.getBoundingClientRect();
+  const pw = panel.offsetWidth || 272;
+  const ph = panel.offsetHeight || 320;
+  let top = ir.top - ph - 10;
+  if (top < 10) top = Math.min(ir.bottom + 10, window.innerHeight - ph - 10);
+  panel.style.top    = Math.max(10, top) + 'px';
+  panel.style.left   = Math.max(10, Math.min(window.innerWidth - pw - 10, ir.left)) + 'px';
+  panel.style.bottom = 'auto';
+  panel.style.right  = 'auto';
+}
+function toggleCalc() {
+  const panel = document.getElementById('calcPanel');
+  const opening = panel.style.display !== 'block';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) { _calcExpr = ''; calcUpdateDisplay(); repositionCalcPanel(); }
+}
+// Drag-anywhere on screen: the small icon when closed, the panel's title
+// bar when open. A press+release with no real movement still counts as a
+// click (so tapping the icon still opens/closes it).
+function makeDraggable(handle, target, onClick) {
+  let dragging = false, moved = false, offX = 0, offY = 0, startX = 0, startY = 0;
+  function start(e) {
+    const pt = e.touches ? e.touches[0] : e;
+    const rect = target.getBoundingClientRect();
+    dragging = true; moved = false;
+    startX = pt.clientX; startY = pt.clientY;
+    offX = pt.clientX - rect.left; offY = pt.clientY - rect.top;
+    target.style.top = rect.top + 'px';
+    target.style.left = rect.left + 'px';
+    target.style.bottom = 'auto'; target.style.right = 'auto';
+    e.preventDefault();
+  }
+  function move(e) {
+    if (!dragging) return;
+    const pt = e.touches ? e.touches[0] : e;
+    if (Math.abs(pt.clientX - startX) > 4 || Math.abs(pt.clientY - startY) > 4) moved = true;
+    let x = pt.clientX - offX, y = pt.clientY - offY;
+    x = Math.max(0, Math.min(window.innerWidth  - target.offsetWidth,  x));
+    y = Math.max(0, Math.min(window.innerHeight - target.offsetHeight, y));
+    target.style.left = x + 'px';
+    target.style.top  = y + 'px';
+    e.preventDefault();
+  }
+  function end() {
+    if (dragging && !moved && onClick) onClick();
+    dragging = false;
+  }
+  handle.addEventListener('mousedown', start);
+  handle.addEventListener('touchstart', start, { passive: false });
+  document.addEventListener('mousemove', move);
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('mouseup', end);
+  document.addEventListener('touchend', end);
+}
+makeDraggable(document.getElementById('calcIcon'), document.getElementById('calcIcon'), toggleCalc);
+makeDraggable(document.getElementById('calcDragHandle'), document.getElementById('calcPanel'), null);
+window.addEventListener('resize', () => {
+  if (document.getElementById('calcPanel').style.display === 'block') repositionCalcPanel();
+});
 // Lets the cashier use a physical numpad/keyboard, not just the on-screen
-// buttons — only listens while the calculator modal is actually open so it
+// buttons — only listens while the calculator panel is actually open so it
 // doesn't interfere with typing anywhere else in the POS.
 document.addEventListener('keydown', function(e) {
-  if (!document.getElementById('mCalc').classList.contains('show')) return;
+  const panel = document.getElementById('calcPanel');
+  if (!panel || panel.style.display !== 'block') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (e.key >= '0' && e.key <= '9') { calcInput(e.key); e.preventDefault(); }
   else if (['+', '-', '*', '/', '.'].includes(e.key)) { calcInput(e.key); e.preventDefault(); }
   else if (e.key === 'Enter' || e.key === '=') { calcEquals(); e.preventDefault(); }

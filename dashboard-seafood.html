@@ -5663,30 +5663,71 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
 
   // Live running total for an open (still logged-in, not yet logged out)
-  // shift — sum of unremitted Cash orders, so the owner sees the current
-  // drawer total without listing each sale.
+  // shift — same formula as the cashier's own Cash Drawer / Cash Remittance
+  // screens (carried float + cash sales + received funds + void/refund
+  // adjustments - expenses, all since the last real remit), so the owner
+  // sees the exact same number the cashier would, not a cruder estimate.
   let liveTotal = null;
   const lastLogin = loginTimes[loginTimes.length - 1];
   const hasOpenShift = lastLogin && !logoutTimes.some(t => t > lastLogin);
   if (isCashier && hasOpenShift) {
-    // Anchor on the last REMITTANCE, not the last login — a cashier who
+    const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
+    const username = (allStaff||[]).find(s => s.id === staffId)?.username;
+    // Anchor on the last REAL REMITTANCE, not the last login — a cashier who
     // logs out and back in mid-day (lunch break, force-logout, etc.)
     // without remitting in between must still have that earlier cash
     // counted here, exactly like the cashier's own "Cash on Hand at
     // Logout" screen (openRemitOnLogout() in cashier-*.html) already does.
-    // Falling back to lastLogin would silently drop that earlier chunk.
-    const { data: lastRemit } = await _sb.from('cash_remittances')
-      .select('created_at').eq('store_id', STORE.id).eq('cashier_name', displayName)
-      .order('created_at', { ascending: false }).limit(1);
-    let liveFrom = lastRemit?.[0]?.created_at;
+    // Falling back to lastLogin would silently drop that earlier chunk. A
+    // Fund Transfer or Void/Refund adjustment must not count as "the last
+    // remit" either — see cashier-*.html's _calcCashDrawerBalance for why.
+    const { data: lastRemitRows } = await _sb.from('cash_remittances')
+      .select('created_at,description').eq('store_id', STORE.id).eq('cashier_name', displayName)
+      .neq('status', 'fund_transfer').order('created_at', { ascending: false }).limit(5);
+    const lastRemit = (lastRemitRows || []).find(r => !isVoidRefundAdj(r));
+    let liveFrom = lastRemit?.created_at;
     if (!liveFrom) {
       const { data: firstLogin } = await _sb.from('staff_logs')
         .select('login_at').eq('staff_id', staffId).order('login_at', { ascending: true }).limit(1);
       liveFrom = firstLogin?.[0]?.login_at || lastLogin;
     }
-    const { data: ord } = await _sb.from('orders').select('total,payment_method')
-      .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', liveFrom);
-    liveTotal = (ord || []).filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+    // Carried-over float belongs to whoever's shift is next, not necessarily
+    // this same cashier, so it looks at the STORE's most recent real remit
+    // overall (not scoped to this cashier like the query above is).
+    const { data: floatRows } = await _sb.from('cash_remittances')
+      .select('drawer_float,description').eq('store_id', STORE.id)
+      .in('status', ['pending', 'over', 'short', 'balanced'])
+      .order('created_at', { ascending: false }).limit(5);
+    const realFloatRemit = (floatRows || []).find(r => !isVoidRefundAdj(r));
+    const carriedFloat = parseFloat(realFloatRemit?.drawer_float) || 0;
+    const [{ data: ord }, { data: expLogs }, { data: rf }, { data: vr }] = await Promise.all([
+      _sb.from('orders').select('total,payment_method,amount_tendered')
+        .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', liveFrom),
+      _sb.from('activity_logs').select('details,created_at')
+        .eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'EXPENSE_PAID').gte('created_at', liveFrom),
+      username ? _sb.from('cash_remittances').select('cash_on_hand,created_at')
+        .eq('store_id', STORE.id).eq('cashier_name', username).eq('status', 'payment_confirmed').gte('created_at', liveFrom)
+        : Promise.resolve({ data: [] }),
+      _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
+        .eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending').gte('created_at', liveFrom)
+    ]);
+    // Split sales only put their cash portion (amount_tendered) in the
+    // drawer — the rest went out electronically, same as a pure e-pay sale.
+    const cashSinceRemit = (ord || []).reduce((s,o) => {
+      const pm = o.payment_method || 'Cash';
+      if (pm === 'Cash') return s + (parseFloat(o.total)||0);
+      if (pm === 'Split') return s + (parseFloat(o.amount_tendered)||0);
+      return s;
+    }, 0);
+    const expensesSinceRemit = (expLogs || []).reduce((s,l) => {
+      try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch(_) { return s; }
+    }, 0);
+    const receivedFundsSinceRemit = (rf || []).reduce((s,r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+    // A Void/Refund charged to this cashier's pending balance reduces what
+    // she still owes — cash_on_hand here is already negative, so adding it
+    // subtracts the voided amount.
+    const voidRefundSinceRemit = (vr || []).filter(isVoidRefundAdj).reduce((s,r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+    liveTotal = carriedFloat + cashSinceRemit + receivedFundsSinceRemit + voidRefundSinceRemit - expensesSinceRemit;
   }
 
   const dayKey = iso => new Date(iso).toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
