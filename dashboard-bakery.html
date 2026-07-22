@@ -970,8 +970,12 @@ input:checked + .slider:before{transform:translateX(18px)}
           <div class="field"><label>Opening Time</label><input id="sOpenTime" type="time"></div>
           <div class="field"><label>Closing Time</label><input id="sCloseTime" type="time"></div>
         </div>
-        <div class="field">
-          <label>Business Day Start Time <span style="color:var(--dim);font-weight:400;font-size:11px">(late-night activity before this time — e.g. a void done at 12:13 AM — counts toward the PREVIOUS day's "Today" sales/reports instead of the new calendar day)</span></label>
+        <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="sBizDayEnable" style="width:auto" onchange="document.getElementById('sBizDayStartField').style.display=this.checked?'':'none'">
+          <label for="sBizDayEnable" style="margin:0">Use a custom Business Day Start Time <span style="color:var(--dim);font-weight:400;font-size:11px">(off = "Today" resets at midnight, like usual — turn on for a store where late-night activity, e.g. a void done at 12:13 AM, should still count toward the PREVIOUS day's "Today" sales/reports; leave off for 24-hour / shifting stores)</span></label>
+        </div>
+        <div class="field" id="sBizDayStartField" style="display:none">
+          <label>Business Day Start Time</label>
           <input id="sBizDayStart" type="time" value="04:00">
         </div>
         <div class="field">
@@ -1881,7 +1885,7 @@ function _localToday() {
 // calendar day's report, matching how a late-night void/sale is understood
 // as part of last night's shift, not a new day that just started minutes ago.
 function _bizDayBounds() {
-  const [h, m] = (STORE?.business_day_start || '04:00').split(':').map(Number);
+  const [h, m] = STORE?.business_day_enabled ? (STORE?.business_day_start || '04:00').split(':').map(Number) : [0, 0];
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h || 0, m || 0, 0, 0);
   if (now < start) start.setDate(start.getDate() - 1);
@@ -2009,6 +2013,8 @@ function _sig(ms = 25000) {
   document.getElementById('sOpenTime').value  = store.open_time  || '08:00';
   document.getElementById('sCloseTime').value = store.close_time || '20:00';
   document.getElementById('sBizDayStart').value = store.business_day_start || '04:00';
+  document.getElementById('sBizDayEnable').checked = !!store.business_day_enabled;
+  document.getElementById('sBizDayStartField').style.display = store.business_day_enabled ? '' : 'none';
   const _closedDays = (store.closed_days || '').split(',').filter(Boolean);
   for (let d = 0; d < 7; d++) document.getElementById('sClosedDay'+d).checked = _closedDays.includes(String(d));
   document.getElementById('sFooter').value   = store.receipt_footer || '';
@@ -6521,6 +6527,7 @@ async function saveSettings() {
     open_time:      document.getElementById('sOpenTime').value || '08:00',
     close_time:     document.getElementById('sCloseTime').value || '20:00',
     business_day_start: document.getElementById('sBizDayStart').value || '04:00',
+    business_day_enabled: document.getElementById('sBizDayEnable').checked,
     closed_days:    [0,1,2,3,4,5,6].filter(d => document.getElementById('sClosedDay'+d).checked).join(','),
     receipt_footer: document.getElementById('sFooter').value.trim(),
     show_calculator: document.getElementById('sShowCalc').checked,
