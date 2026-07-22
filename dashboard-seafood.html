@@ -663,6 +663,27 @@ input:checked + .slider:before{transform:translateX(18px)}
       </div>
     </div>
 
+    <!-- VOID/REFUND APPROVAL — where the cash comes out of -->
+    <div class="modal" id="vrApproveModal">
+      <div class="mbox" style="width:min(420px,100%)">
+        <h3>&#10003; Approve Void / Refund</h3>
+        <p id="vrApproveOrderInfo" style="font-size:13px;color:var(--muted);margin-bottom:14px"></p>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">Deduct this cash from:</div>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border-radius:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" name="vrApproveTarget" value="cashier" checked style="width:auto">
+          <span>The cashier's pending balance (<strong id="vrApproveCashierLabel">—</strong> still owes less)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border-radius:8px;cursor:pointer">
+          <input type="radio" name="vrApproveTarget" value="manager" style="width:auto">
+          <span>My own cash</span>
+        </label>
+        <div class="m-actions">
+          <button class="btn btn-ghost" onclick="cancelApproveVoidRefundModal()">Cancel</button>
+          <button class="btn btn-accent" onclick="confirmApproveVoidRefundModal()">&#10003; Approve</button>
+        </div>
+      </div>
+    </div>
+
     <!-- VOID/REFUND PROOF VIEWER -->
     <div class="modal" id="vrProofModal">
       <div class="mbox" style="width:min(420px,100%)">
@@ -2271,11 +2292,65 @@ async function restoreStockForOrder(orderId, changeType) {
 // second tap before the first approval finishes re-runs it and
 // double-deducts stock/cash for the same order.
 let _vrApproving = new Set();
+let _vrApproveCtx = null;
 async function approveVoidRefund(id, btnEl) {
   if (_vrApproving.has(id)) return;
   const r = _vrCache.find(x => x.id === id);
   if (!r) return;
-  if (!confirm(`Approve this ${r.type} for Order #${r.order_id} (${CUR}${parseFloat(r.order_total || 0).toFixed(2)})?`)) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Loading…'; }
+
+  // Peek at the order (read-only — the real claim happens once the owner
+  // has picked where the cash comes from, or immediately below if there's
+  // no cash decision to make at all).
+  const { data: orig } = await _sb.from('orders').select('*').eq('id', r.order_id).maybeSingle();
+  if (!orig) {
+    showToast('Original order not found.', true);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Approve'; }
+    return;
+  }
+  const orderTotal = parseFloat(orig.total) || 0;
+  const cashPortion = orig.payment_method === 'Cash' ? orderTotal
+                     : orig.payment_method === 'Split' ? (parseFloat(orig.amount_tendered) || 0)
+                     : 0;
+  _vrApproveCtx = { id, r, orig, orderTotal, cashPortion, btnEl };
+
+  if (cashPortion <= 0) {
+    // No cash actually moved for this order (pure e-pay) — nothing to
+    // choose, so keep the old single-confirm flow.
+    if (!confirm(`Approve this ${r.type} for Order #${r.order_id} (${CUR}${orderTotal.toFixed(2)})?`)) {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Approve'; }
+      _vrApproveCtx = null;
+      return;
+    }
+    await _finishApproveVoidRefund('cashier');
+    return;
+  }
+
+  // Real cash is involved — let the owner decide whose balance it comes
+  // out of instead of the system silently guessing.
+  document.getElementById('vrApproveOrderInfo').textContent =
+    `Order #${r.order_id} — ${r.type === 'void' ? 'Void' : 'Refund'} (${CUR}${orderTotal.toFixed(2)}, ${CUR}${cashPortion.toFixed(2)} cash)`;
+  document.getElementById('vrApproveCashierLabel').textContent = orig.cashier_name;
+  const cashierRadio = document.querySelector('input[name="vrApproveTarget"][value="cashier"]');
+  if (cashierRadio) cashierRadio.checked = true;
+  document.getElementById('vrApproveModal').classList.add('show');
+  if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Approve'; }
+}
+function cancelApproveVoidRefundModal() {
+  document.getElementById('vrApproveModal').classList.remove('show');
+  _vrApproveCtx = null;
+}
+async function confirmApproveVoidRefundModal() {
+  if (!_vrApproveCtx) return;
+  const target = document.querySelector('input[name="vrApproveTarget"]:checked')?.value || 'cashier';
+  document.getElementById('vrApproveModal').classList.remove('show');
+  await _finishApproveVoidRefund(target);
+}
+async function _finishApproveVoidRefund(target) {
+  const ctx = _vrApproveCtx;
+  if (!ctx) return;
+  _vrApproveCtx = null;
+  const { id, r, orig, orderTotal, cashPortion, btnEl } = ctx;
   if (_vrApproving.has(id)) return;
   _vrApproving.add(id);
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Approving…'; }
@@ -2298,13 +2373,6 @@ async function approveVoidRefund(id, btnEl) {
     return;
   }
 
-  const { data: orig } = await _sb.from('orders').select('*').eq('id', r.order_id).maybeSingle();
-  if (!orig) { showToast('Original order not found.', true); return; }
-
-  const orderTotal = parseFloat(orig.total) || 0;
-  const cashPortion = orig.payment_method === 'Cash' ? orderTotal
-                     : orig.payment_method === 'Split' ? (parseFloat(orig.amount_tendered) || 0)
-                     : 0;
   const today = _localToday();
 
   // Everything below is independent of everything else here — none of
@@ -2342,31 +2410,20 @@ async function approveVoidRefund(id, btnEl) {
   // physical drawer, so pure e-pay originals don't move anyone's COH — the
   // payment network reverses those on its own. A Split sale only put its
   // cash portion (amount_tendered) in the drawer, not the full order total.
+  // Which balance it comes out of is now the owner's explicit choice (see
+  // the modal above) instead of an automatic "already remitted?" guess.
   if (cashPortion > 0) {
     tasks.push((async () => {
-      // Where is this order's cash right now? If the cashier's shift that
-      // included it has already been received by the manager (status is
-      // over/short/balanced, not still 'pending'), the money is in the
-      // manager's hands — deduct it there. Otherwise the cashier is still
-      // holding it, uncounted — deduct from what they'll eventually hand over.
-      const { data: coveringRemit } = await _sb.from('cash_remittances')
-        .select('status')
-        .eq('store_id', STORE.id).eq('cashier_name', orig.cashier_name)
-        .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,mgr_payment,payment_confirmed,refund)')
-        .gt('created_at', orig.timestamp)
-        .order('created_at', { ascending: true }).limit(1).maybeSingle();
-
       const desc = `${r.type === 'void' ? 'Void' : 'Refund'}: Order #${r.order_id}`;
-      if (coveringRemit && coveringRemit.status !== 'pending') {
-        // Already remitted — comes out of the manager's own cash.
+      if (target === 'manager') {
+        // Comes out of the owner's own cash.
         await _sb.from('cash_remittances').insert({
           store_id: STORE.id, cashier_name: ownerName, shift_date: today,
           pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
           status: 'refund', description: desc
         });
       } else {
-        // Not remitted yet (or no remittance found at all) — still with the
-        // cashier, so reduce what they owe instead of the manager's cash.
+        // Reduces what the cashier still owes instead.
         await _sb.from('cash_remittances').insert({
           store_id: STORE.id, cashier_name: orig.cashier_name, shift_date: today,
           pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
