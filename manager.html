@@ -1974,16 +1974,14 @@ function renderRemit() {
     return true;
   });
 
-  // Pending remittances always shown at top regardless of filter — but a
-  // void/refund cash adjustment that's still 'pending' isn't something a
-  // manager needs to "Receive": it's an automatic ledger note (the
-  // cashier's expected total already went down because of the void), not
-  // real cash changing hands. Treating it like a normal remittance let a
-  // manager accidentally "confirm" it and overwrite its Void/Refund
-  // description with a computed Over/Short status that made no sense.
+  // Pending remittances always shown at top regardless of filter. A
+  // void/refund cash adjustment is not a cashier remittance at all — it's
+  // an automatic ledger note the system writes when an order is voided or
+  // refunded — so it's excluded from this table entirely (it already shows
+  // up, clearly labeled, in the "Net Cash with Manager" sidebar).
   const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
   const pending = _remitData.filter(r => r.status === 'pending' && !isVoidRefundAdj(r));
-  const normal  = filtered.filter(r => r.status !== 'pending' || isVoidRefundAdj(r));
+  const normal  = filtered.filter(r => r.status !== 'pending' && !isVoidRefundAdj(r));
 
   if (!pending.length && !normal.length) {
     tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No remittances for this period.</td></tr>';
@@ -2730,7 +2728,7 @@ async function loadCashSummary() {
           : ['&#128176;', 'Adjustment'];
         const [icon, label] = ADJ_ICON_LABEL;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px">
-          <span style="color:var(--muted)">${icon} ${label}: ${r.description?.replace(/^(Stock purchase|Owner deposit): /,'')?.slice(0,24)||''}</span>
+          <span style="color:var(--muted)">${icon} ${label}: ${r.description?.replace(/^(Stock purchase|Owner deposit|Void|Refund):\s*/,'')?.slice(0,24)||''}</span>
           <span style="font-weight:700;color:${amt<0?'#ef4444':'#10b981'}">${amt>=0?'+':''}&#8369;${Math.abs(amt).toFixed(2)}</span>
         </div>`;
       }).join('')}
