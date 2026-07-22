@@ -2265,7 +2265,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.16';
+const POS_BUILD = '1.9.17';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -4231,8 +4231,19 @@ async function lookupVoidRefundOrder() {
   const { data: ord, error } = await _sb.from('orders').select('id,total,cashier_name,timestamp,payment_method').eq('id', numInt).eq('store_id', STORE_ID).maybeSingle();
   if (error || !ord) { msgEl.textContent = 'Order not found in this store.'; return; }
 
-  const { data: existing } = await _sb.from('void_refund_requests').select('id').eq('order_id', ord.id).eq('status', 'pending').maybeSingle();
-  if (existing) { msgEl.textContent = 'This order already has a pending void/refund request.'; return; }
+  // Block a NEW request for an order that's already pending OR already
+  // approved — without checking 'approved' too, a cashier could look up the
+  // same order number again after it was already voided/refunded and submit
+  // a second request, leading to it being voided/refunded twice.
+  const { data: existing } = await _sb.from('void_refund_requests').select('id,status')
+    .eq('order_id', ord.id).eq('store_id', STORE_ID).in('status', ['pending', 'approved'])
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (existing) {
+    msgEl.textContent = existing.status === 'approved'
+      ? `Order #${ord.id} has already been voided/refunded.`
+      : 'This order already has a pending void/refund request.';
+    return;
+  }
 
   _vrOrder = ord;
   sumEl.innerHTML = `Order #${ord.id} &middot; ${new Date(ord.timestamp).toLocaleString()}<br>Cashier: ${ord.cashier_name} &middot; ${ord.payment_method}<br><strong style="color:var(--accent)">${CUR}${parseFloat(ord.total).toFixed(2)}</strong>`;
