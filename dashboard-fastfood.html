@@ -5495,7 +5495,7 @@ function renderStaff(staff) {
         ${frozenStaffIds.has(s.id)?`<button class="btn btn-ghost btn-sm" onclick="showUpgradeModal('staff', allStaff.length, FREE_STAFF_LIMIT)">Edit</button>`:`<button class="btn btn-ghost btn-sm" onclick="openStaffModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">Edit</button>`}
         ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(0,180,216,.15);color:#00b4d8;border:1px solid rgba(0,180,216,.3)" onclick="copyStaffLink()">&#128279; Link</button>`:''}
         ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:var(--warn-text);border:1px solid rgba(245,158,11,.3)" onclick="openMgrCohModal()">&#128181; View COH</button>`:''}
-        ${s.role==='manager'?`<button class="btn btn-sm" style="background:rgba(16,185,129,.15);color:var(--ok-text);border:1px solid rgba(16,185,129,.3)" onclick="openSendPayModal('${s.id}')">&#128176; Send</button>` : ''}
+        ${(s.role==='manager'||s.role==='cashier')?`<button class="btn btn-sm" style="background:rgba(16,185,129,.15);color:var(--ok-text);border:1px solid rgba(16,185,129,.3)" onclick="openSendPayModal('${s.id}')">&#128176; Send</button>` : ''}
         ${_isOnline?`<button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:var(--danger-text);border:1px solid rgba(239,68,68,.3)" onclick="forceLogoutStaff('${s.id}','${s.username}')">&#128274; Force Logout</button>`:''}
         <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">Del</button>
       </td>
