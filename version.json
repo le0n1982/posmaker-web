@@ -1,7 +1,8 @@
 {
-  "version": "1.9.10",
+  "version": "1.9.11",
   "date": "2026-07-22",
   "changes": [
+    "💰 \"My Activity Today\" now shows \"incl. ₱X left by [name]\" under Cash Drawer when it includes a carried-over float — so it's clear the total isn't just today's own sales.",
     "🔧 Fixed: a Void/Refund's cash adjustment showed up in \"My Activity Today\" as a confusing \"Remittance... SHORT\" entry — it now shows clearly as its own \"Void: Order #X\" / \"Refund: Order #X\" line instead of being mistaken for an actual cashier remittance.",
     "🔧 CRITICAL FIX: a carried-over drawer float could get silently masked to ₱0 by ANY newer cash_remittances entry — a Fund Transfer, Cash Advance, Send Cash, or a Received Fund confirmation — since the float lookup only checked the single most recent row regardless of type. Now only looks at real end-of-shift remittances, so a leftover float from the previous cashier always survives until it's actually remitted.",
     "🔧 Fixed: \"My Activity Today\" and Fund Transfer could show a stale (sometimes missing) carried-over drawer float on a device left open for a long time — the figure now refreshes live the moment you actually open either screen, instead of only updating on a 20-second background timer that could stall.",

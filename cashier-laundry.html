@@ -532,7 +532,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
       <div style="flex:1;text-align:center">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Cash Drawer</div>
         <div style="font-size:24px;font-weight:800;color:#f59e0b" id="myCashDrawer">&#8212;</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">expected total</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px" id="myCashDrawerNote">expected total</div>
       </div>
       <div style="width:1px;background:var(--border)"></div>
       <div style="flex:1;text-align:center">
@@ -2180,7 +2180,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.10';
+const POS_BUILD = '1.9.11';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3798,6 +3798,16 @@ async function openMySales() {
     .filter(r => r.created_at >= _sinceRemit)
     .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
   document.getElementById('myCashDrawer').textContent = CUR + (_remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit - expensesSinceRemit).toFixed(2);
+  // Without this, the float from whoever last remitted was silently folded
+  // into the number with no way to tell it apart from this shift's own cash
+  // sales — surfacing "left by [name]" here is what actually answers "why
+  // is my Cash Drawer more/less than just my own sales?".
+  const _cdNoteEl = document.getElementById('myCashDrawerNote');
+  if (_cdNoteEl) {
+    _cdNoteEl.textContent = _remitCarriedFloat > 0
+      ? `incl. ${CUR}${_remitCarriedFloat.toFixed(2)} left by ${_remitCarriedFloatFrom || 'prev. shift'}`
+      : 'expected total';
+  }
   // E-Pay mirrors the same window as Total Sales above — informational only,
   // e-pay never touches the physical till so there's nothing to reconcile.
   const epayToday = rows.reduce((s, o) => s + ((parseFloat(o.total) || 0) - _cashPortion(o)), 0);
