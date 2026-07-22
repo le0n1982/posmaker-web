@@ -788,7 +788,17 @@ const {createClient} = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 const params = new URLSearchParams(location.search);
 const SID = params.get('sid');
-let MGR = null, _allInv = [], _pingInterval = null, _tgToken = '', _tgChatId = '', _storeName = '', _storeBizType = '';
+let MGR = null, _allInv = [], _pingInterval = null, _tgToken = '', _tgChatId = '', _storeName = '', _storeBizType = '', _bizDayStart = '04:00';
+// "Today" for reporting (Sales page) — see dashboard-bigasan.html's
+// _bizDayBounds() for the full rationale; kept in sync with that logic.
+function _bizDayBounds() {
+  const [h, m] = (_bizDayStart || '04:00').split(':').map(Number);
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h || 0, m || 0, 0, 0);
+  if (now < start) start.setDate(start.getDate() - 1);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  return { start, end };
+}
 const RESTAURANT_BIZ = new Set(['Fast Food','Carinderya','Coffee Shop','Bakery','Lechon',
   'Pizza / Pasta','Seafood','Milk Tea / Drinks','Karinderya / Buffet','Snack Bar']);
 
@@ -805,11 +815,12 @@ async function init(){
   _OPS_STORE_ID = MGR.store_id;
   _OPS_READONLY_ITEMS = true;
   _OPS_REQUIRE_PHOTO = true;
-  const {data:st} = await _sb.from('stores').select('name,telegram_bot_token,telegram_chat_id,business_type').eq('id', MGR.store_id).maybeSingle();
+  const {data:st} = await _sb.from('stores').select('name,telegram_bot_token,telegram_chat_id,business_type,business_day_start').eq('id', MGR.store_id).maybeSingle();
   if(st){
     document.getElementById('storeName').textContent = st.name;
     _storeName = st.name || '';
     _storeBizType = st.business_type || '';
+    _bizDayStart = st.business_day_start || '04:00';
     _tgToken   = st.telegram_bot_token || '';
     _tgChatId  = st.telegram_chat_id || '';
   }
@@ -1336,7 +1347,9 @@ async function loadSales(){
     label = 'CUSTOM'; tableTitle = 'Custom Range Orders';
     ['day','week','month'].forEach(x => document.getElementById('sf'+x.charAt(0).toUpperCase()+x.slice(1)).classList.remove('active'));
   } else if (_salesPeriod === 'day') {
-    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const _bizDay = _bizDayBounds();
+    periodStart = _bizDay.start.toISOString();
+    periodEnd   = _bizDay.end.toISOString();
     label = "TODAY'S"; tableTitle = "Today's Orders";
   } else if (_salesPeriod === 'week') {
     const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0);

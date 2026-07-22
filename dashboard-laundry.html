@@ -964,6 +964,10 @@ input:checked + .slider:before{transform:translateX(18px)}
           <div class="field"><label>Closing Time</label><input id="sCloseTime" type="time"></div>
         </div>
         <div class="field">
+          <label>Business Day Start Time <span style="color:var(--dim);font-weight:400;font-size:11px">(late-night activity before this time — e.g. a void done at 12:13 AM — counts toward the PREVIOUS day's "Today" sales/reports instead of the new calendar day)</span></label>
+          <input id="sBizDayStart" type="time" value="04:00">
+        </div>
+        <div class="field">
           <label>Closed Days</label>
           <div class="closed-days">
             <label><input type="checkbox" id="sClosedDay0"> Sun</label>
@@ -1874,6 +1878,21 @@ function _localToday() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+// "Today" for reporting purposes (Sales/Revenue stat cards, Sales Report,
+// Transactions "Today" filter) — NOT for cash_remittances/shift tracking,
+// which stays on real calendar time. A store's business_day_start (default
+// 04:00) means activity before that hour still counts toward the PREVIOUS
+// calendar day's report, matching how a late-night void/sale is understood
+// as part of last night's shift, not a new day that just started minutes ago.
+function _bizDayBounds() {
+  const [h, m] = (STORE?.business_day_start || '04:00').split(':').map(Number);
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h || 0, m || 0, 0, 0);
+  if (now < start) start.setDate(start.getDate() - 1);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  return { start, end };
+}
+
 let STORE = null, CUR = '₱', TAX = 12;
 let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
@@ -1994,6 +2013,7 @@ function _sig(ms = 25000) {
   document.getElementById('sTax').value      = store.tax_rate ?? 12;
   document.getElementById('sOpenTime').value  = store.open_time  || '08:00';
   document.getElementById('sCloseTime').value = store.close_time || '20:00';
+  document.getElementById('sBizDayStart').value = store.business_day_start || '04:00';
   const _closedDays = (store.closed_days || '').split(',').filter(Boolean);
   for (let d = 0; d < 7; d++) document.getElementById('sClosedDay'+d).checked = _closedDays.includes(String(d));
   document.getElementById('sFooter').value   = store.receipt_footer || '';
@@ -3592,8 +3612,9 @@ async function loadDashboard() {
   try {
     // Use LOCAL date boundaries (fixes UTC+8 / Philippines timezone issue)
     const now        = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).toISOString();
-    const todayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
+    const _bizDay    = _bizDayBounds();
+    const todayStart = _bizDay.start.toISOString();
+    const todayEnd   = _bizDay.end.toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).toISOString();
 
     // Fetch today's orders (full data — used for both stat cards AND the table)
@@ -6498,6 +6519,7 @@ async function saveSettings() {
     tax_rate:       parseFloat(document.getElementById('sTax').value) || 0,
     open_time:      document.getElementById('sOpenTime').value || '08:00',
     close_time:     document.getElementById('sCloseTime').value || '20:00',
+    business_day_start: document.getElementById('sBizDayStart').value || '04:00',
     closed_days:    [0,1,2,3,4,5,6].filter(d => document.getElementById('sClosedDay'+d).checked).join(','),
     receipt_footer: document.getElementById('sFooter').value.trim(),
     show_calculator: document.getElementById('sShowCalc').checked,
