@@ -718,6 +718,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
           <span style="color:var(--muted)">Cash in Drawer (expected)</span>
           <strong id="remitLogExpected" style="color:var(--accent)">—</strong>
         </div>
+        <div id="remitLogReceivedRow" style="display:none;justify-content:space-between;font-size:11px;color:#f97316;margin-top:2px">
+          <span>incl. received funds</span>
+          <span id="remitLogReceivedAmt">—</span>
+        </div>
         <span id="remitLogPOS" style="display:none">—</span>
       </div>
       <div id="remitNonCashSection" style="display:none;background:var(--s2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px">
@@ -1752,6 +1756,7 @@ let _remitOnlineSales = 0;
 let _remitCarriedFloat = 0;
 let _remitCarriedFloatFrom = '';
 let _remitExpensesTotal = 0;
+let _remitReceivedFundsTotal = 0;
 // A Void/Refund cash adjustment is ALSO stored as a 'pending'-status
 // cash_remittances row (see approveVoidRefund) — it has no drawer_float of
 // its own, but being the newest 'pending' row would otherwise mask the real
@@ -1890,8 +1895,25 @@ async function openRemitOnLogout() {
       .eq('store_id', STORE_ID).eq('added_by', name)
       .gte('created_at', from).lte('created_at', to);
     _remitExpensesTotal = (expData || []).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const expected = _remitCarriedFloat + total - _remitExpensesTotal;
+    // Confirmed "Received Fund" payments (from Owner/Manager) also sit
+    // physically in the drawer since the cashier tapped "Yes, I received
+    // it" — without this, a legitimate Received Fund made this same "since
+    // last remit" the drawer looks Short/Over by exactly that amount.
+    const { data: rfData } = CASHIER?.username
+      ? await _sb.from('cash_remittances').select('cash_on_hand,created_at')
+          .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username).eq('status', 'payment_confirmed')
+          .gte('created_at', from).lte('created_at', to)
+      : { data: [] };
+    _remitReceivedFundsTotal = (rfData || []).reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+    const expected = _remitCarriedFloat + total + _remitReceivedFundsTotal - _remitExpensesTotal;
     document.getElementById('remitLogExpected').textContent = (CUR||'₱') + expected.toFixed(2);
+    const rfRow = document.getElementById('remitLogReceivedRow');
+    if (_remitReceivedFundsTotal > 0) {
+      rfRow.style.display = 'flex';
+      document.getElementById('remitLogReceivedAmt').textContent = '+' + (CUR||'₱') + _remitReceivedFundsTotal.toFixed(2);
+    } else {
+      rfRow.style.display = 'none';
+    }
   } catch(_) {
     document.getElementById('remitLogPOS').textContent = '—';
     document.getElementById('remitLogExpected').textContent = '—';
@@ -1905,7 +1927,7 @@ function calcRemitLogDiff() {
   const btn  = document.getElementById('remitLogCheckBtn');
   const el   = document.getElementById('remitLogDiff');
   if (isNaN(cash)) { el.textContent='—'; el.style.color='var(--muted)'; btn.disabled=true; btn.style.opacity='.4'; return; }
-  const diff = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
+  const diff = cash - pos - _remitCarriedFloat - _remitReceivedFundsTotal + _remitExpensesTotal;
   el.textContent = (diff>=0?'+':'') + (CUR||'₱') + Math.abs(diff).toFixed(2);
   el.style.color = diff>0 ? '#f97316' : diff<0 ? '#ef4444' : '#00b4d8';
   btn.disabled = false; btn.style.opacity = '1';
@@ -1943,7 +1965,7 @@ function remitLogStep2() {
   // negative "Cash on Hand" remittance that then showed as a confusing
   // false "Short" to the manager, with no way to tell it was a bad entry.
   if (cash < 0) { showToast('Cash on Hand can\'t be negative — check the amount you counted.', true); return; }
-  const diff = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
+  const diff = cash - pos - _remitCarriedFloat - _remitReceivedFundsTotal + _remitExpensesTotal;
   const name = document.getElementById('remitLogCashier').textContent;
   document.getElementById('remitCk1').textContent = name;
   document.getElementById('remitCk2').textContent = document.getElementById('remitLogDate').textContent;
@@ -2212,7 +2234,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.13';
+const POS_BUILD = '1.9.14';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

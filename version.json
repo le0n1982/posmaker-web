@@ -1,7 +1,8 @@
 {
-  "version": "1.9.13",
+  "version": "1.9.14",
   "date": "2026-07-22",
   "changes": [
+    "🔧 CRITICAL FIX: the Cash Remittance (Logout) screen's \"Cash in Drawer (expected)\" and Over/Short calculation never accounted for confirmed \"Received Fund\" payments — a cashier who legitimately received money from the Owner/Manager mid-shift would see the wrong expected total and could show as Short/Over by exactly that amount for no reason. Now included, with a small \"incl. received funds\" note shown when it applies — matches the same fix already applied to \"My Activity Today\".",
     "🧮 Calculator is now a floating panel (bottom-right corner) instead of a full-screen popup — it can stay open and stay clickable at the same time as another screen like \"My Activity Today\", instead of covering it up.",
     "🔧 CRITICAL FIX: a Void/Refund's automatic cash adjustment could get mistaken for \"the last remittance\" when computing Cash Drawer / POS Sales-since-remit (in the Remit-Logout screen, \"My Activity Today\", and the carried-over float lookup) — this silently dropped real sales and the carried-over float made before the void from all three, understating Cash Drawer and risking a false \"Short\" on the next remit. Now correctly skips past Void/Refund adjustment rows to find the real last remit.",
     "💰 \"My Activity Today\" now shows \"incl. ₱X left by [name]\" under Cash Drawer when it includes a carried-over float — so it's clear the total isn't just today's own sales.",
