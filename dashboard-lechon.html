@@ -7998,6 +7998,21 @@ async function saveSendPay(){
     to_username:s.username,to_name:(s.full_name||s.username),
     body:mbody,read:false
   }).then(()=>{});
+  // Managers should also see this, not just the recipient — otherwise a
+  // manager has no way to know the owner sent cash directly to one of
+  // their cashiers, outside of digging through the Cash Remit table.
+  if (s.role !== 'manager') {
+    const { data: mgrs } = await _sb.from('store_users')
+      .select('username,full_name').eq('store_id', STORE.id).eq('role', 'manager').eq('active', true);
+    const copyBody = '💰 Owner sent ₱' + amt.toFixed(2) + ' to ' + (s.full_name || s.username) + (note ? ': ' + note : '') + ' (FYI, no action needed)';
+    (mgrs || []).forEach(m => {
+      _sb.from('store_messages').insert({
+        store_id: STORE.id, from_name: (STORE.name || 'Owner'), from_role: 'owner',
+        to_username: m.username, to_name: (m.full_name || m.username),
+        body: copyBody, read: false
+      }).then(() => {});
+    });
+  }
   closeModal('sendPayModal');
   showToast('₱'+amt.toFixed(2)+' sent to '+(s.full_name||s.username)+'.');
 }
