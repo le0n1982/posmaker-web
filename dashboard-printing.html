@@ -3758,7 +3758,7 @@ async function loadDashboard() {
 
     // Fetch today's orders (full data — used for both stat cards AND the table)
     const { data: todayOrders, error: e1 } = await _sb.from('orders')
-      .select('id,timestamp,cashier_name,total,payment_method')
+      .select('id,timestamp,cashier_name,total,payment_method,order_type')
       .eq('store_id', STORE.id)
       .gte('timestamp', todayStart).lte('timestamp', todayEnd)
       .order('id', { ascending: false })
@@ -3766,12 +3766,17 @@ async function loadDashboard() {
     if (e1) throw e1;
 
     const { data: monthOrders, error: e2 } = await _sb.from('orders')
-      .select('total').eq('store_id', STORE.id).gte('timestamp', monthStart).abortSignal(_sig(60000));
+      .select('total,order_type').eq('store_id', STORE.id).gte('timestamp', monthStart).abortSignal(_sig(60000));
     if (e2) throw e2;
 
-    const tdCnt = todayOrders.length;
+    // A Void/Refund's compensating negative entry is a bookkeeping
+    // correction, not a real customer transaction — its negative total
+    // still nets out of revenue correctly, but it must not inflate the
+    // orders count.
+    const _isVoidOrRefund = o => o.order_type === 'VOID' || o.order_type === 'REFUND';
+    const tdCnt = todayOrders.filter(o => !_isVoidOrRefund(o)).length;
     const tdRev = todayOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
-    const moCnt = monthOrders.length;
+    const moCnt = monthOrders.filter(o => !_isVoidOrRefund(o)).length;
     const moRev = monthOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
     document.getElementById('tdOrders').textContent = tdCnt;
@@ -4458,7 +4463,11 @@ function renderReport(orders, from, to) {
   const payBg   = m  => m==='Cash'?'#065f46':m==='GCash'?'#1e3a5f':'#3b1a5f';
 
   const grandTotal = orders.reduce((s,o) => s + parseFloat(o.total||0), 0);
-  const grandCount = orders.length;
+  // A Void/Refund's compensating negative entry is a bookkeeping correction,
+  // not a real customer transaction — it's still listed in the table below
+  // (marked VOIDED/REFUNDED) and its negative total still nets out of
+  // grandTotal correctly, but it must not inflate the "orders" count.
+  const grandCount = orders.filter(o => o.order_type !== 'VOID' && o.order_type !== 'REFUND').length;
 
   let html = `<div style="padding:0 4px">`;
 
@@ -4480,7 +4489,7 @@ function renderReport(orders, from, to) {
       <!-- Day header -->
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--s2);border-bottom:1px solid var(--border)">
         <span style="font-weight:700;font-size:13px">&#128197; ${fmtDay(day)}</span>
-        <span style="font-size:12px;color:var(--muted)">${rows.length} order${rows.length>1?'s':''} &nbsp;&bull;&nbsp; <strong style="color:var(--accent)">${CUR}${dayTotal.toFixed(2)}</strong></span>
+        <span style="font-size:12px;color:var(--muted)">${(()=>{const n=rows.filter(o=>o.order_type!=='VOID'&&o.order_type!=='REFUND').length;return n + ' order' + (n!==1?'s':'');})()} &nbsp;&bull;&nbsp; <strong style="color:var(--accent)">${CUR}${dayTotal.toFixed(2)}</strong></span>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--bg)">

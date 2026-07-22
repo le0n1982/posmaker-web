@@ -1446,8 +1446,13 @@ function filterSalesByCashier() {
 function renderSalesData() {
   const CUR = '₱';
   const totalRev = _salesData.reduce((s,o) => s + (o.total||0), 0);
-  const avg = _salesData.length ? totalRev / _salesData.length : 0;
-  document.getElementById('salesCount').textContent = _salesData.length;
+  // A Void/Refund's compensating negative entry is a bookkeeping correction,
+  // not a real customer transaction — it's still listed in the table below
+  // (marked VOIDED/REFUNDED) and its negative total still nets out of
+  // totalRev correctly, but it must not inflate the order count/average.
+  const realOrderCount = _salesData.filter(o => o.order_type !== 'VOID' && o.order_type !== 'REFUND').length;
+  const avg = realOrderCount ? totalRev / realOrderCount : 0;
+  document.getElementById('salesCount').textContent = realOrderCount;
   document.getElementById('salesRev').textContent   = CUR + totalRev.toFixed(2);
   document.getElementById('salesAvg').textContent   = CUR + avg.toFixed(2);
   const tb = document.getElementById('salesTbody');
