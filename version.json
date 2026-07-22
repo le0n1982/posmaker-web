@@ -1,7 +1,8 @@
 {
-  "version": "1.9.8",
+  "version": "1.9.9",
   "date": "2026-07-22",
   "changes": [
+    "🔧 CRITICAL FIX: a carried-over drawer float could get silently masked to ₱0 by ANY newer cash_remittances entry — a Fund Transfer, Cash Advance, Send Cash, or a Received Fund confirmation — since the float lookup only checked the single most recent row regardless of type. Now only looks at real end-of-shift remittances, so a leftover float from the previous cashier always survives until it's actually remitted.",
     "🔧 Fixed: \"My Activity Today\" and Fund Transfer could show a stale (sometimes missing) carried-over drawer float on a device left open for a long time — the figure now refreshes live the moment you actually open either screen, instead of only updating on a 20-second background timer that could stall.",
     "💰 New \"Funds\" button in the POS (owner-toggled in Settings: \"Let cashiers receive fund transfers\") — shows cash sent to the cashier by the manager or owner, with a \"Did you get the funds?\" confirmation. Once confirmed, the amount is added to their Cash Drawer and shows up in \"My Activity Today\".",
     "🔧 CRITICAL FIX: the Cash Remit \"Cash on Hand\" field had no validation against a negative amount — a mistyped minus sign produced a nonsensical negative cash count that showed up as a confusing false \"Short\" to the manager/owner, with no way to tell it was a bad entry. Now blocked with a clear message before it can be submitted.",

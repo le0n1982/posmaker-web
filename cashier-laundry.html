@@ -1739,11 +1739,14 @@ async function refreshCarriedFloat() {
     return;
   }
   try {
-    // Exclude 'fund_transfer' rows — those are just the automatic COH-credit
-    // side effect of a mid-shift Fund Transfer, not a real end-of-shift cash
-    // count, and must not be mistaken for a carried-over drawer float.
+    // Only real end-of-shift remittances ever meaningfully set drawer_float —
+    // every other row type (Fund Transfer, Cash Advance, Send Cash, Received
+    // Fund/owner_payment, purchase/deposit adjustments, etc.) has no
+    // drawer_float of its own, but being newer would otherwise mask the
+    // real carried float the moment any of those get created afterward.
     const { data } = await _sb.from('cash_remittances')
-      .select('drawer_float,cashier_name').eq('store_id', STORE_ID).neq('status', 'fund_transfer')
+      .select('drawer_float,cashier_name').eq('store_id', STORE_ID)
+      .in('status', ['pending', 'over', 'short', 'balanced'])
       .order('created_at', { ascending: false }).limit(1);
     _remitCarriedFloat = parseFloat(data?.[0]?.drawer_float) || 0;
     _remitCarriedFloatFrom = data?.[0]?.cashier_name || '';
@@ -2177,7 +2180,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.8';
+const POS_BUILD = '1.9.9';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
