@@ -1608,12 +1608,13 @@ async function _calcCashDrawerBalance() {
   await refreshCarriedFloat();
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const { data: lastRemit } = await _sb.from('cash_remittances').select('created_at')
+  const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
     .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
-    .order('created_at', { ascending: false }).limit(1);
+    .order('created_at', { ascending: false }).limit(5);
+  const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
   let _sinceRemit;
   try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
-  const _dbLastRemit = lastRemit?.[0]?.created_at;
+  const _dbLastRemit = lastRemit?.created_at;
   if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
@@ -1744,6 +1745,11 @@ let _remitOnlineSales = 0;
 let _remitCarriedFloat = 0;
 let _remitCarriedFloatFrom = '';
 let _remitExpensesTotal = 0;
+// A Void/Refund cash adjustment is ALSO stored as a 'pending'-status
+// cash_remittances row (see approveVoidRefund) — it has no drawer_float of
+// its own, but being the newest 'pending' row would otherwise mask the real
+// end-of-shift remit's float behind it. Same test used on the manager side.
+const _isVoidRefundAdjRow = r => /^(Void|Refund): /.test(r.description || '');
 // Drawer float is physical cash sitting in the till — it belongs to
 // whichever shift is next, not necessarily the same cashier who left it, so
 // this looks at the store's most recent remittance overall (not filtered
@@ -1762,11 +1768,12 @@ async function refreshCarriedFloat() {
     // drawer_float of its own, but being newer would otherwise mask the
     // real carried float the moment any of those get created afterward.
     const { data } = await _sb.from('cash_remittances')
-      .select('drawer_float,cashier_name').eq('store_id', STORE_ID)
+      .select('drawer_float,cashier_name,description').eq('store_id', STORE_ID)
       .in('status', ['pending', 'over', 'short', 'balanced'])
-      .order('created_at', { ascending: false }).limit(1);
-    _remitCarriedFloat = parseFloat(data?.[0]?.drawer_float) || 0;
-    _remitCarriedFloatFrom = data?.[0]?.cashier_name || '';
+      .order('created_at', { ascending: false }).limit(5);
+    const realRemit = (data || []).find(r => !_isVoidRefundAdjRow(r));
+    _remitCarriedFloat = parseFloat(realRemit?.drawer_float) || 0;
+    _remitCarriedFloatFrom = realRemit?.cashier_name || '';
   } catch(_) { _remitCarriedFloat = 0; _remitCarriedFloatFrom = ''; }
 }
 async function openRemitOnLogout() {
@@ -1802,13 +1809,14 @@ async function openRemitOnLogout() {
     // Same exclusion as above — a Fund Transfer must not count as "the last
     // remit" here, or sales made before it get silently dropped from POS
     // Sales on the next real remittance (wrong pos_sales/difference saved).
-    const { data: lastRemit } = await _sb.from('cash_remittances')
-      .select('created_at').eq('store_id', STORE_ID).eq('cashier_name', name).neq('status', 'fund_transfer')
-      .order('created_at', { ascending: false }).limit(1);
+    const { data: lastRemitRows } = await _sb.from('cash_remittances')
+      .select('created_at,description').eq('store_id', STORE_ID).eq('cashier_name', name).neq('status', 'fund_transfer')
+      .order('created_at', { ascending: false }).limit(5);
+    const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
     await refreshCarriedFloat();
     const _lsRemitKey = 'pm_last_remit_' + STORE_ID + '_' + name;
     const _lsRemitTime = localStorage.getItem(_lsRemitKey);
-    const _dbRemitTime = lastRemit?.[0]?.created_at;
+    const _dbRemitTime = lastRemit?.created_at;
     let from = (_lsRemitTime && _dbRemitTime)
       ? (_lsRemitTime > _dbRemitTime ? _lsRemitTime : _dbRemitTime)
       : (_lsRemitTime || _dbRemitTime);
@@ -2197,7 +2205,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.11';
+const POS_BUILD = '1.9.12';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3817,12 +3825,13 @@ async function openMySales() {
   // window below must reach back that far too, not just "today". Otherwise
   // Total Sales / Cash Drawer / the whole feed silently zero out the moment
   // the calendar flips, even with real unremitted cash still in the till.
-  const { data: lastRemit } = await _sb.from('cash_remittances').select('created_at')
+  const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
     .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
-    .order('created_at', { ascending: false }).limit(1);
+    .order('created_at', { ascending: false }).limit(5);
+  const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
   let _sinceRemit;
   try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
-  const _dbLastRemit = lastRemit?.[0]?.created_at;
+  const _dbLastRemit = lastRemit?.created_at;
   if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
