@@ -2199,7 +2199,7 @@ async function loadVoidRefund() {
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${r.proof_b64 ? `<button class="btn btn-ghost btn-sm" onclick="viewVoidRefundProof('${r.id}')">&#128247; View Proof</button>` : ''}
-            <button class="btn btn-accent btn-sm" onclick="approveVoidRefund('${r.id}')">&#10003; Approve</button>
+            <button class="btn btn-accent btn-sm" onclick="approveVoidRefund('${r.id}', this)">&#10003; Approve</button>
             <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="declineVoidRefund('${r.id}')">&#10005; Decline</button>
           </div>
         </div>
@@ -2267,94 +2267,128 @@ async function restoreStockForOrder(orderId, changeType) {
   }));
 }
 
-async function approveVoidRefund(id) {
+// Guards against double-approving the same request two ways: _vrApproving
+// blocks a second tap on THIS device while the first is still in flight,
+// and the conditional UPDATE below (".eq('status','pending')") is the real
+// policy — an atomic claim at the database level that only one concurrent
+// approval can ever win, no matter where the second one comes from (a
+// stuck tab, a second device, a slow retry). Independent writes also now
+// run together instead of stacking one after another, which was most of
+// what made this feel laggy on a slow connection.
+let _vrApproving = new Set();
+async function approveVoidRefund(id, btnEl) {
+  if (_vrApproving.has(id)) return;
   const r = _vrCache.find(x => x.id === id);
   if (!r) return;
   if (!confirm(`Approve this ${r.type} for Order #${r.order_id} (${CUR}${parseFloat(r.order_total || 0).toFixed(2)})?`)) return;
+  if (_vrApproving.has(id)) return;
+  _vrApproving.add(id);
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Approving…'; }
+  try {
+
+  const ownerName = STORE.owner_name || 'Owner';
+
+  // Atomic claim — only succeeds if this request is still 'pending' right
+  // now in the database. If someone else already approved/declined it (or
+  // this is the losing half of a double-tap race), no row matches and
+  // claimed comes back empty, so we stop before touching stock or cash.
+  const { data: claimed } = await _sb.from('void_refund_requests')
+    .update({ status: 'approved', decided_by: ownerName, decided_at: new Date().toISOString() })
+    .eq('id', id).eq('status', 'pending')
+    .select('id').maybeSingle();
+  if (!claimed) {
+    showToast('This request was already processed.', true);
+    loadVoidRefund();
+    checkPendingVoidRefund();
+    return;
+  }
 
   const { data: orig } = await _sb.from('orders').select('*').eq('id', r.order_id).maybeSingle();
   if (!orig) { showToast('Original order not found.', true); return; }
 
-  const ownerName = STORE.owner_name || 'Owner';
-
-  // Insert a compensating negative order — every existing revenue total
-  // just sums orders.total, so this nets out automatically everywhere
-  // (Today's Revenue, Sales Report, etc.) without touching those queries
-  // or the original order record.
-  await _sb.from('orders').insert({
-    store_id: STORE.id,
-    cashier_name: ownerName,
-    subtotal: -(parseFloat(orig.subtotal) || 0),
-    tax: -(parseFloat(orig.tax) || 0),
-    total: -(parseFloat(orig.total) || 0),
-    payment_method: orig.payment_method,
-    amount_tendered: 0,
-    change_given: 0,
-    discount_pct: 0,
-    order_type: r.type === 'void' ? 'VOID' : 'REFUND',
-    table_no: `Order #${r.order_id}`,
-  });
-
-  // A void means the sale is being erased as if it never happened — the
-  // stock deducted at sale time must come back just as much as (arguably
-  // more than) a refund, where the goods may have already left with the
-  // customer. Both restore stock; only the stock_history label differs.
-  await restoreStockForOrder(r.order_id, r.type === 'void' ? 'VOID_RESTOCK' : 'REFUND_RESTOCK');
-
-  // Cash-on-hand deduction: only the cash actually collected ever hit a
-  // physical drawer, so pure e-pay originals don't move anyone's COH — the
-  // payment network reverses those on its own. A Split sale only put its
-  // cash portion (amount_tendered) in the drawer, not the full order total.
   const orderTotal = parseFloat(orig.total) || 0;
   const cashPortion = orig.payment_method === 'Cash' ? orderTotal
                      : orig.payment_method === 'Split' ? (parseFloat(orig.amount_tendered) || 0)
                      : 0;
+  const today = _localToday();
+
+  // Everything below is independent of everything else here — none of
+  // these need each other's result — so they run together via Promise.all
+  // instead of one awaited round trip after another.
+  const tasks = [
+    // Compensating negative order — every existing revenue total just sums
+    // orders.total, so this nets out automatically everywhere (Today's
+    // Revenue, Sales Report, etc.) without touching those queries.
+    _sb.from('orders').insert({
+      store_id: STORE.id,
+      cashier_name: ownerName,
+      subtotal: -(parseFloat(orig.subtotal) || 0),
+      tax: -(parseFloat(orig.tax) || 0),
+      total: -orderTotal,
+      payment_method: orig.payment_method,
+      amount_tendered: 0,
+      change_given: 0,
+      discount_pct: 0,
+      order_type: r.type === 'void' ? 'VOID' : 'REFUND',
+      table_no: `Order #${r.order_id}`,
+    }),
+    // A void means the sale is being erased as if it never happened — the
+    // stock deducted at sale time must come back just as much as (arguably
+    // more than) a refund, where the goods may have already left with the
+    // customer. Both restore stock; only the stock_history label differs.
+    restoreStockForOrder(r.order_id, r.type === 'void' ? 'VOID_RESTOCK' : 'REFUND_RESTOCK'),
+    _sb.from('activity_logs').insert({
+      store_id: STORE.id, actor_name: ownerName, actor_role: 'owner',
+      action: r.type === 'void' ? 'ORDER_VOIDED' : 'ORDER_REFUNDED', target_name: `Order #${r.order_id}`,
+      details: JSON.stringify({ amount: r.order_total, reason: r.reason })
+    }),
+  ];
+  // Cash-on-hand deduction: only the cash actually collected ever hit a
+  // physical drawer, so pure e-pay originals don't move anyone's COH — the
+  // payment network reverses those on its own. A Split sale only put its
+  // cash portion (amount_tendered) in the drawer, not the full order total.
   if (cashPortion > 0) {
-    // Where is this order's cash right now? If the cashier's shift that
-    // included it has already been received by the manager (status is
-    // over/short/balanced, not still 'pending'), the money is in the
-    // manager's hands — deduct it there. Otherwise the cashier is still
-    // holding it, uncounted — deduct from what they'll eventually hand over.
-    const { data: coveringRemit } = await _sb.from('cash_remittances')
-      .select('status')
-      .eq('store_id', STORE.id).eq('cashier_name', orig.cashier_name)
-      .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,payment_confirmed,refund)')
-      .gt('created_at', orig.timestamp)
-      .order('created_at', { ascending: true }).limit(1).maybeSingle();
+    tasks.push((async () => {
+      // Where is this order's cash right now? If the cashier's shift that
+      // included it has already been received by the manager (status is
+      // over/short/balanced, not still 'pending'), the money is in the
+      // manager's hands — deduct it there. Otherwise the cashier is still
+      // holding it, uncounted — deduct from what they'll eventually hand over.
+      const { data: coveringRemit } = await _sb.from('cash_remittances')
+        .select('status')
+        .eq('store_id', STORE.id).eq('cashier_name', orig.cashier_name)
+        .not('status', 'in', '(purchase,deposit,coh_to_staff,mgr_remit,owner_payment,mgr_payment,payment_confirmed,refund)')
+        .gt('created_at', orig.timestamp)
+        .order('created_at', { ascending: true }).limit(1).maybeSingle();
 
-    const today = _localToday();
-    const desc = `${r.type === 'void' ? 'Void' : 'Refund'}: Order #${r.order_id}`;
-    if (coveringRemit && coveringRemit.status !== 'pending') {
-      // Already remitted — comes out of the manager's own cash.
-      await _sb.from('cash_remittances').insert({
-        store_id: STORE.id, cashier_name: ownerName, shift_date: today,
-        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
-        status: 'refund', description: desc
-      });
-    } else {
-      // Not remitted yet (or no remittance found at all) — still with the
-      // cashier, so reduce what they owe instead of the manager's cash.
-      await _sb.from('cash_remittances').insert({
-        store_id: STORE.id, cashier_name: orig.cashier_name, shift_date: today,
-        pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
-        status: 'pending', description: desc
-      });
-    }
+      const desc = `${r.type === 'void' ? 'Void' : 'Refund'}: Order #${r.order_id}`;
+      if (coveringRemit && coveringRemit.status !== 'pending') {
+        // Already remitted — comes out of the manager's own cash.
+        await _sb.from('cash_remittances').insert({
+          store_id: STORE.id, cashier_name: ownerName, shift_date: today,
+          pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
+          status: 'refund', description: desc
+        });
+      } else {
+        // Not remitted yet (or no remittance found at all) — still with the
+        // cashier, so reduce what they owe instead of the manager's cash.
+        await _sb.from('cash_remittances').insert({
+          store_id: STORE.id, cashier_name: orig.cashier_name, shift_date: today,
+          pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
+          status: 'pending', description: desc
+        });
+      }
+    })());
   }
+  await Promise.all(tasks);
 
-  await _sb.from('void_refund_requests').update({
-    status: 'approved', decided_by: ownerName, decided_at: new Date().toISOString()
-  }).eq('id', id);
-
-  await _sb.from('activity_logs').insert({
-    store_id: STORE.id, actor_name: ownerName, actor_role: 'owner',
-    action: r.type === 'void' ? 'ORDER_VOIDED' : 'ORDER_REFUNDED', target_name: `Order #${r.order_id}`,
-    details: JSON.stringify({ amount: r.order_total, reason: r.reason })
-  }).then(() => {});
   showToast(`${r.type === 'void' ? 'Void' : 'Refund'} approved.`);
   loadVoidRefund();
   checkPendingVoidRefund();
   showVoidRefundReceipt(r, orig);
+  } finally {
+    _vrApproving.delete(id);
+  }
 }
 
 // Printable record of what was voided/refunded — the owner can print or
