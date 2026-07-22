@@ -1953,9 +1953,16 @@ function renderRemit() {
     return true;
   });
 
-  // Pending remittances always shown at top regardless of filter
-  const pending = _remitData.filter(r => r.status === 'pending');
-  const normal  = filtered.filter(r => r.status !== 'pending');
+  // Pending remittances always shown at top regardless of filter — but a
+  // void/refund cash adjustment that's still 'pending' isn't something a
+  // manager needs to "Receive": it's an automatic ledger note (the
+  // cashier's expected total already went down because of the void), not
+  // real cash changing hands. Treating it like a normal remittance let a
+  // manager accidentally "confirm" it and overwrite its Void/Refund
+  // description with a computed Over/Short status that made no sense.
+  const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
+  const pending = _remitData.filter(r => r.status === 'pending' && !isVoidRefundAdj(r));
+  const normal  = filtered.filter(r => r.status !== 'pending' || isVoidRefundAdj(r));
 
   if (!pending.length && !normal.length) {
     tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No remittances for this period.</td></tr>';
@@ -1977,7 +1984,7 @@ function renderRemit() {
     const desc = r.description || '';
     const adjLabel = r.status === 'coh_to_staff'
       ? (/^Sent to /.test(desc) ? 'Cash Sent' : /^Transferred to Staff Funds/.test(desc) ? 'Staff Funds' : 'Cash Advance')
-      : r.status === 'refund'
+      : (r.status === 'refund' || r.status === 'pending') && /^(Void|Refund): /.test(desc)
       ? (/^Void:/.test(desc) ? 'Void' : 'Refund')
       : ADJ_STATUS_LABEL[r.status];
     const statusBadge = isPending
@@ -2085,8 +2092,11 @@ async function submitReuploadReceipt() {
 
 async function checkPendingRemits() {
   const { data } = await _sb.from('cash_remittances')
-    .select('id').eq('store_id', MGR.store_id).eq('status', 'pending');
-  const count = (data||[]).length;
+    .select('id,description').eq('store_id', MGR.store_id).eq('status', 'pending');
+  // A void/refund cash adjustment is also stored as 'pending' (see
+  // renderRemit), but it's an automatic ledger note, not a real
+  // remittance waiting on the manager — don't count it here.
+  const count = (data||[]).filter(r => !/^(Void|Refund): /.test(r.description || '')).length;
   const badge = document.getElementById('remitBadge');
   if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
 }
@@ -2509,6 +2519,10 @@ async function saveRemit() {
   if (!date)       { showToast('Select a date.', true); return; }
   if (!cashier)    { showToast('Select a cashier.', true); return; }
   if (isNaN(cash)) { showToast('Enter cash on hand amount.', true); return; }
+  // Physical cash counted can never be negative — a stray minus key
+  // otherwise produced a nonsensical negative remittance that showed up as
+  // a confusing "Short" entry with no way to tell it was a bad entry.
+  if (cash < 0)    { showToast('Cash on Hand can\'t be negative — check the amount.', true); return; }
   const diff   = cash - pos;
   const status = diff > 0 ? 'over' : diff < 0 ? 'short' : 'balanced';
   const btn = document.getElementById('rmSaveBtn');
