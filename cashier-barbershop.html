@@ -2453,7 +2453,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.19';
+const POS_BUILD = '1.9.20';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3461,15 +3461,13 @@ function toggleDiscPanel() {
   }
 }
 function positionDiscPanel() {
-  const btn = document.getElementById('discTrigger');
+  // Floating widgets are centered on screen (not anchored to their trigger
+  // button) so they read as one consistent, professional layout instead of
+  // popping up in different corners depending on which button opened them.
   const panel = document.getElementById('discPanel');
-  const r = btn.getBoundingClientRect();
-  const pw = panel.offsetWidth || 220;
-  const ph = panel.offsetHeight || 120;
-  let top = r.top - ph - 8;
-  if (top < 8) top = Math.min(r.bottom + 8, window.innerHeight - ph - 8);
-  panel.style.top  = Math.max(8, top) + 'px';
-  panel.style.left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left)) + 'px';
+  panel.style.top = '50%';
+  panel.style.left = '50%';
+  panel.style.transform = 'translate(-50%, -50%)';
 }
 // "All Purchases" (default) applies the %/amount to the whole cart, same as
 // before. "Specific Items" scopes it to only whichever cart lines the
