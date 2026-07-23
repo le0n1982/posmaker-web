@@ -1360,10 +1360,17 @@ input:checked + .slider:before{transform:translateX(18px)}
            product's own unit (e.g. buying rice by the bag, selling it by the
            kilo) — lets the owner type the conversion in plain terms instead
            of working out the raw fraction (1 bag = 25 kg → 0.04) by hand. -->
-      <div id="invLinkConvRow" style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:var(--dim)">
+      <div id="invLinkConvRow" style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:var(--dim);flex-wrap:wrap">
         <span>Easier: 1 <strong id="invLinkConvFrom"></strong> =</span>
         <input id="invLinkConvVal" type="number" min="0.001" step="0.001" placeholder="e.g. 25" oninput="applyInvLinkConv()"
           style="width:70px;padding:6px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:center">
+        <!-- Only shown (as a real dropdown) when the product's own unit is
+             part of a known weight/volume family — lets the owner enter the
+             conversion in whichever unit is easiest (e.g. grams instead of
+             kilos) instead of being stuck typing it in the product's exact
+             unit. Falls back to plain text for count-based units (pcs, box,
+             etc.) where there's no universal ratio between units to convert. -->
+        <select id="invLinkConvUnit" onchange="applyInvLinkConv()" style="display:none;padding:5px 6px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:Inter,sans-serif;outline:none"></select>
         <span id="invLinkConvTo"></span>
       </div>
       <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Qty = how much of this item is used per 1 order</div>
@@ -5585,9 +5592,22 @@ function removeProdImg(){
   _prodPendingImgs=[];
   renderProdThumbs();
 }
+// Real-world conversion ratios (relative to the group's base unit) — only
+// weight and volume have a universal ratio between units; a "bag" or "box"
+// doesn't (could be any size), so count-based units get no dropdown below.
+const UNIT_CONV_GROUPS={
+  weight:{kg:1,g:0.001,mg:0.000001,lb:0.453592,oz:0.0283495},
+  volume:{L:1,mL:0.001,gal:3.78541}
+};
+function _unitConvGroup(unit){
+  const u=(unit||'').trim();
+  for(const table of Object.values(UNIT_CONV_GROUPS)){ if(u in table) return table; }
+  return null;
+}
 function autoFillUsageQty(){
   const id=document.getElementById('pInvLink').value;
   const convRow=document.getElementById('invLinkConvRow');
+  const unitSel=document.getElementById('invLinkConvUnit');
   document.getElementById('invLinkConvVal').value='';
   if(!id){ convRow.style.display='none'; return; }
   const item=invItems.find(x=>x.id===id);
@@ -5600,7 +5620,20 @@ function autoFillUsageQty(){
   const prodUnit=(document.getElementById('pUnit').value||'').trim();
   if(item&&invUnit&&prodUnit&&invUnit.toLowerCase()!==prodUnit.toLowerCase()){
     document.getElementById('invLinkConvFrom').textContent=invUnit;
-    document.getElementById('invLinkConvTo').textContent=prodUnit;
+    // If the product's unit belongs to a known weight/volume family, let the
+    // owner pick ANY unit in that family to enter the conversion in (e.g.
+    // grams instead of kilos) — otherwise fall back to the plain fixed label
+    // as before, since there's no universal ratio to convert count units by.
+    const group=_unitConvGroup(prodUnit);
+    if(group){
+      unitSel.innerHTML=Object.keys(group).map(u=>`<option value="${u}"${u===prodUnit?' selected':''}>${u}</option>`).join('');
+      unitSel.style.display='';
+      document.getElementById('invLinkConvTo').style.display='none';
+    }else{
+      unitSel.style.display='none';
+      document.getElementById('invLinkConvTo').style.display='';
+      document.getElementById('invLinkConvTo').textContent=prodUnit;
+    }
     convRow.style.display='flex';
   }else{
     convRow.style.display='none';
@@ -5609,7 +5642,17 @@ function autoFillUsageQty(){
 function applyInvLinkConv(){
   const n=parseFloat(document.getElementById('invLinkConvVal').value);
   if(!n||n<=0)return;
-  document.getElementById('pInvLinkQty').value=Math.round((1/n)*1e6)/1e6;
+  const prodUnit=(document.getElementById('pUnit').value||'').trim();
+  const unitSel=document.getElementById('invLinkConvUnit');
+  const group=_unitConvGroup(prodUnit);
+  // Convert whatever unit the owner picked (e.g. grams) into the product's
+  // own unit (e.g. kilos) before computing the fraction, so "1 bag = 1000 g"
+  // and "1 bag = 1 kg" land on the exact same Qty either way.
+  const valueInProdUnit=(group&&unitSel.value&&unitSel.value!==prodUnit)
+    ? n*(group[unitSel.value]/group[prodUnit])
+    : n;
+  if(!valueInProdUnit||valueInProdUnit<=0)return;
+  document.getElementById('pInvLinkQty').value=Math.round((1/valueInProdUnit)*1e6)/1e6;
 }
 function addInvLink(){
   const sel=document.getElementById('pInvLink');
@@ -6068,9 +6111,14 @@ async function renderStaffLogsBody(staffId, displayName, role) {
   // shouldn't quietly drop out of view just because it's outside the range.
   let unconfirmedHtml = '';
   if (isCashier) {
-    const { data: pendingRemits } = await _sb.from('cash_remittances')
-      .select('shift_date,created_at').eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending')
+    const { data: pendingRemitsRaw } = await _sb.from('cash_remittances')
+      .select('shift_date,created_at,description').eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending')
       .order('created_at', { ascending: true });
+    // A Void/Refund cash adjustment is also stored as a 'pending' row (see
+    // approveVoidRefund) — it's an automatic ledger note, not a real
+    // end-of-shift remittance sitting unconfirmed, so it must not show up
+    // here as if the manager still owes this cashier a "Receive" action.
+    const pendingRemits = (pendingRemitsRaw || []).filter(r => !/^(Void|Refund): /.test(r.description || ''));
     if (pendingRemits && pendingRemits.length) {
       unconfirmedHtml = `
         <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--warn-text);letter-spacing:.5px">&#9203; NOT YET CONFIRMED BY MANAGER</div>
