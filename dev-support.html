@@ -480,6 +480,14 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
         </div>
         <div id="bugCheckResults" style="margin-top:18px"></div>
       </div>
+      <div class="card">
+        <div class="card-title">&#128269; Code Audit — Unguarded Save Buttons</div>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 14px">Fetches the live deployed source of every dashboard file (+ manager.html) and scans for <code>async function</code>s that write a new record (<code>.insert(</code>) with no double-tap guard — the exact bug class that let the "Dinorado/Kilo" product get created twice. Doesn't touch the database; this is a static read of the pages themselves.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-accent btn-sm" id="codeAuditBtn" onclick="runCodeAudit()">&#128269; Scan Live Code</button>
+        </div>
+        <div id="codeAuditResults" style="margin-top:18px"></div>
+      </div>
     </div>
 
     </div><!-- /.main-panel -->
@@ -1231,6 +1239,62 @@ BEGIN
     GROUP BY s.id, s.name, lower(trim(i.name))
     HAVING count(*) > 1;
 
+  -- Duplicate expenses created within 10 seconds of each other — a same-name,
+  -- same-amount expense recorded twice a month apart is a real recurring
+  -- bill; recorded twice within 10 seconds is a double-tapped Save button.
+  RETURN QUERY
+    SELECT 'Duplicate Expense'::text, 'warning'::text,
+           '[' || s.name || '] Expense "' || e1.name || '" (' || e1.amount || ') saved twice ' ||
+             round(extract(epoch from (e2.created_at - e1.created_at))::numeric, 1) || 's apart — likely a double-tap',
+           'ids: ' || e1.id::text || ', ' || e2.id::text
+    FROM expenses e1
+    JOIN expenses e2 ON e2.store_id = e1.store_id AND e2.id > e1.id
+      AND e2.name = e1.name AND e2.amount = e1.amount
+      AND e2.created_at - e1.created_at < interval '10 seconds'
+    JOIN stores s ON s.id = e1.store_id
+    WHERE s.business_type = p_business_type;
+
+  -- Duplicate staff deductions within 10 seconds — same signature as above.
+  RETURN QUERY
+    SELECT 'Duplicate Staff Deduction'::text, 'warning'::text,
+           '[' || s.name || '] Deduction for "' || d1.staff_name || '" (' || d1.amount || ') saved twice ' ||
+             round(extract(epoch from (d2.created_at - d1.created_at))::numeric, 1) || 's apart — likely a double-tap',
+           'ids: ' || d1.id::text || ', ' || d2.id::text
+    FROM staff_deductions d1
+    JOIN staff_deductions d2 ON d2.store_id = d1.store_id AND d2.id > d1.id
+      AND d2.staff_id = d1.staff_id AND d2.amount = d1.amount AND d2.reason = d1.reason
+      AND d2.created_at - d1.created_at < interval '10 seconds'
+    JOIN stores s ON s.id = d1.store_id
+    WHERE s.business_type = p_business_type;
+
+  -- Duplicate payment methods within 10 seconds — same QR added twice.
+  RETURN QUERY
+    SELECT 'Duplicate Payment Method'::text, 'warning'::text,
+           '[' || s.name || '] Payment method "' || m1.label || '" saved twice ' ||
+             round(extract(epoch from (m2.created_at - m1.created_at))::numeric, 1) || 's apart — likely a double-tap',
+           'ids: ' || m1.id::text || ', ' || m2.id::text
+    FROM payment_methods m1
+    JOIN payment_methods m2 ON m2.store_id = m1.store_id AND m2.id > m1.id
+      AND m2.label = m1.label
+      AND m2.created_at - m1.created_at < interval '10 seconds'
+    JOIN stores s ON s.id = m1.store_id
+    WHERE s.business_type = p_business_type;
+
+  -- Duplicate "Transfer to Staff Funds" — each real transfer writes a PAIR
+  -- of cash_remittances rows (+amount owner_payment, -amount coh_to_staff);
+  -- a double-tap doubles that whole pair, so this looks for 4+ rows with the
+  -- same amount landing within 10 seconds instead of the normal 2.
+  RETURN QUERY
+    SELECT 'Duplicate Staff Funds Transfer'::text, 'warning'::text,
+           '[' || s.name || '] ' || count(*) || ' transfer-pair rows of ' || cr.cash_on_hand::text ||
+             ' within the same 10s window (expected 2 for one transfer) — likely a double-tap',
+           string_agg(cr.id::text, ', ')
+    FROM cash_remittances cr JOIN stores s ON s.id = cr.store_id
+    WHERE s.business_type = p_business_type
+      AND cr.cashier_name = 'Owner Transfer' AND cr.status IN ('owner_payment','coh_to_staff')
+    GROUP BY s.id, s.name, cr.status, abs(cr.cash_on_hand), date_trunc('minute', cr.created_at)
+    HAVING count(*) > 1;
+
   -- Broken inv_links, per store of this type
   RETURN QUERY
     SELECT 'Broken Inventory Link'::text, 'critical'::text,
@@ -1455,6 +1519,96 @@ async function runBugCheck() {
         `).join('')}
       </div>
     `).join('');
+}
+
+// ── Code Audit — Unguarded Save Buttons ─────────────────────────────────────
+// Same detector used by hand to find the "Dinorado/Kilo" duplicate-product
+// bug and 11 siblings across the dashboard, ported to run client-side
+// against the LIVE deployed pages (fetched over HTTP, same origin) instead
+// of the local repo — no server/database access needed, just a text scan.
+const CODE_AUDIT_SLUGS = [
+  'fastfood','carinderya','coffeeshop','bakery','lechon','pizzapasta','seafood','milktea','buffet','snackbar',
+  'sarisari','bigasan','hardware','agrisupply','drugstore','petstore','clothing','electronics','furniture',
+  'barbershop','laundry','printing','autoparts','schoolsupplies'
+];
+// Functions that legitimately have no disable-guard: called only from an
+// already-guarded caller, blocked by a native blocking dialog (prompt()), or
+// an intentional repeat-click stepper — not a Save button a user could
+// double-tap into creating a duplicate row.
+const CODE_AUDIT_SAFE_LIST = new Set(['restoreStockForOrder', 'openInvCatQuick', 'adjInvStock', 'logAction', 'checkFaceAttendanceResult']);
+
+function _extractFunctionsForAudit(src) {
+  const results = [];
+  const re = /(async\s+function\s+(\w+)\s*\([^)]*\)\s*\{)/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const startBrace = m.index + m[0].length - 1;
+    let depth = 1, i = startBrace + 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') depth--;
+      i++;
+    }
+    results.push({ name: m[2], body: src.slice(startBrace, i) });
+  }
+  return results;
+}
+
+function _auditFileText(src) {
+  const fns = _extractFunctionsForAudit(src);
+  const findings = [];
+  for (const fn of fns) {
+    if (!/\.insert\(/.test(fn.body)) continue;
+    if (CODE_AUDIT_SAFE_LIST.has(fn.name)) continue;
+    const hasDisabledGuard = /\.disabled\s*=\s*true/.test(fn.body) || /if\s*\(\s*\w+\.disabled\s*\)\s*return/.test(fn.body);
+    const hasFlagGuard = /if\s*\(\s*_\w+\s*\)\s*return;/.test(fn.body) && /_\w+\s*=\s*true/.test(fn.body);
+    const hasAtomicClaim = /maybeSingle\(\)/.test(fn.body) && /status.*pending/.test(fn.body);
+    if (!(hasDisabledGuard || hasFlagGuard || hasAtomicClaim)) findings.push(fn.name);
+  }
+  return findings;
+}
+
+async function runCodeAudit() {
+  const btn = document.getElementById('codeAuditBtn');
+  const resultsEl = document.getElementById('codeAuditResults');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scanning…';
+  resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Fetching and scanning live files…</p>';
+  const files = CODE_AUDIT_SLUGS.map(s => 'dashboard-' + s + '.html').concat(['manager.html']);
+  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const allFindings = [];
+  for (const file of files) {
+    try {
+      const res = await fetch(base + file, { cache: 'no-store' });
+      if (!res.ok) { allFindings.push({ file, error: 'HTTP ' + res.status }); continue; }
+      const text = await res.text();
+      const functions = _auditFileText(text);
+      if (functions.length) allFindings.push({ file, functions });
+    } catch (e) {
+      allFindings.push({ file, error: e.message });
+    }
+  }
+  btn.disabled = false; btn.innerHTML = '&#128269; Scan Live Code';
+  const withIssues = allFindings.filter(f => f.functions && f.functions.length);
+  const withErrors = allFindings.filter(f => f.error);
+  if (!withIssues.length && !withErrors.length) {
+    resultsEl.innerHTML = '<p style="color:var(--success);font-size:14px;font-weight:600">&#10003; No unguarded record-creating functions found across ' + files.length + ' files.</p>';
+    return;
+  }
+  let html = '';
+  if (withIssues.length) {
+    const totalFns = withIssues.reduce((s, f) => s + f.functions.length, 0);
+    html += '<p style="font-size:12px;color:var(--muted);margin-bottom:12px">' + totalFns + ' unguarded function(s) across ' + withIssues.length + ' file(s).</p>';
+    html += withIssues.map(f => `
+      <div style="border-left:3px solid var(--warn);background:rgba(245,158,11,.06);border-radius:8px;padding:10px 14px;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${esc(f.file)}</div>
+        <div style="font-size:12px;color:var(--muted);font-family:monospace">${f.functions.map(esc).join(', ')}</div>
+      </div>
+    `).join('');
+  }
+  if (withErrors.length) {
+    html += '<p style="font-size:11px;color:var(--muted);margin-top:10px">Could not fetch: ' + withErrors.map(f => esc(f.file) + ' (' + esc(f.error) + ')').join(', ') + '</p>';
+  }
+  resultsEl.innerHTML = html;
 }
 
 // ── Render Stores ────────────────────────────────────────────────────────────
