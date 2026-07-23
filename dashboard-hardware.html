@@ -3996,6 +3996,12 @@ async function openMgrCohModal() {
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
   const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
+  // Money the owner sent directly to a MANAGER (not a cashier, and not
+  // general Staff Funds) — once confirmed received, it's physically in that
+  // manager's hands the same as a cashier's Received Fund, so it belongs in
+  // Net Cash with Manager, not sitting invisible/unaccounted.
+  const mgrUsernames = new Set((allStaff||[]).filter(s => s.role === 'manager').map(s => s.username));
+  const ownerToMgrRows = rows.filter(r => r.status === 'payment_confirmed' && mgrUsernames.has(r.cashier_name));
   const confirmedStatuses = ['over','short','balanced'];
   const confirmedRows = cashierRows.filter(r => confirmedStatuses.includes(r.status));
   const pendingRows   = cashierRows.filter(r => r.status === 'pending');
@@ -4003,7 +4009,8 @@ async function openMgrCohModal() {
   const pendingTotal   = pendingRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const adjTotal       = adjRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const mgrRemitTotal  = mgrRemitRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
-  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal;
+  const ownerToMgrTotal = ownerToMgrRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
+  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal + ownerToMgrTotal;
   const purchaseTotal  = adjRows.filter(r=>r.status==='purchase').reduce((s,r)=>s+Math.abs(parseFloat(r.cash_on_hand||0)),0);
   const depositTotal   = adjRows.filter(r=>r.status==='deposit').reduce((s,r)=>s+parseFloat(r.cash_on_hand||0),0);
 
@@ -4042,6 +4049,7 @@ async function openMgrCohModal() {
     '<div style="font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:4px;text-transform:uppercase">Net Cash with Manager</div>'+
     '<div style="font-size:28px;font-weight:800;color:var(--ok-text)">'+CUR+netTotal.toFixed(2)+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+subLine+'</div>'+
+    (ownerToMgrTotal>0?'<div style="font-size:11px;color:var(--ok-text);margin-top:4px">incl. '+CUR+ownerToMgrTotal.toFixed(2)+' sent by you, confirmed received</div>':'')+
     (staffTransferTotal>0?'<div style="font-size:11px;color:#a855f7;margin-top:4px">'+CUR+staffTransferTotal.toFixed(2)+' total transferred to Staff Funds</div>':'')+
     '</div>'+
     '<div style="background:var(--s2);border-radius:8px;padding:12px 14px;margin-bottom:14px">'+
@@ -4101,6 +4109,12 @@ async function loadManagerCash() {
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
   const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
+  // Money the owner sent directly to a MANAGER (not a cashier, and not
+  // general Staff Funds) — once confirmed received, it's physically in that
+  // manager's hands the same as a cashier's Received Fund, so it belongs in
+  // Net Cash with Manager, not sitting invisible/unaccounted.
+  const mgrUsernames = new Set((allStaff||[]).filter(s => s.role === 'manager').map(s => s.username));
+  const ownerToMgrRows = rows.filter(r => r.status === 'payment_confirmed' && mgrUsernames.has(r.cashier_name));
   const confirmedStatuses = ['over','short','balanced'];
   const confirmedRows = cashierRows.filter(r => confirmedStatuses.includes(r.status));
   const pendingRows   = cashierRows.filter(r => r.status === 'pending');
@@ -4108,7 +4122,8 @@ async function loadManagerCash() {
   const pendingTotal   = pendingRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const adjTotal       = adjRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const mgrRemitTotal  = mgrRemitRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
-  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal;
+  const ownerToMgrTotal = ownerToMgrRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
+  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal + ownerToMgrTotal;
   const purchaseTotal  = adjRows.filter(r=>r.status==='purchase').reduce((s,r)=>s+Math.abs(parseFloat(r.cash_on_hand||0)),0);
   const depositTotal   = adjRows.filter(r=>r.status==='deposit').reduce((s,r)=>s+parseFloat(r.cash_on_hand||0),0);
 

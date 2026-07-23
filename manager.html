@@ -2738,10 +2738,16 @@ async function loadCashSummary() {
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
   const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
+  // Money the OWNER sent directly to the MANAGER herself (not to a cashier,
+  // and not general Staff Funds for disbursement) — once confirmed received,
+  // it's physically in her hands the same as a cashier's Received Fund, so
+  // it belongs in Net Cash with Manager, not sitting invisible/unaccounted.
+  const ownerToMgrRows = rows.filter(r => r.status === 'payment_confirmed' && r.cashier_name === MGR.username);
 
   // Today's entries only — for the per-cashier breakdown display
   const todayCashierRows = cashierRows.filter(r => r.shift_date === today);
   const todayAdjRows     = adjRows.filter(r => r.shift_date === today);
+  const todayOwnerToMgrRows = ownerToMgrRows.filter(r => r.shift_date === today);
 
   if (!rows.length) {
     el.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">No remittances recorded yet.</div>';
@@ -2756,7 +2762,8 @@ async function loadCashSummary() {
   const pendingTotal   = pendingRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const adjTotal       = adjRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   const mgrRemitTotal  = mgrRemitRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
-  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal;
+  const ownerToMgrTotal = ownerToMgrRows.reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
+  const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal + ownerToMgrTotal;
   const purchaseTotal  = adjRows.filter(r=>r.status==='purchase').reduce((s,r)=>s+Math.abs(parseFloat(r.cash_on_hand||0)),0);
   const depositTotal   = adjRows.filter(r=>r.status==='deposit').reduce((s,r)=>s+parseFloat(r.cash_on_hand||0),0);
   // List only the adjustment types actually present, in plain words — a
@@ -2773,7 +2780,7 @@ async function loadCashSummary() {
   _cashNetTotal = netTotal;
   _cashBreakdownData = {
     rows: confirmedRows.map(r => ({ name: r.cashier_name, date: r.shift_date, amount: parseFloat(r.cash_on_hand||0) })),
-    adjTotal, adjTypesPresent, mgrRemitTotal, netTotal
+    adjTotal, adjTypesPresent, mgrRemitTotal, ownerToMgrTotal, netTotal
   };
   _cashBreakdown = confirmedRows.length
     ? confirmedRows.map(r => {
@@ -2789,6 +2796,9 @@ async function loadCashSummary() {
         </div>` : '') + (mgrRemitTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
           <span style="color:var(--muted)">Previously deposited</span>
           <span style="font-weight:600;color:#a855f7">&#8369;${mgrRemitTotal.toFixed(2)}</span>
+        </div>` : '') + (ownerToMgrTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+          <span style="color:var(--muted)">Received from owner</span>
+          <span style="font-weight:600;color:#10b981">+&#8369;${ownerToMgrTotal.toFixed(2)}</span>
         </div>` : '')
     : '<div style="font-size:12px;color:var(--muted)">No cashier remittances yet.</div>';
 
@@ -2862,6 +2872,16 @@ async function loadCashSummary() {
         </div>`;
       }).join('')}
     </div>` : ''}
+    ${todayOwnerToMgrRows.length ? `<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+      ${todayOwnerToMgrRows.map(r => {
+        const amt = parseFloat(r.cash_on_hand||0);
+        const d = (r.description||'').replace(/^Owner sent:?\s*/i,'').slice(0,28);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px">
+          <span style="color:var(--muted)">&#128176; Received from owner${d?' &mdash; '+d:''}</span>
+          <span style="font-weight:700;color:#10b981">+&#8369;${amt.toFixed(2)}</span>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
   `;
 }
 
@@ -2874,11 +2894,15 @@ async function loadPayments() {
   if (!el) return;
   el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Loading...</div>';
 
-  const { data: payments } = await _sb.from('cash_remittances')
+  const { data: paymentsRaw } = await _sb.from('cash_remittances')
     .select('id,cashier_name,cash_on_hand,description,status,created_at')
     .eq('store_id', MGR.store_id)
     .in('status', ['owner_payment','payment_confirmed'])
     .order('created_at', { ascending: false }).limit(30);
+  // Money the owner sent directly to the manager herself belongs in her own
+  // Net Cash with Manager (Cash Remit page) once confirmed, not in this
+  // general Staff Funds disbursement pool alongside money meant for staff.
+  const payments = (paymentsRaw || []).filter(p => p.cashier_name !== MGR.username);
   if (!payments?.length) {
     el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No payments recorded yet.</div>';
     return;
