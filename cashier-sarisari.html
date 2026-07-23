@@ -1618,7 +1618,7 @@ async function _calcCashDrawerBalance() {
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const [{ data: orders }, { data: logs }, { data: confirmedPayments }, { data: voidRows }] = await Promise.all([
-    _sb.from('orders').select('timestamp,total,payment_method,amount_tendered')
+    _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).gte('timestamp', queryStart),
     _sb.from('activity_logs').select('action,details,created_at')
       .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart),
@@ -1640,7 +1640,31 @@ async function _calcCashDrawerBalance() {
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).eq('status', 'pending')
       .gte('created_at', queryStart)
   ]);
+  // A void/refund charged to "the owner's own cash" (target=manager) never
+  // touches this cashier's cash_remittances at all — the compensating
+  // negative order is attributed to the owner's name, not hers — so her own
+  // ORIGINAL sale row above still counts as if she's holding that cash. She
+  // isn't: the money was given back. Look up which of her own orders were
+  // voided/refunded (either target) and exclude their cash portion here too —
+  // EXCEPT ones already covered by her own voidRefundSinceRemit adjustment
+  // below (target=cashier), or this would subtract the same amount twice.
+  const _voidedOrderIds = new Set();
+  if ((orders || []).length) {
+    const _tableNos = orders.map(o => `Order #${o.id}`);
+    const { data: _vRows } = await _sb.from('orders').select('table_no')
+      .eq('store_id', STORE_ID).in('order_type', ['VOID', 'REFUND']).in('table_no', _tableNos);
+    (_vRows || []).forEach(r => {
+      const m = /^Order #(\d+)$/.exec(r.table_no || '');
+      if (m) _voidedOrderIds.add(parseInt(m[1], 10));
+    });
+  }
+  (voidRows || []).forEach(r => {
+    if (!_isVoidRefundAdjRow(r)) return;
+    const m = /Order #(\d+)/.exec(r.description || '');
+    if (m) _voidedOrderIds.delete(parseInt(m[1], 10));
+  });
   const _cashPortion = o => {
+    if (_voidedOrderIds.has(o.id)) return 0;
     const t = parseFloat(o.total) || 0;
     if ((o.payment_method || 'Cash') === 'Cash') return t;
     if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
@@ -1843,9 +1867,38 @@ async function openRemitOnLogout() {
         .order('created_at', { ascending: true }).limit(1);
       from = firstLogin?.[0]?.created_at || (today + 'T00:00:00');
     }
-    const { data } = await _sb.from('orders').select('total,payment_method,amount_tendered')
+    const { data } = await _sb.from('orders').select('id,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', name)
       .gte('timestamp', from).lte('timestamp', to);
+    // Fetched early (not down by _remitVoidRefundTotal below) because the
+    // POS Sales / non-cash breakdown computed just below also needs to know
+    // which orders were voided/refunded.
+    const { data: vrData } = await _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
+      .eq('store_id', STORE_ID).eq('cashier_name', name).eq('status', 'pending')
+      .gte('created_at', from).lte('created_at', to);
+    // A void/refund charged to "the owner's own cash" (target=manager) never
+    // touches this cashier's cash_remittances at all — the compensating
+    // negative order is attributed to the owner's name, not hers — so her
+    // own ORIGINAL sale row above still counts as if she's holding that
+    // cash. She isn't: the money was given back. Exclude the cash portion
+    // of any of her own orders that were voided/refunded (either target) —
+    // EXCEPT ones already covered by _remitVoidRefundTotal below
+    // (target=cashier), or this would subtract the same amount twice.
+    const _voidedOrderIds = new Set();
+    if ((data || []).length) {
+      const _tableNos = data.map(o => `Order #${o.id}`);
+      const { data: _vRows } = await _sb.from('orders').select('table_no')
+        .eq('store_id', STORE_ID).in('order_type', ['VOID', 'REFUND']).in('table_no', _tableNos);
+      (_vRows || []).forEach(r => {
+        const m = /^Order #(\d+)$/.exec(r.table_no || '');
+        if (m) _voidedOrderIds.add(parseInt(m[1], 10));
+      });
+    }
+    (vrData || []).forEach(r => {
+      if (!_isVoidRefundAdjRow(r)) return;
+      const m = /Order #(\d+)/.exec(r.description || '');
+      if (m) _voidedOrderIds.delete(parseInt(m[1], 10));
+    });
     // Sales made while offline sit in the local queue until the connection
     // comes back (see queueOfflineOrder/syncOfflineQueue) — if logout happens
     // before that sync finishes, those orders aren't in the 'orders' table
@@ -1860,21 +1913,28 @@ async function openRemitOnLogout() {
     // sales only put their cash portion (amount_tendered) in the drawer —
     // the rest went out electronically, same as a pure e-pay sale.
     const _orders = (data||[]).concat(_queuedOrders);
+    // A voided/refunded order contributes nothing at all here — not to cash,
+    // and not to online/e-pay either. Without this, forcing its cash portion
+    // to 0 (above) while still using its raw total for the online-sales
+    // subtraction below would wrongly dump the whole voided amount into
+    // "non-cash sales" instead of just dropping it entirely.
+    const _effectiveTotal = o => _voidedOrderIds.has(o.id) ? 0 : (parseFloat(o.total) || 0);
     const _cashPortion = o => {
+      if (_voidedOrderIds.has(o.id)) return 0;
       const t = parseFloat(o.total) || 0;
       if ((o.payment_method || 'Cash') === 'Cash') return t;
       if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
       return 0;
     };
     const total = _orders.reduce((s,o) => s + _cashPortion(o), 0);
-    _remitOnlineSales = _orders.reduce((s,o) => s + ((parseFloat(o.total)||0) - _cashPortion(o)), 0);
+    _remitOnlineSales = _orders.reduce((s,o) => s + (_effectiveTotal(o) - _cashPortion(o)), 0);
     document.getElementById('remitLogPOS').textContent = (CUR||'₱') + total.toFixed(2);
     // Broken down per payment method (GCash, BDO, Maya, etc.) so the
     // cashier can see exactly what already settled electronically, instead
     // of one lump "non-cash" figure that doesn't say which bank/wallet.
     const _nonCashByMethod = {};
     _orders.forEach(o => {
-      const amt = (parseFloat(o.total) || 0) - _cashPortion(o);
+      const amt = _effectiveTotal(o) - _cashPortion(o);
       if (amt <= 0) return;
       const method = o.payment_method || 'Other';
       _nonCashByMethod[method] = (_nonCashByMethod[method] || 0) + amt;
@@ -1910,10 +1970,9 @@ async function openRemitOnLogout() {
     // A Void/Refund charged to "the cashier's pending balance" reduces what
     // she still owes — the original sale's cash is still counted above via
     // POS Sales, so without this the voided amount stays counted as if it
-    // were still collected. cash_on_hand here is already negative.
-    const { data: vrData } = await _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
-      .eq('store_id', STORE_ID).eq('cashier_name', name).eq('status', 'pending')
-      .gte('created_at', from).lte('created_at', to);
+    // were still collected. cash_on_hand here is already negative. (vrData
+    // was already fetched above, before POS Sales, since that calc also
+    // needs to know which orders were voided/refunded.)
     _remitVoidRefundTotal = (vrData || []).filter(_isVoidRefundAdjRow).reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
     const expected = _remitCarriedFloat + total + _remitReceivedFundsTotal + _remitVoidRefundTotal - _remitExpensesTotal;
     document.getElementById('remitLogExpected').textContent = (CUR||'₱') + expected.toFixed(2);
@@ -2256,7 +2315,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.17';
+const POS_BUILD = '1.9.18';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -3966,6 +4025,29 @@ async function openMySales() {
   const { data: itemRows } = orderIds.length
     ? await _sb.from('order_items').select('order_id,name,qty').in('order_id', orderIds)
     : { data: [] };
+  // A void/refund charged to "the owner's own cash" (target=manager) never
+  // touches this cashier's cash_remittances at all — the compensating
+  // negative order is attributed to the owner's name, not hers — so her own
+  // ORIGINAL sale row above still counts as if she's holding that cash. She
+  // isn't: the money was given back. Look up which of her own orders were
+  // voided/refunded (either target) and exclude their cash portion below —
+  // EXCEPT ones already covered by her own voidRefundSinceRemit adjustment
+  // (target=cashier), or this would subtract the same amount twice.
+  const _voidedOrderIds = new Set();
+  if (orderIds.length) {
+    const _tableNos = orderIds.map(id => `Order #${id}`);
+    const { data: _vRows } = await _sb.from('orders').select('table_no')
+      .eq('store_id', STORE_ID).in('order_type', ['VOID', 'REFUND']).in('table_no', _tableNos);
+    (_vRows || []).forEach(r => {
+      const m = /^Order #(\d+)$/.exec(r.table_no || '');
+      if (m) _voidedOrderIds.add(parseInt(m[1], 10));
+    });
+  }
+  (remits || []).forEach(r => {
+    if (!_isVoidRefundAdjRow(r)) return;
+    const m = /Order #(\d+)/.exec(r.description || '');
+    if (m) _voidedOrderIds.delete(parseInt(m[1], 10));
+  });
   const itemsByOrder = {};
   (itemRows || []).forEach(i => { (itemsByOrder[i.order_id] = itemsByOrder[i.order_id] || []).push(i); });
   const _orderItemsLabel = id => (itemsByOrder[id] || []).map(i => {
@@ -3981,6 +4063,7 @@ async function openMySales() {
   // the cashier hasn't remitted yet) minus any expenses paid out of the
   // drawer in that same window.
   const _cashPortion = o => {
+    if (_voidedOrderIds.has(o.id)) return 0;
     const t = parseFloat(o.total) || 0;
     if ((o.payment_method || 'Cash') === 'Cash') return t;
     if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
@@ -4014,7 +4097,9 @@ async function openMySales() {
   }
   // E-Pay mirrors the same window as Total Sales above — informational only,
   // e-pay never touches the physical till so there's nothing to reconcile.
-  const epayToday = rows.reduce((s, o) => s + ((parseFloat(o.total) || 0) - _cashPortion(o)), 0);
+  // A voided/refunded order contributes nothing here either — not just its
+  // cash portion — or a voided CASH sale would wrongly show up as E-Pay.
+  const epayToday = rows.reduce((s, o) => s + ((_voidedOrderIds.has(o.id) ? 0 : (parseFloat(o.total) || 0)) - _cashPortion(o)), 0);
   document.getElementById('myEpayTotal').textContent = CUR + epayToday.toFixed(2);
   // Merge today's sales with this cashier's own remittances, expenses, and
   // login/logout into one chronological feed — a scannable self-check of

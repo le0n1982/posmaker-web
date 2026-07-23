@@ -1,7 +1,8 @@
 {
-  "version": "1.9.17",
-  "date": "2026-07-22",
+  "version": "1.9.18",
+  "date": "2026-07-23",
   "changes": [
+    "🔧 CRITICAL FIX: when a Void/Refund was charged to \"the owner's own cash\" instead of the cashier's balance, the cashier's own Cash Drawer / POS Sales / Cash Remittance never excluded that sale — she still looked like she was holding cash that was actually given back, showing a false \"Short\" for no real reason. Now correctly excluded in all three screens, whichever side the void/refund was charged to.",
     "🔧 CRITICAL FIX: Void/Refund's order lookup only blocked a SECOND request while the first was still pending — once a request was approved, the same order number could be looked up and voided/refunded again. Now blocked with \"Order #X has already been voided/refunded.\"",
     "🧮 Calculator redesigned to match the Owner/Manager Dashboard exactly — a small draggable icon (bottom-right) that opens a draggable panel, instead of the previous fixed floating box.",
     "🔧 CRITICAL FIX: Cash Drawer / \"Cash in Drawer (expected)\" never subtracted a Void or Refund that was charged to the cashier's own pending balance — the original sale's cash stayed counted forever with no offsetting deduction, overstating the drawer by the voided amount (and risking a false \"Over\" that then had to be handed over as if it were real). Now correctly subtracted in all three places (My Activity Today, Fund Transfer's balance check, and Cash Remittance), with a \"less voids/refunds\" note shown when it applies.",

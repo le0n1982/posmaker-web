@@ -2348,17 +2348,52 @@ async function restoreStockForOrder(orderId, changeType) {
   if (!orderItems || !orderItems.length) return;
   const prodIds = orderItems.map(i => i.product_id).filter(Boolean);
   if (!prodIds.length) return;
-  const { data: prodRows } = await _sb.from('products').select('id,inv_links').in('id', prodIds);
-  const linksMap = {};
-  (prodRows || []).forEach(p => { linksMap[p.id] = p.inv_links; });
+  const { data: prodRows } = await _sb.from('products').select('id,name,sku,inv_links').in('id', prodIds);
+  const prodMap = {};
+  (prodRows || []).forEach(p => { prodMap[p.id] = p; });
+
+  // A product with no inv_links set still auto-deducts stock at sale time by
+  // matching its name/SKU against an inventory item (see the cashier POS's
+  // product-load fallback) — this is the common case for a simple store that
+  // never explicitly configured a recipe link. Without the same fallback
+  // here, voiding/refunding one of THOSE sales silently never gives the
+  // stock back at all.
+  const _needsAutoMatch = prodIds.filter(id => {
+    const p = prodMap[id];
+    if (!p) return false;
+    let links = []; try { links = p.inv_links ? JSON.parse(p.inv_links) : []; } catch (_) { links = []; }
+    return !links.length;
+  });
+  const autoMatchMap = {};
+  if (_needsAutoMatch.length) {
+    const { data: invAll } = await _sb.from('inventory_items').select('id,name,sku').eq('store_id', STORE.id);
+    const invByName = {};
+    (invAll || []).forEach(inv => {
+      if (inv.name) invByName[inv.name.toLowerCase().trim()] = inv.id;
+      if (inv.sku && inv.sku.trim()) invByName[inv.sku.toLowerCase().trim()] = inv.id;
+    });
+    _needsAutoMatch.forEach(id => {
+      const p = prodMap[id];
+      const key = (p.name || '').toLowerCase().trim();
+      const skuKey = (p.sku || '').toLowerCase().trim();
+      const invId = invByName[key] || (skuKey ? invByName[skuKey] : null);
+      if (invId) autoMatchMap[id] = invId;
+    });
+  }
 
   const restores = {};
   for (const item of orderItems) {
-    let links = []; try { links = linksMap[item.product_id] ? JSON.parse(linksMap[item.product_id]) : []; } catch (_) {}
-    for (const link of links) {
-      const invId = typeof link === 'string' ? link : link.id;
-      const useQty = typeof link === 'object' ? (link.qty || 1) : 1;
-      restores[invId] = (restores[invId] || 0) + useQty * item.qty;
+    const p = prodMap[item.product_id];
+    let links = []; try { links = p?.inv_links ? JSON.parse(p.inv_links) : []; } catch (_) { links = []; }
+    if (links.length) {
+      for (const link of links) {
+        const invId = typeof link === 'string' ? link : link.id;
+        const useQty = typeof link === 'object' ? (link.qty || 1) : 1;
+        restores[invId] = (restores[invId] || 0) + useQty * item.qty;
+      }
+    } else if (autoMatchMap[item.product_id]) {
+      const invId = autoMatchMap[item.product_id];
+      restores[invId] = (restores[invId] || 0) + item.qty;
     }
   }
   const invIds = Object.keys(restores);
@@ -5796,7 +5831,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     const realFloatRemit = (floatRows || []).find(r => !isVoidRefundAdj(r));
     const carriedFloat = parseFloat(realFloatRemit?.drawer_float) || 0;
     const [{ data: ord }, { data: expLogs }, { data: rf }, { data: vr }] = await Promise.all([
-      _sb.from('orders').select('total,payment_method,amount_tendered')
+      _sb.from('orders').select('id,total,payment_method,amount_tendered')
         .eq('store_id', STORE.id).eq('cashier_name', displayName).gte('timestamp', liveFrom),
       _sb.from('activity_logs').select('details,created_at')
         .eq('store_id', STORE.id).eq('actor_name', displayName).eq('action', 'EXPENSE_PAID').gte('created_at', liveFrom),
@@ -5806,9 +5841,33 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
         .eq('store_id', STORE.id).eq('cashier_name', displayName).eq('status', 'pending').gte('created_at', liveFrom)
     ]);
+    // A void/refund charged to "the owner's own cash" (target=manager) never
+    // touches this cashier's cash_remittances at all — the compensating
+    // negative order is attributed to the owner's name, not hers — so her
+    // own ORIGINAL sale row above still counts as if she's holding that
+    // cash. She isn't: the money was given back. Exclude the cash portion
+    // of any of her own orders that were voided/refunded (either target) —
+    // EXCEPT ones already covered by voidRefundSinceRemit below
+    // (target=cashier), or this would subtract the same amount twice.
+    const _voidedOrderIds = new Set();
+    if ((ord || []).length) {
+      const _tableNos = ord.map(o => `Order #${o.id}`);
+      const { data: _vRows } = await _sb.from('orders').select('table_no')
+        .eq('store_id', STORE.id).in('order_type', ['VOID', 'REFUND']).in('table_no', _tableNos);
+      (_vRows || []).forEach(r => {
+        const m = /^Order #(\d+)$/.exec(r.table_no || '');
+        if (m) _voidedOrderIds.add(parseInt(m[1], 10));
+      });
+    }
+    (vr || []).forEach(r => {
+      if (!isVoidRefundAdj(r)) return;
+      const m = /Order #(\d+)/.exec(r.description || '');
+      if (m) _voidedOrderIds.delete(parseInt(m[1], 10));
+    });
     // Split sales only put their cash portion (amount_tendered) in the
     // drawer — the rest went out electronically, same as a pure e-pay sale.
     const cashSinceRemit = (ord || []).reduce((s,o) => {
+      if (_voidedOrderIds.has(o.id)) return s;
       const pm = o.payment_method || 'Cash';
       if (pm === 'Cash') return s + (parseFloat(o.total)||0);
       if (pm === 'Split') return s + (parseFloat(o.amount_tendered)||0);
