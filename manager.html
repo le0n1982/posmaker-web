@@ -163,7 +163,6 @@ button{cursor:pointer}
     <div class="sb-item" onclick="nav('remit')" title="View cash remittances from cashiers. Red = awaiting confirmation."><span class="ico">&#128176;</span> Cash Remit <span id="remitBadge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:auto"></span></div>
     <div class="sb-item" onclick="nav('staff')" title="See your fellow staff — who's online now and their login history. View only, no editing."><span class="ico">&#128101;</span> Staff</div>
     <div class="sb-item" onclick="nav('checklist')" title="Tasks before opening and closing the store — with photo proof."><span class="ico">&#9989;</span> Daily Checklist</div>
-    <div class="sb-item" onclick="nav('funds')" title="Money sent by owner to staff — salary, advance, allowance."><span class="ico">&#128176;</span> Staff Funds</div>
     <div class="sb-item" onclick="nav('cashadvance')" title="Request a cash advance — deducted from your next salary."><span class="ico">&#128179;</span> Cash Advance</div>
     <div class="sb-item" onclick="nav('payroll')" title="View salary status for all staff — view only, the owner runs payroll."><span class="ico">&#128181;</span> Payroll</div>
     <div class="sb-item" onclick="nav('voidrefund')" title="Approve or decline void/refund requests submitted by cashiers, with photo proof."><span class="ico">&#8630;</span> Void &amp; Refund <span id="vrBadge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:auto"></span></div>
@@ -395,15 +394,6 @@ button{cursor:pointer}
     </div>
   </div>
   <!-- STAFF FUNDS SECTION -->
-  <div class="section" id="sec-funds">
-    <div style="max-width:560px">
-      <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Money sent by owner to staff — salary, advance, allowance. Upload proof of disbursement when received.</p>
-      <div id="paymentsList2" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Loading...</div>
-      </div>
-    </div>
-  </div>
-
   <!-- CASH ADVANCE -->
   <div class="section" id="sec-cashadvance">
     <div style="max-width:560px">
@@ -1570,7 +1560,7 @@ function downloadSalesCSV(){
 }
 
 // ── UI Helpers ─────────────────────────────────────────────────────────────
-const SECTION_TITLES = {inv:'Inventory', log:'Activity Log', sales:'Sales', remit:'Cash Remit', staff:'Staff', checklist:'Daily Checklist', funds:'Staff Funds', cashadvance:'Cash Advance', payroll:'Payroll', voidrefund:'Void & Refund', helpers:'Helpers'};
+const SECTION_TITLES = {inv:'Inventory', log:'Activity Log', sales:'Sales', remit:'Cash Remit', staff:'Staff', checklist:'Daily Checklist', cashadvance:'Cash Advance', payroll:'Payroll', voidrefund:'Void & Refund', helpers:'Helpers'};
 function nav(id){
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
@@ -1585,7 +1575,6 @@ function nav(id){
   if(id==='remit')     { loadRemit(); checkPendingRemits(); loadFundTransfersReceived(); }
   if(id==='staff')     loadMgrStaff();
   if(id==='checklist') loadChecklist();
-  if(id==='funds')     loadPayments();
   if(id==='cashadvance') loadCashAdvance();
   if(id==='payroll')     loadMgrPayroll();
   if(id==='voidrefund')  loadVoidRefund();
@@ -2885,148 +2874,6 @@ async function loadCashSummary() {
   `;
 }
 
-// ── Staff Funds Panel ────────────────────────────────────────────────────────
-window._fundsReceiptMap = {};
-window._fundsDisbProofMap = {};
-
-async function loadPayments() {
-  const el = document.getElementById('paymentsList2');
-  if (!el) return;
-  el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Loading...</div>';
-
-  const { data: paymentsRaw } = await _sb.from('cash_remittances')
-    .select('id,cashier_name,cash_on_hand,description,status,created_at')
-    .eq('store_id', MGR.store_id)
-    .in('status', ['owner_payment','payment_confirmed'])
-    .order('created_at', { ascending: false }).limit(30);
-  // Money the owner sent directly to the manager herself belongs in her own
-  // Net Cash with Manager (Cash Remit page) once confirmed, not in this
-  // general Staff Funds disbursement pool alongside money meant for staff.
-  const payments = (paymentsRaw || []).filter(p => p.cashier_name !== MGR.username);
-  if (!payments?.length) {
-    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No payments recorded yet.</div>';
-    return;
-  }
-
-  // Fetch owner receipts from OWNER_SEND logs
-  const { data: sendLogs } = await _sb.from('activity_logs')
-    .select('details,target_name').eq('store_id', MGR.store_id).eq('action','OWNER_SEND')
-    .order('created_at', { ascending: false }).limit(100);
-  const nameRcptMap = {};
-  window._fundsReceiptMap = {};
-  (sendLogs||[]).forEach(l => {
-    try {
-      const d = JSON.parse(l.details||'{}');
-      if (!d.receipt_b64) return;
-      const src = d.receipt_b64.startsWith('data:') ? d.receipt_b64 : 'data:image/jpeg;base64,'+d.receipt_b64;
-      if (d.cr_id) window._fundsReceiptMap[d.cr_id] = src;
-      if (l.target_name && !nameRcptMap[l.target_name]) nameRcptMap[l.target_name] = src;
-    } catch(_) {}
-  });
-  // Try name match (exact), then partial match, then fallback to any unmatched receipt
-  const allRcptSrcs = Object.values(nameRcptMap);
-  payments.forEach(p => {
-    if (window._fundsReceiptMap[p.id]) return;
-    // Exact match by cashier_name (username)
-    if (nameRcptMap[p.cashier_name]) { window._fundsReceiptMap[p.id] = nameRcptMap[p.cashier_name]; return; }
-    // Partial match: any nameRcptMap key contains cashier_name or vice versa
-    const match = Object.keys(nameRcptMap).find(k => k.toLowerCase().includes(p.cashier_name.toLowerCase()) || p.cashier_name.toLowerCase().includes(k.toLowerCase().split(' ')[0]));
-    if (match) { window._fundsReceiptMap[p.id] = nameRcptMap[match]; return; }
-  });
-  // Last resort: single receipt — assign to all unmatched payments
-  if (allRcptSrcs.length === 1) {
-    payments.forEach(p => { if (!window._fundsReceiptMap[p.id]) window._fundsReceiptMap[p.id] = allRcptSrcs[0]; });
-  }
-
-  // Fetch sub-items: salary + expenses
-  const { data: subLogs } = await _sb.from('activity_logs')
-    .select('id,action,details,created_at').eq('store_id', MGR.store_id)
-    .in('action',['SALARY_GIVEN','EXPENSE_PAID'])
-    .order('created_at', { ascending: true });
-  const salaryMap = {}, expenseMap = {};
-  window._fundsDisbProofMap = {};
-  (subLogs||[]).forEach(l => {
-    try {
-      const d = JSON.parse(l.details||'{}');
-      if (!d.cr_id) return;
-      if (d.receipt_b64) window._fundsDisbProofMap[l.id] = d.receipt_b64.startsWith('data:') ? d.receipt_b64 : 'data:image/jpeg;base64,'+d.receipt_b64;
-      const item = { ...d, _id: l.id, _at: l.created_at };
-      if (l.action === 'SALARY_GIVEN') { if (!salaryMap[d.cr_id]) salaryMap[d.cr_id]=[]; salaryMap[d.cr_id].push(item); }
-      else { if (!expenseMap[d.cr_id]) expenseMap[d.cr_id]=[]; expenseMap[d.cr_id].push(item); }
-    } catch(_) {}
-  });
-
-  // Combine all payments into one pool
-  const allSals = Object.values(salaryMap).flat();
-  const allExps = Object.values(expenseMap).flat();
-  const totalReceived = payments.reduce((s,p)=>s+parseFloat(p.cash_on_hand||0),0);
-  const totalSal = allSals.reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const totalExp = allExps.reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const totalLeft = totalReceived - totalSal - totalExp;
-  // Use the newest payment's id for new disbursements
-  const latestCrId = payments[0].id;
-
-  const receiptsHtml = payments.map(p => {
-    const amt = parseFloat(p.cash_on_hand||0);
-    const confirmed = p.status === 'payment_confirmed';
-    const note = (p.description||'').replace(/^Owner sent:?\s*/i,'');
-    const dt = new Date(p.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const hasRcpt = !!window._fundsReceiptMap[p.id];
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px">
-      <div>
-        <strong style="color:#10b981">&#8369;${amt.toFixed(2)}</strong>
-        <span style="color:var(--muted);margin-left:6px">${note||'Payment'} &bull; ${dt}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-        <span style="font-size:10px;font-weight:700;color:${confirmed?'#10b981':'#f59e0b'}">${confirmed?'&#10003; Confirmed':'&#9679; Pending'}</span>
-        ${hasRcpt ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="openReceiptViewer('${p.id}')">&#128247;</button>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-    <div style="background:var(--s2);padding:14px 16px">
-      <div style="font-size:26px;font-weight:800;color:${totalLeft>=0?'#10b981':'#ef4444'}">&#8369;${totalLeft.toFixed(2)}</div>
-      <div style="display:flex;gap:16px;margin-top:6px;font-size:12px">
-        <span>Received: <strong style="color:#10b981">&#8369;${totalReceived.toFixed(2)}</strong></span>
-        <span>Spent: <strong style="color:#ef4444">&#8369;${(totalSal+totalExp).toFixed(2)}</strong></span>
-      </div>
-    </div>
-    <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;margin-bottom:6px">&#128176; FUNDS RECEIVED</div>
-      ${receiptsHtml}
-    </div>
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px">&#128100; STAFF SALARY</span>
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openAddDisburse('salary','${latestCrId}')">+ Add</button>
-      </div>
-      ${allSals.length ? allSals.map(s=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-          <span style="color:var(--text)">${s.name||'Staff'}</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-weight:700;color:#10b981">&#8369;${parseFloat(s.amount||0).toFixed(2)}</span>
-            ${window._fundsDisbProofMap[s._id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="showDisbProof('${s._id}')">&#128247;</button>` : ''}
-          </div>
-        </div>`).join('') : '<div style="font-size:12px;color:var(--dim);text-align:center;padding:8px 0">No salary records yet.</div>'}
-    </div>
-    <div style="padding:12px 16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px">&#128203; OTHER EXPENSES</span>
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openAddDisburse('expense','${latestCrId}')">+ Add</button>
-      </div>
-      ${allExps.length ? allExps.map(e=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-          <div><span style="color:var(--text)">${e.desc||e.name||'Expense'}</span>${e.category?`<span style="font-size:10px;color:var(--muted);margin-left:6px">${e.category}</span>`:''}</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-weight:700;color:#ef4444">&#8369;${parseFloat(e.amount||0).toFixed(2)}</span>
-            ${window._fundsDisbProofMap[e._id] ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="showDisbProof('${e._id}')">&#128247;</button>` : ''}
-          </div>
-        </div>`).join('') : '<div style="font-size:12px;color:var(--dim);text-align:center;padding:8px 0">No expense records yet.</div>'}
-    </div>
-  </div>`;
-}
-
 // ── Cash Advance (any staff — manager submits on their behalf, incl. self) ─
 let _caMaxAmt = null, _caMaxPerMonth = null, _caThisMonthCount = 0, _caAllStaff = [];
 async function loadCashAdvance() {
@@ -3287,126 +3134,6 @@ async function loadMgrPayroll() {
         <td style="text-align:right;font-weight:700">${CUR}${parseFloat(e.amount).toFixed(2)}</td>
         <td style="color:var(--muted);font-size:12px">${e.notes || ''}</td>
       </tr>`).join('');
-}
-
-function openReceiptViewer(crId) {
-  const src = window._fundsReceiptMap[crId];
-  if (!src) { showToast('No receipt attached to this payment.', true); return; }
-  document.getElementById('rcvImg').src = src;
-  document.getElementById('rcvModal').classList.add('show');
-}
-function showDisbProof(logId) {
-  const src = window._fundsDisbProofMap[logId];
-  if (!src) { showToast('No proof photo found.', true); return; }
-  document.getElementById('rcvImg').src = src;
-  document.getElementById('rcvModal').classList.add('show');
-}
-
-let _disbType='',_disbCrId='',_disbQRPoll=null,_disbQRToken=null;
-async function openAddDisburse(type, crId) {
-  _disbType = type; _disbCrId = crId;
-  const isSal = type === 'salary';
-  document.getElementById('disbTitle').textContent = isSal ? '👤 Add Staff Salary' : '📋 Add Expense';
-  document.getElementById('disbNameRow').style.display = isSal ? '' : 'none';
-  document.getElementById('disbDescRow').style.display = isSal ? 'none' : '';
-  document.getElementById('disbCatRow').style.display = isSal ? 'none' : '';
-  document.getElementById('disbDesc').value = '';
-  document.getElementById('disbCat').value = 'Bills';
-  document.getElementById('disbAmt').value = '';
-  document.getElementById('disbFile').value = '';
-  document.getElementById('disbFileCam').value = '';
-  document.getElementById('disbPreview').style.display = 'none';
-  const btn = document.getElementById('disbBtn');
-  btn.disabled = false; btn.textContent = 'Save';
-  document.getElementById('disburseModal').classList.add('show');
-  if (isSal) {
-    const sel = document.getElementById('disbName');
-    sel.innerHTML = '<option value="">Loading cashiers...</option>';
-    const { data } = await _sb.from('store_users').select('full_name,username').eq('store_id', MGR.store_id).order('full_name');
-    sel.innerHTML = '<option value="">Select cashier...</option>';
-    (data || []).forEach(u => { const n = u.full_name || u.username; sel.appendChild(new Option(n, n)); });
-    sel.value = '';
-  }
-}
-function handleDisburseFile(input) {
-  const file = input.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const img = new Image();
-    img.onload = () => {
-      const MAX=1200, cv=document.createElement('canvas');
-      const sc=Math.min(1,MAX/Math.max(img.width,img.height));
-      cv.width=img.width*sc; cv.height=img.height*sc;
-      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-      addTimestampWatermark(cv);
-      document.getElementById('disbProofImg').src = cv.toDataURL('image/jpeg',0.65);
-      document.getElementById('disbPreview').style.display = '';
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-  input.value = '';
-}
-async function openDisburseQR() {
-  if (!_opsData) await loadOpsData();
-  _disbQRToken = await createImgUploadToken('disb_proof',1);
-  const url = 'https://posmaker.ggff.net/image-upload.html?sid='+_OPS_STORE_ID+'&token='+_disbQRToken+'&max=1';
-  document.getElementById('disbQRCode').src = 'https://api.qrserver.com/v1/create-qr-code/?size=190x190&data='+encodeURIComponent(url);
-  document.getElementById('disbQRStatus').textContent = 'Waiting for photo…';
-  document.getElementById('disbQRModal').classList.add('show');
-  if (_disbQRPoll) clearInterval(_disbQRPoll);
-  _disbQRPoll = setInterval(async () => {
-    await refreshOpsData();
-    const sess = (_opsData&&_opsData.imgUploadSessions&&_opsData.imgUploadSessions[_disbQRToken])||null;
-    if (!sess||!sess.images||sess.images.length===0) return;
-    const img = new Image();
-    img.onload = () => {
-      const MAX=1200,cv=document.createElement('canvas');
-      const sc=Math.min(1,MAX/Math.max(img.width,img.height));
-      cv.width=img.width*sc; cv.height=img.height*sc;
-      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-      addTimestampWatermark(cv);
-      document.getElementById('disbProofImg').src = cv.toDataURL('image/jpeg',0.65);
-      document.getElementById('disbPreview').style.display = '';
-    };
-    img.src = 'data:image/jpeg;base64,'+sess.images[0];
-    document.getElementById('disbQRStatus').textContent = '✅ Photo received!';
-    await clearImgUploadSession(_disbQRToken); _disbQRToken=null;
-    setTimeout(()=>closeDisburseQR(),1200);
-  },2500);
-}
-function closeDisburseQR() {
-  if(_disbQRPoll){clearInterval(_disbQRPoll);_disbQRPoll=null;}
-  if(_disbQRToken){clearImgUploadSession(_disbQRToken);_disbQRToken=null;}
-  document.getElementById('disbQRModal').classList.remove('show');
-}
-async function saveDisburse() {
-  const isSal = _disbType==='salary';
-  const amt = parseFloat(document.getElementById('disbAmt').value);
-  if (!amt||amt<=0) { showToast('Enter a valid amount.',true); return; }
-  const name = isSal ? document.getElementById('disbName').value.trim() : '';
-  const desc = !isSal ? document.getElementById('disbDesc').value.trim() : '';
-  const cat  = !isSal ? document.getElementById('disbCat').value : '';
-  if (isSal && !name) { showToast('Select a cashier.',true); return; }
-  if (!isSal && !desc) { showToast('Enter description.',true); return; }
-  const proofImg = document.getElementById('disbProofImg');
-  const rcpt = proofImg.src&&proofImg.src.startsWith('data:') ? proofImg.src : null;
-  const btn = document.getElementById('disbBtn');
-  btn.disabled=true; btn.textContent='Saving…';
-  const { error: disbErr } = await _sb.from('activity_logs').insert({
-    store_id:MGR.store_id, actor_name:MGR.name, actor_role:'manager',
-    action: isSal ? 'SALARY_GIVEN' : 'EXPENSE_PAID',
-    target_name: isSal ? name : desc,
-    details: JSON.stringify(Object.assign(
-      { cr_id:_disbCrId, amount:amt },
-      isSal ? { name } : { desc, category:cat },
-      rcpt ? { receipt_b64:rcpt } : {}
-    ))
-  });
-  if (disbErr) { showToast('Error saving: ' + disbErr.message, true); btn.disabled=false; btn.textContent='Save'; return; }
-  document.getElementById('disburseModal').classList.remove('show');
-  showToast('Record saved.');
-  await loadPayments();
 }
 
 // ── Helpers (Non-Account Staff) ───────────────────────────────────────────
@@ -4019,62 +3746,6 @@ _updateThemeIcon();
     <button class="btn btn-ghost" onclick="closeAsReceiptQR()">Close</button>
   </div>
 </div>
-<!-- DISBURSE MODAL (Salary / Expense) -->
-<div class="modal" id="disburseModal">
-  <div class="mbox">
-    <h3 id="disbTitle">Add Record</h3>
-    <div id="disbNameRow" class="field">
-      <label>Staff</label>
-      <select id="disbName" style="width:100%;padding:9px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:13px"><option value="">Loading...</option></select>
-    </div>
-    <div id="disbDescRow" class="field" style="display:none">
-      <label>Description</label>
-      <input id="disbDesc" type="text" placeholder="e.g. Electric Bill, Water Bill, Food">
-    </div>
-    <div id="disbCatRow" class="field" style="display:none">
-      <label>Category</label>
-      <select id="disbCat" style="width:100%;padding:9px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
-        <option value="Bills">Bills (Electric, Water, etc.)</option>
-        <option value="Food">Food / Meals</option>
-        <option value="Transport">Transport</option>
-        <option value="Others">Others</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Amount (&#8369;)</label>
-      <input id="disbAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:#10b981">
-    </div>
-    <div class="field">
-      <label>Photo Proof <span style="color:var(--muted);font-size:11px">(date &amp; time auto-stamped)</span></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <label class="btn btn-ghost" for="disbFileCam" style="flex:1;text-align:center;cursor:pointer;font-size:12px;margin-bottom:0">&#128247; Take Photo</label>
-        <input id="disbFileCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleDisburseFile(this)">
-        <label class="btn btn-ghost" for="disbFile" style="flex:1;text-align:center;cursor:pointer;font-size:12px;margin-bottom:0">&#128193; Upload Photo</label>
-        <input id="disbFile" type="file" accept="image/*" style="display:none" onchange="handleDisburseFile(this)">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="openDisburseQR()" style="white-space:nowrap;font-size:12px">&#128248; Scan QR</button>
-      </div>
-      <div id="disbPreview" style="display:none;margin-top:10px;text-align:center">
-        <img id="disbProofImg" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--border);display:block">
-        <div style="font-size:11px;color:#10b981;margin-top:4px">&#10003; Timestamp added</div>
-      </div>
-    </div>
-    <div class="m-actions">
-      <button class="btn btn-ghost" onclick="document.getElementById('disburseModal').classList.remove('show')">Cancel</button>
-      <button class="btn btn-accent" id="disbBtn" onclick="saveDisburse()">Save</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal" id="disbQRModal">
-  <div class="mbox" style="text-align:center;max-width:300px">
-    <h3 style="margin-bottom:8px">&#128247; Upload from Phone</h3>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Scan the QR code — choose a photo from gallery or take a new one.</p>
-    <img id="disbQRCode" style="width:190px;height:190px;border-radius:8px;background:#fff;padding:6px;margin:8px auto;display:block">
-    <div id="disbQRStatus" style="font-size:12px;color:var(--muted);margin-bottom:14px">Waiting for photo&#8230;</div>
-    <button class="btn btn-ghost" onclick="closeDisburseQR()">Close</button>
-  </div>
-</div>
-
 <!-- Cash Advance — confirm COH handover with photo proof -->
 <div class="modal" id="caDisbModal">
   <div class="mbox">
@@ -4161,15 +3832,6 @@ _updateThemeIcon();
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeMgrStaffLogsModal()">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal" id="rcvModal" onclick="this.classList.remove('show')">
-  <div style="max-width:480px;width:100%;padding:8px" onclick="event.stopPropagation()">
-    <img id="rcvImg" style="max-width:100%;border-radius:10px;display:block;margin:0 auto">
-    <div style="text-align:center;margin-top:10px">
-      <button class="btn btn-ghost" onclick="document.getElementById('rcvModal').classList.remove('show')">Close</button>
     </div>
   </div>
 </div>

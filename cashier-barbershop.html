@@ -2332,7 +2332,14 @@ async function loadProds() {
         // Only borrow the inventory item's unit for a direct 1:1 link — see
         // comment above this block for why a recipe-style link must not.
         if (effIsDirect && effUnit) p.unit = effUnit;
-      } else if (!(p.stock > 0)) {
+      } else {
+        // Products no longer have a way to set their own stock directly —
+        // the product edit form only manages inv_links now — so a leftover
+        // products.stock value from before that existed (or from any other
+        // stale/legacy source) must never block the name/SKU auto-match.
+        // Skipping it here silently disconnected a product from its
+        // same-named inventory item forever: its badge froze at whatever
+        // that old number was, and its sales never touched real stock.
         const key = (p.name || '').toLowerCase().trim();
         const skuKey = (p.sku || '').toLowerCase().trim();
         const inv = invByName[key] || (skuKey ? invByName[skuKey] : null);
@@ -2446,7 +2453,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.18';
+const POS_BUILD = '1.9.19';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
