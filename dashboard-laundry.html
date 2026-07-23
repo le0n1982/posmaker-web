@@ -1254,6 +1254,16 @@ input:checked + .slider:before{transform:translateX(18px)}
           style="width:68px;padding:10px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none;text-align:center">
         <button type="button" class="btn btn-accent btn-sm" style="font-size:18px;padding:0 14px;line-height:1" onclick="addInvLink()">+</button>
       </div>
+      <!-- Shown only when the inventory item's unit differs from this
+           product's own unit (e.g. buying rice by the bag, selling it by the
+           kilo) — lets the owner type the conversion in plain terms instead
+           of working out the raw fraction (1 bag = 25 kg → 0.04) by hand. -->
+      <div id="invLinkConvRow" style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:var(--dim)">
+        <span>Easier: 1 <strong id="invLinkConvFrom"></strong> =</span>
+        <input id="invLinkConvVal" type="number" min="0.001" step="0.001" placeholder="e.g. 25" oninput="applyInvLinkConv()"
+          style="width:70px;padding:6px 8px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:center">
+        <span id="invLinkConvTo"></span>
+      </div>
       <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Qty = how much of this item is used per 1 order</div>
       <div id="invLinkList"></div>
     </div>
@@ -5407,6 +5417,7 @@ function openProdModal(p) {
   invSel.innerHTML='<option value="">&#8212; Select item &#8212;</option>'+invItems.map(i=>`<option value="${i.id}" data-cost="${i.cost_price||0}">${i.name}${i.sku?' ('+i.sku+')':''}</option>`).join('');
   renderInvLinkList();
   updateProfitPreview();
+  document.getElementById('invLinkConvRow').style.display='none';
   // Reset in case a previous open got left mid-save (e.g. a network error
   // that never reached _restore()) — without this the Save/Cancel buttons
   // could stay stuck disabled on the next open.
@@ -5471,9 +5482,29 @@ function removeProdImg(){
 }
 function autoFillUsageQty(){
   const id=document.getElementById('pInvLink').value;
-  if(!id)return;
+  const convRow=document.getElementById('invLinkConvRow');
+  document.getElementById('invLinkConvVal').value='';
+  if(!id){ convRow.style.display='none'; return; }
   const item=invItems.find(x=>x.id===id);
   if(item&&item.default_usage_qty) document.getElementById('pInvLinkQty').value=item.default_usage_qty;
+  // Offer the "1 [inv unit] = ? [product unit]" helper whenever the two
+  // units differ (e.g. buying rice by the bag, selling it by the kilo) —
+  // typing the natural conversion here is much less error-prone than
+  // asking the owner to work out the raw fraction (0.04) themselves.
+  const invUnit=(item?.unit||'').trim();
+  const prodUnit=(document.getElementById('pUnit').value||'').trim();
+  if(item&&invUnit&&prodUnit&&invUnit.toLowerCase()!==prodUnit.toLowerCase()){
+    document.getElementById('invLinkConvFrom').textContent=invUnit;
+    document.getElementById('invLinkConvTo').textContent=prodUnit;
+    convRow.style.display='flex';
+  }else{
+    convRow.style.display='none';
+  }
+}
+function applyInvLinkConv(){
+  const n=parseFloat(document.getElementById('invLinkConvVal').value);
+  if(!n||n<=0)return;
+  document.getElementById('pInvLinkQty').value=Math.round((1/n)*1e6)/1e6;
 }
 function addInvLink(){
   const sel=document.getElementById('pInvLink');
