@@ -872,7 +872,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="field"><label>Reason</label><input id="deductReason" type="text" placeholder="e.g. Short cash count, July 10"></div>
         <div class="m-actions">
           <button class="btn btn-ghost" onclick="closeModal('deductModal')">Cancel</button>
-          <button class="btn btn-accent" style="background:var(--danger-text)" onclick="saveDeduction()">Add Deduction</button>
+          <button class="btn btn-accent" style="background:var(--danger-text)" id="saveDeductionBtn" onclick="saveDeduction(this)">Add Deduction</button>
         </div>
       </div>
     </div>
@@ -1396,7 +1396,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div id="invExpiryAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--danger-text);margin-bottom:12px"></div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('invModal')">Cancel</button>
-      <button class="btn btn-accent" onclick="saveInvItem()">Save</button>
+      <button class="btn btn-accent" id="saveInvItemBtn" onclick="saveInvItem(this)">Save</button>
     </div>
   </div>
 </div>
@@ -1520,7 +1520,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <textarea id="surveyComment" rows="3" placeholder="What do you like? What can we improve?"></textarea>
     </div>
     <div style="display:flex;gap:8px;flex-direction:column;margin-top:8px">
-      <button class="btn btn-accent btn-full" onclick="submitSatisfactionSurvey()">Submit Feedback</button>
+      <button class="btn btn-accent btn-full" id="submitSurveyBtn" onclick="submitSatisfactionSurvey(this)">Submit Feedback</button>
       <a href="contact.html" id="surveyContactLink" target="_blank" style="text-align:center;font-size:12px;color:var(--muted);text-decoration:underline">Need help instead? Contact Support</a>
       <button class="btn btn-ghost btn-full" onclick="dismissSatisfactionSurvey()">Maybe Later</button>
     </div>
@@ -1568,7 +1568,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="field"><label>Notes <span style="color:var(--dim);font-weight:400">(optional)</span></label><input id="expNotes" type="text" placeholder="Optional details"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
       <button class="btn btn-ghost" onclick="closeModal('expModal')">Cancel</button>
-      <button class="btn btn-accent" onclick="saveExpense()">Save Expense</button>
+      <button class="btn btn-accent" id="saveExpenseBtn" onclick="saveExpense(this)">Save Expense</button>
     </div>
   </div>
 </div>
@@ -1616,7 +1616,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     </div>
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeModal('mAddPayMethod')">Cancel</button>
-      <button class="btn-confirm" onclick="savePaymentMethod()">Save</button>
+      <button class="btn-confirm" id="savePayMethodBtn" onclick="savePaymentMethod(this)">Save</button>
     </div>
   </div>
 </div>
@@ -1690,7 +1690,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('staffModal')">Cancel</button>
-      <button class="btn btn-accent" onclick="saveStaff()">Save</button>
+      <button class="btn btn-accent" id="saveStaffBtn" onclick="saveStaff(this)">Save</button>
     </div>
   </div>
 </div>
@@ -1779,7 +1779,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('composeModal')">Cancel</button>
-      <button class="btn btn-accent" onclick="sendMessage()">Send</button>
+      <button class="btn btn-accent" id="sendMessageBtn" onclick="sendMessage(this)">Send</button>
     </div>
   </div>
 </div>
@@ -3006,7 +3006,8 @@ async function onExpStaffChange() {
   }
 }
 
-async function saveExpense() {
+async function saveExpense(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
   const id     = document.getElementById('expId').value;
   const name   = document.getElementById('expName').value.trim();
   const amount = parseFloat(document.getElementById('expAmount').value);
@@ -3014,18 +3015,20 @@ async function saveExpense() {
   const cat    = document.getElementById('expCategory').value;
   const date   = document.getElementById('expDate').value;
   const notes  = document.getElementById('expNotes').value.trim();
-  if (!name)           { showToast('Enter expense name.', true); return; }
-  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
-  if (!date)           { showToast('Select a date.', true); return; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save Expense'; } };
+  if (!name)           { showToast('Enter expense name.', true); _restore(); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); _restore(); return; }
+  if (!date)           { showToast('Select a date.', true); _restore(); return; }
   const row = { store_id: STORE.id, name, amount, billing_cycle: cycle, category: cat, expense_date: date, notes };
   const { error } = id
     ? await _sb.from('expenses').update(row).eq('id', id)
     : await _sb.from('expenses').insert(row);
-  if (error) { showToast('Error: ' + error.message, true); return; }
+  if (error) { showToast('Error: ' + error.message, true); _restore(); return; }
   if (!id && _pendingSettleAdvanceIds.length) {
     await _sb.from('cash_advances').update({ status: 'settled', settled_at: new Date().toISOString() }).in('id', _pendingSettleAdvanceIds);
     _pendingSettleAdvanceIds = [];
   }
+  _restore();
   closeModal('expModal');
   showToast(id ? 'Expense updated.' : 'Expense added.');
   loadExpenses(_expPeriod);
@@ -3139,17 +3142,20 @@ function openDeductModal(staffId, staffName) {
   document.getElementById('deductModal').classList.add('show');
 }
 
-async function saveDeduction() {
+async function saveDeduction(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
   const staffId = document.getElementById('deductStaffId').value;
   const staffName = document.getElementById('deductStaffName').textContent;
   const amt = parseFloat(document.getElementById('deductAmt').value);
   const reason = document.getElementById('deductReason').value.trim();
-  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
-  if (!reason) { showToast('Enter a reason for this deduction.', true); return; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Add Deduction'; } };
+  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); _restore(); return; }
+  if (!reason) { showToast('Enter a reason for this deduction.', true); _restore(); return; }
   const { error } = await _sb.from('staff_deductions').insert({
     store_id: STORE.id, staff_id: staffId, staff_name: staffName, amount: amt, reason, status: 'pending'
   });
-  if (error) { showToast('Error: ' + error.message, true); return; }
+  if (error) { showToast('Error: ' + error.message, true); _restore(); return; }
+  _restore();
   closeModal('deductModal');
   showToast('Deduction added — will be applied on next payroll run.');
   loadPayroll();
@@ -4069,31 +4075,33 @@ async function openMgrCohModal() {
     '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Use part of this cash directly for salary/expenses instead of remitting it &mdash; no need to send new money.</div>'+
     '<div style="display:flex;gap:8px">'+
     '<input id="cohTransferAmt" type="number" min="0.01" max="'+netTotal+'" step="0.01" placeholder="Amount" style="flex:1;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">'+
-    '<button class="btn btn-accent btn-sm" onclick="transferCohToStaffFunds('+netTotal+')">Transfer</button>'+
+    '<button class="btn btn-accent btn-sm" onclick="transferCohToStaffFunds('+netTotal+',this)">Transfer</button>'+
     '</div>'+
     '</div>'+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Recent Remittances</div>'+
     '<div style="max-height:280px;overflow-y:auto">'+breakdownHtml+'</div>';
 }
 
-async function transferCohToStaffFunds(maxAmount) {
+async function transferCohToStaffFunds(maxAmount, btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Transferring…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Transfer'; } };
   const inp = document.getElementById('cohTransferAmt');
   const amt = parseFloat(inp.value);
-  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
-  if (amt > maxAmount + 0.001) { showToast('Cannot transfer more than the current Net Cash with Manager.', true); return; }
+  if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); _restore(); return; }
+  if (amt > maxAmount + 0.001) { showToast('Cannot transfer more than the current Net Cash with Manager.', true); _restore(); return; }
   const today = _localToday();
   const { error: e1 } = await _sb.from('cash_remittances').insert({
     store_id: STORE.id, cashier_name: 'Owner Transfer', shift_date: today,
     pos_sales: 0, cash_on_hand: amt, difference: amt,
     status: 'owner_payment', description: "Transferred from manager's Cash on Hand"
   });
-  if (e1) { showToast('Error: ' + e1.message, true); return; }
+  if (e1) { showToast('Error: ' + e1.message, true); _restore(); return; }
   const { error: e2 } = await _sb.from('cash_remittances').insert({
     store_id: STORE.id, cashier_name: 'Owner Transfer', shift_date: today,
     pos_sales: 0, cash_on_hand: -amt, difference: -amt,
     status: 'coh_to_staff', description: 'Transferred to Staff Funds'
   });
-  if (e2) { showToast('Error: ' + e2.message, true); return; }
+  if (e2) { showToast('Error: ' + e2.message, true); _restore(); return; }
   showToast(CUR + amt.toFixed(2) + ' transferred to Staff Funds.');
   openMgrCohModal();
 }
@@ -6087,7 +6095,9 @@ function removeContribution(i) {
   _sfContributions.splice(i, 1);
   renderSfContribList();
 }
-async function saveStaff() {
+async function saveStaff(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; } };
   const id   = document.getElementById('staffId').value;
   const origName = document.getElementById('staffOrigName').value.trim();
   const user = document.getElementById('sfUser').value.trim().toLowerCase();
@@ -6095,8 +6105,8 @@ async function saveStaff() {
   const pw   = document.getElementById('sfPw').value;
   const role = document.getElementById('sfRole').value;
   const active = document.getElementById('sfActive').checked;
-  if (!id && !user) { showToast('Username is required.', true); return; }
-  if (!id && !pw)   { showToast('Password is required for new staff.', true); return; }
+  if (!id && !user) { showToast('Username is required.', true); _restore(); return; }
+  if (!id && !pw)   { showToast('Password is required for new staff.', true); _restore(); return; }
   const jobTitle = document.getElementById('sfJobTitle').value.trim();
   const jobDesc  = document.getElementById('sfJobDesc').value.trim();
   const salaryVal = document.getElementById('sfSalary').value;
@@ -6107,13 +6117,14 @@ async function saveStaff() {
     monthly_salary: salary, salary_frequency: salaryFreq, mandatory_contributions: _sfContributions
   };
   if (pw) payload.password_hash = await sha256(pw);
+  let err;
   if (id) {
-    await _sb.from('store_users').update(payload).eq('id', id);
+    ({ error: err } = await _sb.from('store_users').update(payload).eq('id', id));
     // Renaming a staff member splits their history in every report that
     // groups by name (Cashier Remittance Accuracy, Sales Report, etc.),
     // since orders/remittances/logs store a name snapshot, not a staff_id.
     // Cascade the rename into that history so it stays one continuous record.
-    if (name && origName && name !== origName) {
+    if (!err && name && origName && name !== origName) {
       await Promise.all([
         _sb.from('cash_remittances').update({ cashier_name: name }).eq('store_id', STORE.id).eq('cashier_name', origName),
         _sb.from('orders').update({ cashier_name: name }).eq('store_id', STORE.id).eq('cashier_name', origName),
@@ -6122,8 +6133,10 @@ async function saveStaff() {
       ]);
     }
   } else {
-    await _sb.from('store_users').insert({ store_id: STORE.id, username: user, ...payload });
+    ({ error: err } = await _sb.from('store_users').insert({ store_id: STORE.id, username: user, ...payload }));
   }
+  if (err) { showToast('Error: ' + err.message, true); _restore(); return; }
+  _restore();
   closeModal('staffModal'); await loadStaff(); showToast('Staff saved.');
 }
 async function toggleStaff(id, val) {
@@ -6595,12 +6608,15 @@ async function confirmReceiptValid() {
   }
   showToast('Receipt confirmed as valid.');
 }
+let _invalidatingReceipt = false;
 async function invalidateReceipt() {
+  if (_invalidatingReceipt) return;
+  _invalidatingReceipt = true;
   const r = _receiptCache[_currentReceiptLogId];
   const log = _activityLogs.find(l => l.id === _currentReceiptLogId);
   closeModal('receiptModal');
   const toStaff = (allStaff || []).find(s => s.full_name === r?.actorName || s.username === r?.actorName);
-  if (!toStaff) { showToast('Could not identify staff to notify.', true); return; }
+  if (!toStaff) { showToast('Could not identify staff to notify.', true); _invalidatingReceipt = false; return; }
   if (log) {
     let d = {};
     try { d = log.details ? JSON.parse(log.details) : {}; } catch(_) { d = {}; }
@@ -6618,6 +6634,7 @@ async function invalidateReceipt() {
     body: 'Your uploaded receipt is invalid — it could not be verified. Please upload the receipt again with a clear photo.',
     read: false,
   });
+  _invalidatingReceipt = false;
   if (error) { showToast(error.message, true); return; }
   showToast('Invalid receipt notice sent to ' + (toStaff.full_name || toStaff.username) + '.');
 }
@@ -6634,11 +6651,13 @@ function openCompose(toName, body) {
   document.getElementById('msgBody').value = body || '';
   document.getElementById('composeModal').classList.add('show');
 }
-async function sendMessage() {
+async function sendMessage(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Sending…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Send'; } };
   const sel = document.getElementById('msgTo');
   const toUsername = sel.value;
   const body = document.getElementById('msgBody').value.trim();
-  if (!toUsername || !body) { showToast('Please fill in all fields.', true); return; }
+  if (!toUsername || !body) { showToast('Please fill in all fields.', true); _restore(); return; }
   const toStaff = (allStaff || []).find(s => s.username === toUsername);
   const { error } = await _sb.from('store_messages').insert({
     store_id: STORE.id,
@@ -6649,7 +6668,8 @@ async function sendMessage() {
     body,
     read: false,
   });
-  if (error) { showToast(error.message, true); return; }
+  if (error) { showToast(error.message, true); _restore(); return; }
+  _restore();
   closeModal('composeModal');
   showToast('Message sent to ' + (toStaff?.full_name || toUsername) + '.');
   if (document.getElementById('sec-messages').classList.contains('active')) loadMessages();
@@ -6833,14 +6853,17 @@ function handleAddPayMethodQr(e) {
   };
   reader.readAsDataURL(file);
 }
-async function savePaymentMethod() {
+async function savePaymentMethod(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; } };
   const label = document.getElementById('pmLabel').value.trim();
-  if (!label) { showToast('Enter a label (e.g. GCash).', true); return; }
-  if (!pendingPmQrb64) { showToast('Upload a QR code image.', true); return; }
+  if (!label) { showToast('Enter a label (e.g. GCash).', true); _restore(); return; }
+  if (!pendingPmQrb64) { showToast('Upload a QR code image.', true); _restore(); return; }
   const { error } = await _sb.from('payment_methods').insert({
     store_id: STORE.id, label, qr_b64: pendingPmQrb64, qr_payload: pendingPmQrPayload || null, sort_order: PAY_METHODS.length
   });
-  if (error) { showToast('❌ Save failed: ' + error.message, true); return; }
+  if (error) { showToast('❌ Save failed: ' + error.message, true); _restore(); return; }
+  _restore();
   closeModal('mAddPayMethod');
   showToast('Payment method added.');
   loadPaymentMethods();
@@ -7454,7 +7477,14 @@ function calcUsageCost(){
     stockEl.innerHTML=rows.join(' &nbsp;·&nbsp; ');
   }else{stockEl.innerHTML='';}
 }
-async function saveInvItem(){
+async function saveInvItem(btnEl){
+  // The name-match "restock instead of duplicate" logic below only guards
+  // against a duplicate NAME — it still checks against a snapshot of
+  // invItems taken before the click, so two rapid taps on a brand-new item
+  // would both see "no match" and both INSERT, creating an exact duplicate
+  // anyway. This is what actually stops the second tap.
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; } };
   const id=document.getElementById('invItemId').value;
   const name=document.getElementById('invName').value.trim();
   const cat=document.getElementById('invCat').value;
@@ -7464,8 +7494,8 @@ async function saveInvItem(){
   let cost=parseFloat(document.getElementById('invCost').value)||0;
   const lowStock=parseFloat(document.getElementById('invLowStock').value)||5;
   const usageQty=parseFloat(document.getElementById('invUsageQty').value)||1;
-  if(!name){showToast('Item name is required.',true);return;}
-  if(!cat){showToast('Please select a category.',true);return;}
+  if(!name){showToast('Item name is required.',true);_restore();return;}
+  if(!cat){showToast('Please select a category.',true);_restore();return;}
   if(!sku) sku=genAutoSku(cat, invItems);
   // "How many pcs in 1 [unit]?" (invPiecesPerUnit) is informational only —
   // its live preview already shows the pcs-total math. It used to also
@@ -7488,13 +7518,14 @@ async function saveInvItem(){
     else{({error:err}=await _sb.from('inventory_items').insert({store_id:STORE.id,...p2}));}
     usageNotSaved=true;
   }
-  if(err){showToast(err.message,true);return;}
+  if(err){showToast(err.message,true);_restore();return;}
   // Sync photos to matching product for visual scanner (best effort, non-blocking)
   if(imgData){
     _invPendingImgs=[];
     _sb.from('products').select('id').eq('store_id',STORE.id).eq('name',name).maybeSingle()
       .then(({data:mp})=>{ if(mp) _sb.from('products').update({image_b64:imgData}).eq('id',mp.id).then(()=>{}); });
   }
+  _restore();
   await loadDbCategories();
   const fromProd=document.getElementById('invModal').dataset.fromProd==='1';
   document.getElementById('invModal').dataset.fromProd='';
@@ -7754,8 +7785,10 @@ async function _markSurveyPrompted() {
   STORE.survey_prompted_at = now;
   await _sb.from('stores').update({ survey_prompted_at: now }).eq('id', STORE.id);
 }
-async function submitSatisfactionSurvey() {
+async function submitSatisfactionSurvey(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; }
   if (!_surveyRating) { showToast('Please select a rating from 1 to 10.', true); return; }
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Submitting…'; }
   const comment = document.getElementById('surveyComment').value.trim();
   const email = document.getElementById('sbUser')?.textContent || '';
   await _sb.from('satisfaction_surveys').insert({
