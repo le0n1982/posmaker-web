@@ -1271,8 +1271,8 @@ input:checked + .slider:before{transform:translateX(18px)}
       <label class="toggle"><input type="checkbox" id="pAvail" checked><span class="slider"></span></label>
     </div>
     <div class="m-actions">
-      <button class="btn btn-ghost" onclick="closeModal('prodModal')">Cancel</button>
-      <button class="btn btn-accent" id="saveProdBtn" onclick="saveProd()">Save</button>
+      <button class="btn btn-ghost" id="cancelProdBtn" onclick="closeModal('prodModal')">Cancel</button>
+      <button class="btn btn-accent" id="saveProdBtn" onclick="saveProd(this)">Save</button>
     </div>
   </div>
 </div>
@@ -5399,6 +5399,13 @@ function openProdModal(p) {
   invSel.innerHTML='<option value="">&#8212; Select item &#8212;</option>'+invItems.map(i=>`<option value="${i.id}" data-cost="${i.cost_price||0}">${i.name}${i.sku?' ('+i.sku+')':''}</option>`).join('');
   renderInvLinkList();
   updateProfitPreview();
+  // Reset in case a previous open got left mid-save (e.g. a network error
+  // that never reached _restore()) — without this the Save/Cancel buttons
+  // could stay stuck disabled on the next open.
+  _savingProd = false;
+  const _saveBtn = document.getElementById('saveProdBtn'), _cancelBtn = document.getElementById('cancelProdBtn');
+  if (_saveBtn) { _saveBtn.disabled = false; _saveBtn.textContent = 'Save'; }
+  if (_cancelBtn) _cancelBtn.disabled = false;
   document.getElementById('prodModal').classList.add('show');
   setTimeout(()=>document.getElementById('pName').focus(),50);
 }
@@ -5515,7 +5522,25 @@ function updateProfitPreview(){
   document.getElementById('profitNote').textContent=profit<0?'&#9888; Selling below cost':'';
 }
 function onInvLinkChange(){ updateProfitPreview(); }
-async function saveProd(){
+let _savingProd = false;
+async function saveProd(btnEl){
+  // Without this, a slow connection made the Save button feel unresponsive
+  // enough to tempt a second tap — and since there was nothing here to stop
+  // it, that second tap fired a second INSERT, creating an exact duplicate
+  // product. Cancel is disabled too, since closing the modal never actually
+  // aborted an in-flight save — it just hid it while the request kept going
+  // and saved anyway, right after the owner thought they'd cancelled it.
+  if (_savingProd) return;
+  _savingProd = true;
+  const cancelBtn = document.getElementById('cancelProdBtn');
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  if (cancelBtn) cancelBtn.disabled = true;
+  const _restore = () => {
+    _savingProd = false;
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; }
+    if (cancelBtn) cancelBtn.disabled = false;
+  };
+  try {
   const id=document.getElementById('prodId').value;
   const name=document.getElementById('pName').value.trim();
   const cat=document.getElementById('pCat').value;
@@ -5525,14 +5550,14 @@ async function saveProd(){
   const costPrice=parseFloat(document.getElementById('pCostPrice').value)||0;
   const pcsPerPack=parseFloat(document.getElementById('pPcsPerPack').value)||0;
   const avail=document.getElementById('pAvail').checked;
-  if(!name||isNaN(price)||price<0){showToast('Name and price are required.',true);return;}
-  if(!cat){showToast('Please select a category.',true);return;}
+  if(!name||isNaN(price)||price<0){showToast('Name and price are required.',true);_restore();return;}
+  if(!cat){showToast('Please select a category.',true);_restore();return;}
   if(!sku) sku=genAutoSku(cat, allProds);
   if (sku) {
     let dupQ = _sb.from('products').select('id,name').eq('store_id', STORE.id).eq('sku', sku);
     if (id) dupQ = dupQ.neq('id', id);
     const { data: dupRows } = await dupQ.limit(1);
-    if (dupRows && dupRows.length) { showToast('This barcode is already registered to "' + dupRows[0].name + '". Try another barcode.', true); return; }
+    if (dupRows && dupRows.length) { showToast('This barcode is already registered to "' + dupRows[0].name + '". Try another barcode.', true); _restore(); return; }
   }
   // Compress photos — skip if already small (already compressed)
   const imgs=await Promise.all(_prodPendingImgs.map(b=>b.length>15000?_compressImg(b):Promise.resolve(b)));
@@ -5545,7 +5570,7 @@ async function saveProd(){
     ({data:nr,error:err}=await _sb.from('products').insert({store_id:STORE.id,...payload,available:true}).select('id').single());
     if(nr) savedId=nr.id;
   }
-  if(err){showToast(err.message,true);return;}
+  if(err){showToast(err.message,true);_restore();return;}
   // Compute + save AI embeddings in background so POS can detect without recomputing
   if(imgs.length>0&&savedId){
     _loadDashMn().then(ok=>{
@@ -5556,7 +5581,9 @@ async function saveProd(){
     });
   }
   _prodPendingImgs=[];
+  _restore();
   closeModal('prodModal');await loadProducts();loadCategories();showToast('Product saved.');
+  } catch(e) { _restore(); throw e; }
 }
 async function toggleProd(id, val) {
   await _sb.from('products').update({ available: val }).eq('id', id);
