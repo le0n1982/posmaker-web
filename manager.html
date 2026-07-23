@@ -2755,6 +2755,12 @@ async function loadCashSummary() {
   const netTotal       = confirmedTotal + adjTotal + mgrRemitTotal + ownerToMgrTotal;
   const purchaseTotal  = adjRows.filter(r=>r.status==='purchase').reduce((s,r)=>s+Math.abs(parseFloat(r.cash_on_hand||0)),0);
   const depositTotal   = adjRows.filter(r=>r.status==='deposit').reduce((s,r)=>s+parseFloat(r.cash_on_hand||0),0);
+  // Confirmed from previous days (not today) — shown as one carry-over line
+  // instead of re-listing every remittance back to when the store started;
+  // that history already lives in Activity Log / Sales Report for whoever
+  // needs to audit it, so daily use here doesn't need to re-show it.
+  const todayConfirmedRows = confirmedRows.filter(r => r.shift_date === today);
+  const prevConfirmedTotal = confirmedRows.filter(r => r.shift_date !== today).reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
   // List only the adjustment types actually present, in plain words — a
   // static "(stock/deposit/refunds)" label was misleading when e.g. no
   // stock was ever bought with drawer cash, just refunds.
@@ -2771,8 +2777,18 @@ async function loadCashSummary() {
     rows: confirmedRows.map(r => ({ name: r.cashier_name, date: r.shift_date, amount: parseFloat(r.cash_on_hand||0) })),
     adjTotal, adjTypesPresent, mgrRemitTotal, ownerToMgrTotal, netTotal
   };
-  _cashBreakdown = confirmedRows.length
-    ? confirmedRows.map(r => {
+  // The manager sees TODAY's remittances individually plus one carry-over
+  // line for everything older — not the full history back to day one. That
+  // full detail isn't lost: _cashBreakdownData above still keeps every row,
+  // saved with the deposit itself so the OWNER can still see the complete
+  // itemized justification later via "Breakdown". Daily operational use just
+  // doesn't need months of already-recorded history re-shown every time.
+  _cashBreakdown = (todayConfirmedRows.length || prevConfirmedTotal)
+    ? (prevConfirmedTotal !== 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+          <span style="color:var(--muted)">Carry-over from previous days</span>
+          <span style="font-weight:600;color:#10b981">+&#8369;${prevConfirmedTotal.toFixed(2)}</span>
+        </div>` : '')
+      + todayConfirmedRows.map(r => {
         const d = r.shift_date || '';
         const cash = parseFloat(r.cash_on_hand||0);
         return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
@@ -2790,9 +2806,6 @@ async function loadCashSummary() {
           <span style="font-weight:600;color:#10b981">+&#8369;${ownerToMgrTotal.toFixed(2)}</span>
         </div>` : '')
     : '<div style="font-size:12px;color:var(--muted)">No cashier remittances yet.</div>';
-
-  // Confirmed from previous days (not today) — shown as carry-over
-  const prevConfirmedTotal = confirmedRows.filter(r => r.shift_date !== today).reduce((s,r) => s + parseFloat(r.cash_on_hand||0), 0);
 
   el.innerHTML = `
     <div style="background:var(--s2);border-radius:8px;padding:10px 12px;text-align:center;margin-bottom:10px">
