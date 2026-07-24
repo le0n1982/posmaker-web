@@ -1349,7 +1349,7 @@ input:checked + .slider:before{transform:translateX(18px)}
           style="width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid #252540;border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
         <div id="invQcResult" style="margin-top:6px;font-size:13px;color:#00b4d8;font-weight:600;min-height:18px"></div>
         <select id="invWallet" style="width:100%;margin-top:8px;padding:8px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:Inter,sans-serif;outline:none">
-          <option value="Wallet">Paid from: Wallet (Cash)</option>
+          <option value="Wallet">Paid from: Cash (Drawer)</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);font-weight:400;cursor:pointer">
           <input type="checkbox" id="invOutsideWallet" onchange="document.getElementById('invWallet').disabled=this.checked" style="width:auto">
@@ -1443,7 +1443,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="field" id="addStockWalletField" style="display:none">
       <label>Paid From</label>
       <select id="addStockWallet" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
-        <option value="Wallet">Wallet (Cash)</option>
+        <option value="Wallet">Cash (Drawer)</option>
       </select>
       <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--muted);font-weight:400;cursor:pointer">
         <input type="checkbox" id="addStockOutsideWallet" onchange="document.getElementById('addStockWallet').disabled=this.checked" style="width:auto">
@@ -2595,6 +2595,15 @@ function toggleWalletMethod(i) {
           </div>
         </div>`;
       }
+      if (e._kind === 'stock_purchase') {
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="color:var(--text)">${e.name}</div>
+            <div style="color:var(--dim);font-size:10px">${new Date(e.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</div>
+          </div>
+          <strong style="color:var(--danger-text)">&minus;${CUR}${e.amount.toFixed(2)}</strong>
+        </div>`;
+      }
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">
         <div>
           <div style="color:var(--text)">${e.order || 'E-Pay'}${e.cashier ? ' &middot; ' + e.cashier : ''}</div>
@@ -2626,7 +2635,7 @@ async function loadWallet() {
   const balEl = document.getElementById('walletBalanceVal');
   const listEl = document.getElementById('walletHistoryList');
   if (!balEl || !listEl) return;
-  const [{ data: crRows, error }, { data: logRows }, { data: sentRows }, { data: epayLogs }, { data: payMethods }] = await Promise.all([
+  const [{ data: crRows, error }, { data: logRows }, { data: sentRows }, { data: epayLogs }, { data: payMethods }, { data: stockPurchases }] = await Promise.all([
     _sb.from('cash_remittances').select('id,cash_on_hand,cashier_name,created_at,description,owner_confirmed')
       .eq('store_id', STORE.id).eq('status', 'mgr_remit').order('created_at', { ascending: false }),
     _sb.from('activity_logs').select('details').eq('store_id', STORE.id).eq('action', 'MGR_REMIT'),
@@ -2641,7 +2650,14 @@ async function loadWallet() {
     // Payments" banner already surfaces. Only proofs the owner has actually
     // confirmed count here, same as manager deposits above.
     _sb.from('activity_logs').select('id,details,created_at,target_name,actor_name').eq('store_id', STORE.id).eq('action', 'EPAY_PROOF'),
-    _sb.from('payment_methods').select('label').eq('store_id', STORE.id).order('sort_order')
+    _sb.from('payment_methods').select('label').eq('store_id', STORE.id).order('sort_order'),
+    // Stock restocked with "Paid From" set to an actual configured bank/
+    // e-wallet (not plain "Wallet" cash, and not "paid outside the Wallet")
+    // took that money straight out of the matching bank balance — deduct it
+    // the same way a "Send Payment" deduction does. The bank name is parsed
+    // from the note (no dedicated column) since Add Stock/Edit Item only
+    // ever appends " via <bank>" for this exact case.
+    _sb.from('expenses').select('id,name,amount,notes,expense_date,category').eq('store_id', STORE.id).eq('category', 'Stock Purchase')
   ]);
   if (error) {
     listEl.innerHTML = `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">${error.message}</div>`;
@@ -2685,7 +2701,22 @@ async function loadWallet() {
     _bump(method, r.owner_confirmed ? amt : 0, { _kind: 'deposit', id: r.id, amount: amt, created_at: r.created_at, cashier: r.cashier_name, note: (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim(), confirmed: r.owner_confirmed });
     if (d.receipt_b64) _receiptCache[r.id] = { b64: d.receipt_b64, actorName: r.cashier_name, label: `Deposit from ${r.cashier_name} · ${method} · ${CUR}${amt.toFixed(2)}` };
   });
-  const balance = receivedTotal - sentTotal + epayTotal;
+  // Restocking with "Paid From" set to an actual bank (not plain Wallet
+  // cash, not "paid outside the Wallet") pulled that money out of the
+  // matching bank balance — deduct it from both the total and that bank's
+  // own bucket, same as a "Send Payment" deduction.
+  const configuredLabelsForStock = (payMethods || []).map(m => m.label);
+  let stockPurchaseTotal = 0;
+  (stockPurchases || []).forEach(e => {
+    const m = /\svia\s(.+)$/.exec(e.notes || '');
+    const bank = m ? m[1].trim() : '';
+    if (!bank || !configuredLabelsForStock.includes(bank)) return;
+    const amt = parseFloat(e.amount) || 0;
+    if (!amt) return;
+    stockPurchaseTotal += amt;
+    _bump(bank, -amt, { _kind: 'stock_purchase', id: e.id, amount: amt, created_at: e.expense_date, name: e.name || 'Restock' });
+  });
+  const balance = receivedTotal - sentTotal + epayTotal - stockPurchaseTotal;
   const fmt = n => CUR + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   balEl.textContent = fmt(balance);
   balEl.style.color = balance < 0 ? 'var(--danger-text)' : 'var(--ok-text)';
@@ -2695,6 +2726,7 @@ async function loadWallet() {
     if (receivedTotal > 0) subParts.push(`${fmt(receivedTotal)} from managers`);
     if (epayTotal > 0) subParts.push(`${fmt(epayTotal)} from e-pay`);
     if (sentTotal > 0) subParts.push(`\u2212 ${fmt(sentTotal)} sent to staff`);
+    if (stockPurchaseTotal > 0) subParts.push(`\u2212 ${fmt(stockPurchaseTotal)} stock purchases`);
     subEl.textContent = subParts.length ? subParts.join('  ') : 'Confirmed deposits from managers and e-pay sales';
   }
   const methodWrap = document.getElementById('walletByMethodWrap');
@@ -7444,7 +7476,7 @@ async function openInvModal(item){
   // e-wallets the owner already configured under Settings — same list used
   // for Send Payment and the quick "+Add Stock" button.
   const invWalletSel=document.getElementById('invWallet');
-  invWalletSel.innerHTML='<option value="Wallet">Paid from: Wallet (Cash)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">Paid from: ${m.label}</option>`).join('');
+  invWalletSel.innerHTML='<option value="Wallet">Paid from: Cash (Drawer)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">Paid from: ${m.label}</option>`).join('');
   invWalletSel.disabled=false;
   document.getElementById('invOutsideWallet').checked=false;
   if(costPer>0) calcUsageCost();
@@ -7673,7 +7705,7 @@ async function openAddStock(id){
   // e-wallets the owner already configured under Settings — same list used
   // for Send Payment.
   const walletSel=document.getElementById('addStockWallet');
-  walletSel.innerHTML='<option value="Wallet">Wallet (Cash)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
+  walletSel.innerHTML='<option value="Wallet">Cash (Drawer)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
   walletSel.disabled=false;
   document.getElementById('addStockOutsideWallet').checked=false;
   setTimeout(()=>document.getElementById('addStockAmt').focus(),50);
