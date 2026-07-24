@@ -8466,6 +8466,12 @@ function openSendPayModal(staffId){
   _spStaffId=staffId;
   document.getElementById('spRecipient').textContent=(s.full_name||s.username)||'—';
   document.getElementById('spAmt').value='';
+  // "Cash" always available (owner handing over physical cash), plus
+  // whatever banks/e-wallets the owner already configured under Settings —
+  // same PAY_METHODS list the cashier's E-Pay QR picker uses, so there's
+  // only one place to manage the list of wallets.
+  const walletSel=document.getElementById('spWallet');
+  walletSel.innerHTML='<option value="Cash">Cash</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
   document.getElementById('spNote').value='';
   document.getElementById('spFile').value='';
   document.getElementById('spFileCam').value='';
@@ -8518,16 +8524,18 @@ function closeSendPayQR(){
   document.getElementById('spQRModal').classList.remove('show');
 }
 async function saveSendPay(){
+  const btn=document.getElementById('spBtn');
+  if(btn.disabled)return;
   const s=(allStaff||[]).find(x=>x.id===_spStaffId)||{};
   const amt=parseFloat(document.getElementById('spAmt').value);
   if(!amt||amt<=0){showToast('Enter a valid amount.',true);return;}
   const note=document.getElementById('spNote').value.trim();
+  const wallet=document.getElementById('spWallet').value||'Cash';
   const rImg=document.getElementById('spReceiptImg');
   const rcpt=(rImg.src&&rImg.src.startsWith('data:'))?rImg.src:null;
-  const btn=document.getElementById('spBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending…';
   const today=_localToday();
-  const desc='Owner sent'+(note?': '+note:'');
+  const desc='Owner sent'+(wallet&&wallet!=='Cash'?' via '+wallet:'')+(note?': '+note:'');
   const {data:crD,error:crE}=await _sb.from('cash_remittances').insert({
     store_id:STORE.id,cashier_name:s.username||'staff',shift_date:today,
     pos_sales:0,cash_on_hand:amt,difference:amt,
@@ -8580,6 +8588,12 @@ async function saveSendPay(){
     <div class="field">
       <label>Amount (&#8369;)</label>
       <input id="spAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:var(--ok-text)">
+    </div>
+    <div class="field">
+      <label>Wallet / Bank Used</label>
+      <select id="spWallet" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
+        <option value="Cash">Cash</option>
+      </select>
     </div>
     <div class="field">
       <label>Note / Purpose (optional)</label>
