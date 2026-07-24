@@ -1558,6 +1558,16 @@ input:checked + .slider:before{transform:translateX(18px)}
     <input type="hidden" id="addStockId">
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px" id="addStockInfo"></div>
     <div class="field"><label>Amount to Add</label><input id="addStockAmt" type="number" min="1" step="1" placeholder="e.g. 50"></div>
+    <div class="field">
+      <label>Price per unit <span style="color:var(--dim);font-weight:400">(optional — leave blank if just correcting a count)</span></label>
+      <input id="addStockPrice" type="number" min="0" step="0.01" placeholder="e.g. 45.00" oninput="document.getElementById('addStockWalletField').style.display = parseFloat(this.value) > 0 ? '' : 'none'">
+    </div>
+    <div class="field" id="addStockWalletField" style="display:none">
+      <label>Paid From</label>
+      <select id="addStockWallet" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
+        <option value="Wallet">Wallet (Cash)</option>
+      </select>
+    </div>
     <div class="m-actions">
       <button class="btn btn-ghost" onclick="closeModal('addStockModal')">Cancel</button>
       <button class="btn btn-accent" onclick="confirmAddStock(this)">Add Stock</button>
@@ -7890,24 +7900,50 @@ async function adjInvStock(id,delta){
   _sb.from('stock_history').insert({ store_id: STORE.id, inventory_item_id: id, change_type: 'MANUAL_ADJUST', qty_change: delta }).then(() => {});
   item.stock=newVal;renderInv(invItems);
 }
-function openAddStock(id){
+async function openAddStock(id){
   const i=invItems.find(x=>x.id===id);if(!i)return;
   document.getElementById('addStockId').value=id;
   document.getElementById('addStockAmt').value='';
+  // Pre-fill with the item's last known cost so re-stocking at the same
+  // price doesn't require re-typing it — still editable if this batch cost
+  // more/less than last time.
+  document.getElementById('addStockPrice').value=i.cost_price?parseFloat(i.cost_price).toFixed(2):'';
   document.getElementById('addStockInfo').innerHTML=`<strong>${i.name}</strong> &nbsp;Â·&nbsp; ${i.unit||'pc'} &nbsp;Â·&nbsp; Current: <strong style="color:var(--accent)">${i.stock??0}</strong>`;
   document.getElementById('addStockModal').classList.add('show');
+  const walletField=document.getElementById('addStockWalletField');
+  walletField.style.display=i.cost_price?'':'none';
+  // "Wallet" covers cash straight from the till, plus whatever banks/
+  // e-wallets the owner already configured under Settings — same list used
+  // for Send Payment.
+  const walletSel=document.getElementById('addStockWallet');
+  walletSel.innerHTML='<option value="Wallet">Wallet (Cash)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
   setTimeout(()=>document.getElementById('addStockAmt').focus(),50);
 }
 async function confirmAddStock(btnEl){
   const id=document.getElementById('addStockId').value;
   const amt=parseFloat(document.getElementById('addStockAmt').value);
   if(!amt||amt<=0){showToast('Enter a valid amount.',true);return;}
+  const price=parseFloat(document.getElementById('addStockPrice').value)||0;
+  const wallet=document.getElementById('addStockWallet').value||'Wallet';
   const i=invItems.find(x=>x.id===id);if(!i)return;
   if(btnEl){ if(btnEl.disabled) return; btnEl.disabled=true; btnEl.textContent='Adding…'; }
   const newVal=parseFloat(i.stock??0)+amt;
-  await _sb.from('inventory_items').update({stock:newVal}).eq('id',id);
+  const updateRow={stock:newVal};
+  if(price>0) updateRow.cost_price=price;
+  await _sb.from('inventory_items').update(updateRow).eq('id',id);
   _sb.from('stock_history').insert({ store_id: STORE.id, inventory_item_id: id, change_type: 'MANUAL_ADD', qty_change: amt }).then(() => {});
-  i.stock=newVal;closeModal('addStockModal');renderInv(invItems);
+  // Only record a real expense when a price was actually entered — a plain
+  // stock count correction (no price) shouldn't create a phantom purchase.
+  if(price>0){
+    const today=_localToday();
+    _sb.from('expenses').insert({
+      store_id: STORE.id, name: `Restock: ${i.name}`, amount: price*amt, billing_cycle:'one-time',
+      category:'Stock Purchase', expense_date: today,
+      notes: `${amt} ${i.unit||'pc'} @ ${CUR}${price.toFixed(2)}/${i.unit||'pc'} via ${wallet}`
+    }).then(({error})=>{ if(!error && typeof loadExpenses==='function') loadExpenses(_expPeriod); });
+  }
+  i.stock=newVal; if(price>0) i.cost_price=price;
+  closeModal('addStockModal');renderInv(invItems);
   showToast(`Added ${amt} ${i.unit||'pc'} to ${i.name}. New: ${newVal}`);
   if(btnEl){ btnEl.disabled=false; btnEl.textContent='Add Stock'; }
 }
