@@ -898,7 +898,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Cash you're handing over to the manager mid-shift — deducted from your Cash Drawer, same as an expense.</p>
     <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Amount</label>
     <div id="ftDrawerNote" style="font-size:11px;color:var(--muted);margin:-4px 0 6px">&#8212;</div>
-    <input class="inp" id="ftAmount" type="number" min="0" step="0.01" placeholder="0.00">
+    <input class="inp" id="ftAmount" type="number" min="0" step="0.01" placeholder="0.00" oninput="checkFundTransferAmt()">
     <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Reason</label>
     <input class="inp" id="ftReason" type="text" placeholder="e.g. Need change for another till">
     <div class="m-actions">
@@ -1804,14 +1804,34 @@ async function _calcCashDrawerBalance() {
     .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
   return _remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit + voidRefundSinceRemit - expensesSinceRemit;
 }
+let _ftDrawerBalance = 0;
 async function openFundTransfer() {
   document.getElementById('ftAmount').value = '';
   document.getElementById('ftReason').value = '';
   document.getElementById('mFundTransfer').classList.add('show');
   const noteEl = document.getElementById('ftDrawerNote');
   noteEl.textContent = 'Checking Cash Drawer…';
-  const balance = await _calcCashDrawerBalance();
-  noteEl.textContent = `Cash Drawer: ${CUR||'₱'}${balance.toFixed(2)} available`;
+  noteEl.style.color = 'var(--muted)';
+  const btn = document.getElementById('ftSaveBtn');
+  btn.disabled = false; btn.innerHTML = '&#10003; Confirm Transfer';
+  _ftDrawerBalance = await _calcCashDrawerBalance();
+  noteEl.textContent = `Cash Drawer: ${CUR||'₱'}${_ftDrawerBalance.toFixed(2)} available`;
+}
+// Live feedback as she types — blocks the Confirm button immediately
+// instead of only rejecting after she taps Confirm Transfer.
+function checkFundTransferAmt() {
+  const amount = parseFloat(document.getElementById('ftAmount').value);
+  const noteEl = document.getElementById('ftDrawerNote');
+  const btn = document.getElementById('ftSaveBtn');
+  if (!isNaN(amount) && amount > _ftDrawerBalance + 0.01) {
+    noteEl.textContent = `Cash Drawer only has ${CUR||'₱'}${_ftDrawerBalance.toFixed(2)} — cannot transfer more than that.`;
+    noteEl.style.color = '#ef4444';
+    btn.disabled = true; btn.style.opacity = '.4';
+  } else {
+    noteEl.textContent = `Cash Drawer: ${CUR||'₱'}${_ftDrawerBalance.toFixed(2)} available`;
+    noteEl.style.color = 'var(--muted)';
+    btn.disabled = false; btn.style.opacity = '1';
+  }
 }
 // ── Received Fund (money sent by Manager/Owner, awaiting confirmation) ─────
 async function checkReceivedFundsBadge() {
@@ -1827,16 +1847,32 @@ async function openReceivedFunds() {
   const listEl = document.getElementById('rfList');
   listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading…</div>';
   document.getElementById('mReceivedFunds').classList.add('show');
-  const { data } = await _sb.from('cash_remittances').select('id,cash_on_hand,status,description,created_at')
-    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
-    .in('status', ['owner_payment', 'mgr_payment'])
-    .order('created_at', { ascending: false });
+  // Look up the last real remit so "Recently Received" only shows funds
+  // that are still part of the CURRENT Cash Drawer — one confirmed before
+  // an earlier remit was already handed over and isn't sitting in the
+  // drawer anymore, so listing it here would be misleading.
+  const { data: lastRemitRows } = await _sb.from('cash_remittances')
+    .select('created_at,description').eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
+    .neq('status', 'fund_transfer').order('created_at', { ascending: false }).limit(5);
+  const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
+  const sinceRemit = lastRemit?.created_at || '1970-01-01T00:00:00Z';
+  const [{ data }, { data: confirmedData }] = await Promise.all([
+    _sb.from('cash_remittances').select('id,cash_on_hand,status,description,created_at')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
+      .in('status', ['owner_payment', 'mgr_payment'])
+      .order('created_at', { ascending: false }),
+    _sb.from('cash_remittances').select('id,cash_on_hand,description,created_at')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
+      .eq('status', 'payment_confirmed').gte('created_at', sinceRemit)
+      .order('created_at', { ascending: false })
+  ]);
   const rows = data || [];
-  if (!rows.length) {
+  const confirmedRows = confirmedData || [];
+  if (!rows.length && !confirmedRows.length) {
     listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No pending funds.</div>';
     return;
   }
-  listEl.innerHTML = rows.map(r => {
+  const pendingHtml = rows.map(r => {
     const amt = parseFloat(r.cash_on_hand) || 0;
     const from = r.status === 'mgr_payment' ? 'Manager' : 'Owner';
     const dt = new Date(r.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1850,6 +1886,25 @@ async function openReceivedFunds() {
       <button class="btn-confirm" style="width:100%" onclick="confirmReceivedFund('${r.id}', this)">&#10003; Yes, I received it</button>
     </div>`;
   }).join('');
+  // Confirmed funds STAY listed here (not just while pending) so it's clear
+  // each one safely landed in the Cash Drawer instead of appearing to
+  // vanish the moment it's confirmed — a cashier who confirms fund #1 then
+  // sees fund #2 arrive would otherwise have no way to tell #1 wasn't lost,
+  // it's just already counted.
+  const confirmedHtml = confirmedRows.length ? `
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:${rows.length ? '14px' : '0'} 0 8px">Recently Received (already in your Cash Drawer)</div>
+    ${confirmedRows.map(r => {
+      const amt = parseFloat(r.cash_on_hand) || 0;
+      const dt = new Date(r.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:6px;opacity:.75">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:var(--muted)">${dt}${r.description ? ' &middot; ' + r.description : ''}</span>
+          <span style="font-size:15px;font-weight:700;color:#10b981">&#10003; +${CUR||'₱'}${amt.toFixed(2)}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  ` : '';
+  listEl.innerHTML = (rows.length ? pendingHtml : '<div style="text-align:center;color:var(--muted);padding:12px 0">No pending funds.</div>') + confirmedHtml;
 }
 async function confirmReceivedFund(id, btn) {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Confirming…';
@@ -2468,7 +2523,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.24';
+const POS_BUILD = '1.9.26';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

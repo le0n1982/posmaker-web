@@ -1,7 +1,9 @@
 {
-  "version": "1.9.24",
+  "version": "1.9.26",
   "date": "2026-07-24",
   "changes": [
+    "💰 \"Funds\" (Received Fund) screen now keeps recently-confirmed funds visible under a \"Recently Received\" section instead of them disappearing the moment they're confirmed — previously, confirming one fund then receiving another made the first one look like it had vanished, even though it was already safely counted in Cash Drawer.",
+    "🔒 Fund Transfer to Manager now blocks the Confirm button immediately (with a red warning) the moment the typed amount exceeds the Cash Drawer balance, instead of only rejecting it after tapping Confirm Transfer.",
     "💰 Cash Remittance (Logout) no longer asks the cashier to manually count and type \"Cash on Hand\" — it's now a plain computed number (\"Cash Drawer Amount\") based on sales, received funds, void/refund adjustments, and expenses. Remittance Amount (how much she's actually handing over) starts at 0 and must be typed in — it can never exceed the Cash Drawer Amount, but can be less to leave float for the next cashier. This removes Over/Short reconciliation in favor of a simpler handoff.",
     "🔧 CRITICAL FIX: when confirming a Cash Remittance (Logout), the actually-SAVED record used a different, incomplete formula than the one shown on-screen right up to \"Confirm & Logout\" — it silently dropped confirmed Received Funds and Void/Refund adjustments from the saved Over/Short. A confirmed Received Fund could vanish from the official record even though it was correctly shown to the cashier moments before confirming. Now the saved record always matches what was shown.",
     "🎨 Floating widgets (Discount, Add Items) now open centered on screen instead of popping up near their trigger button — a cleaner, more consistent look. Calculator stays bottom-right as before.",

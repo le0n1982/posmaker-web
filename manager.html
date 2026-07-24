@@ -3527,7 +3527,9 @@ async function openMgrDepositModal() {
   document.getElementById('mgrDepBankQrWrap').style.display = 'none';
   const { data } = await _sb.from('payment_methods').select('*').eq('store_id', MGR.store_id).order('sort_order');
   _mgrDepPayMethods = data || [];
-  bankSel.innerHTML = '<option value="">' + (_mgrDepPayMethods.length ? 'Select bank/e-wallet...' : 'No banks set up yet') + '</option>' +
+  // "Cash" covers handing the money straight to the owner in person (no
+  // bank/e-wallet involved) — always available even if no banks are set up.
+  bankSel.innerHTML = '<option value="">Select bank/e-wallet or Cash...</option><option value="Cash">Cash</option>' +
     _mgrDepPayMethods.map(m => `<option value="${m.label.replace(/"/g,'&quot;')}">${m.label}</option>`).join('');
   onMgrDepBankChange();
 }
