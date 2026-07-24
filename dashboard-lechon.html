@@ -334,6 +334,12 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div id="epayPendingAlert" style="display:none;background:var(--info-bg);border:1px solid #60a5fa;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="openPendingEpayCashierLog()">
         <strong style="color:var(--info-text)">&#128241; Unconfirmed E-Pay Payments</strong> &#8212; <span id="epayPendingCount" style="color:var(--text)"></span> <span style="color:var(--info-text);text-decoration:underline">View Staff &#8594;</span>
       </div>
+      <!-- A manager approved a Refund charged to her own cash without enough
+           Net Cash to cover it — she has no owner inbox to message directly,
+           so it surfaces here instead. -->
+      <div id="refundFundsAlert" style="display:none;background:var(--danger-bg);border:1px solid #ef4444;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;cursor:pointer" onclick="nav('staff')">
+        <strong style="color:#ef4444">&#128176; Refund Needs Funds</strong> &#8212; <span id="refundFundsList" style="color:var(--text)"></span> <span style="color:#ef4444;text-decoration:underline">Send Payment &#8594;</span>
+      </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="sc-label">Today's Orders</div><div class="sc-val" id="tdOrders">&#8212;</div><div class="sc-sub">orders today</div></div>
         <div class="stat-card"><div class="sc-label">Today's Revenue</div><div class="sc-val" id="tdRev">&#8212;</div><div class="sc-sub">gross sales</div></div>
@@ -3848,6 +3854,31 @@ async function checkStaleRemittances() {
   }
 }
 
+// ── Refund needs owner funds ──────────────────────────────────────────────
+// A manager approved a Refund charged to her own cash without enough Net
+// Cash to actually cover it (see approveVoidRefund in manager.html) — she
+// has no way to message the owner directly, so this surfaces it here
+// instead. Resolving it is manual: the owner sends funds (Send Payment);
+// this just naturally ages out of the 7-day window once handled.
+async function checkRefundFundsAlert() {
+  const alertEl = document.getElementById('refundFundsAlert');
+  if (!alertEl || !STORE?.id) return;
+  const sinceDate = new Date(Date.now() - 7 * 86400000).toISOString();
+  const { data: logs } = await _sb.from('activity_logs')
+    .select('actor_name,details,created_at').eq('store_id', STORE.id).eq('action', 'REFUND_NEEDS_FUNDS')
+    .gte('created_at', sinceDate).order('created_at', { ascending: false }).limit(10);
+  if (!logs?.length) { alertEl.style.display = 'none'; return; }
+  const flagged = logs.map(l => {
+    let d = {}; try { d = JSON.parse(l.details || '{}'); } catch (_) {}
+    return { manager: l.actor_name, amount: parseFloat(d.amount) || 0, orderId: d.order_id };
+  }).filter(f => f.amount > 0);
+  if (!flagged.length) { alertEl.style.display = 'none'; return; }
+  const list = flagged.slice(0, 5).map(f => `${f.manager} (${CUR}${f.amount.toFixed(2)}, Order #${f.orderId})`).join(', ')
+    + (flagged.length > 5 ? ` +${flagged.length - 5} more` : '');
+  document.getElementById('refundFundsList').textContent = list;
+  alertEl.style.display = 'block';
+}
+
 async function loadDashboard() {
   if (!STORE) return;
   const _tbody = document.getElementById('ordersTbody');
@@ -3937,6 +3968,7 @@ async function loadDashboard() {
     checkUnremittedCash();
     checkLateRemittances();
     checkStaleRemittances();
+    checkRefundFundsAlert();
     checkPendingCashAdvance();
     checkPendingEpayProofs();
 

@@ -460,14 +460,16 @@ button{cursor:pointer}
       <h3>&#10003; Approve Void / Refund</h3>
       <p id="vrApproveOrderInfo" style="font-size:13px;color:var(--muted);margin-bottom:14px"></p>
       <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">Deduct this cash from:</div>
-      <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border-radius:8px;margin-bottom:8px;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border-radius:8px;margin-bottom:2px;cursor:pointer">
         <input type="radio" name="vrApproveTarget" value="cashier" checked style="width:auto">
         <span>The cashier's pending balance (<strong id="vrApproveCashierLabel">—</strong> still owes less)</span>
       </label>
+      <div id="vrApproveCashierWarn" style="display:none;font-size:11px;color:var(--danger-text);margin:2px 0 8px 4px"></div>
       <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border-radius:8px;cursor:pointer">
         <input type="radio" name="vrApproveTarget" value="manager" style="width:auto">
         <span>My own cash (comes out of Net Cash with Manager)</span>
       </label>
+      <div id="vrApproveMgrWarn" style="display:none;font-size:11px;color:var(--warn-text);margin:4px 0 0 4px"></div>
       <div class="m-actions">
         <button class="btn btn-ghost" onclick="cancelApproveVoidRefundModal()">Cancel</button>
         <button class="btn btn-accent" onclick="confirmApproveVoidRefundModal()">&#10003; Approve</button>
@@ -2384,6 +2386,61 @@ async function restoreStockForOrder(orderId, changeType) {
 // from (a stuck tab, a second device, a slow retry).
 let _vrApproving = new Set();
 let _vrApproveCtx = null;
+// Live Cash Drawer balance for a SPECIFIC cashier, computed the same way
+// cashier-*.html's own _calcCashDrawerBalance() does — needed here so a
+// Refund's "deduct from the cashier" option can be blocked when she
+// doesn't actually have enough cash to cover it (a Void has no such
+// restriction — no real cash needs to change hands to cancel an order).
+async function _getCashierDrawerBalance(cashierName, cashierUsername) {
+  const isVoidRefundAdj = r => /^(Void|Refund): /.test(r.description || '');
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const { data: lastRemitRows } = await _sb.from('cash_remittances')
+    .select('created_at,description').eq('store_id', MGR.store_id).eq('cashier_name', cashierName)
+    .in('status', ['pending', 'over', 'short', 'balanced']).order('created_at', { ascending: false }).limit(5);
+  const lastRemit = (lastRemitRows || []).find(r => !isVoidRefundAdj(r));
+  const sinceRemit = lastRemit?.created_at || dayStart;
+  const [{ data: orders }, { data: logs }, { data: confirmedPayments }, { data: voidRows }, { data: floatRows }] = await Promise.all([
+    _sb.from('orders').select('id,total,payment_method,amount_tendered')
+      .eq('store_id', MGR.store_id).eq('cashier_name', cashierName).gte('timestamp', sinceRemit),
+    _sb.from('activity_logs').select('action,details,created_at')
+      .eq('store_id', MGR.store_id).eq('actor_name', cashierName).gte('created_at', sinceRemit),
+    cashierUsername
+      ? _sb.from('cash_remittances').select('cash_on_hand,created_at')
+          .eq('store_id', MGR.store_id).eq('cashier_name', cashierUsername).eq('status', 'payment_confirmed').gte('created_at', sinceRemit)
+      : Promise.resolve({ data: [] }),
+    _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
+      .eq('store_id', MGR.store_id).eq('cashier_name', cashierName).eq('status', 'pending').gte('created_at', sinceRemit),
+    // Carried-over float belongs to whoever's shift is next — looks at the
+    // store's most recent real remit overall, not scoped to this cashier.
+    _sb.from('cash_remittances').select('drawer_float,description').eq('store_id', MGR.store_id)
+      .in('status', ['pending', 'over', 'short', 'balanced']).order('created_at', { ascending: false }).limit(5)
+  ]);
+  const orderIds = (orders || []).map(o => o.id);
+  const _voidedOrderIds = new Set();
+  if (orderIds.length) {
+    const tableNos = orderIds.map(id => `Order #${id}`);
+    const { data: vRows } = await _sb.from('orders').select('table_no')
+      .eq('store_id', MGR.store_id).in('order_type', ['VOID', 'REFUND']).in('table_no', tableNos);
+    (vRows || []).forEach(r => { const m = /^Order #(\d+)$/.exec(r.table_no || ''); if (m) _voidedOrderIds.add(parseInt(m[1], 10)); });
+  }
+  (voidRows || []).forEach(r => { if (!isVoidRefundAdj(r)) return; const m = /Order #(\d+)/.exec(r.description || ''); if (m) _voidedOrderIds.delete(parseInt(m[1], 10)); });
+  const cashPortion = o => {
+    if (_voidedOrderIds.has(o.id)) return 0;
+    const t = parseFloat(o.total) || 0;
+    if ((o.payment_method || 'Cash') === 'Cash') return t;
+    if (o.payment_method === 'Split') return parseFloat(o.amount_tendered) || 0;
+    return 0;
+  };
+  const cashSinceRemit = (orders || []).reduce((s, o) => s + cashPortion(o), 0);
+  const expensesSinceRemit = (logs || []).filter(l => l.action === 'EXPENSE_PAID')
+    .reduce((s, l) => { try { return s + (parseFloat(JSON.parse(l.details).amount) || 0); } catch (_) { return s; } }, 0);
+  const receivedFundsSinceRemit = (confirmedPayments || []).reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+  const voidRefundSinceRemit = (voidRows || []).filter(isVoidRefundAdj).reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
+  const realFloatRemit = (floatRows || []).find(r => !isVoidRefundAdj(r));
+  const carriedFloat = parseFloat(realFloatRemit?.drawer_float) || 0;
+  return carriedFloat + cashSinceRemit + receivedFundsSinceRemit + voidRefundSinceRemit - expensesSinceRemit;
+}
 async function approveVoidRefund(id, btnEl) {
   if (_vrApproving.has(id)) return;
   const r = _vrCache.find(x => x.id === id);
@@ -2423,7 +2480,33 @@ async function approveVoidRefund(id, btnEl) {
     `Order #${r.order_id} — ${r.type === 'void' ? 'Void' : 'Refund'} (${'₱'}${orderTotal.toFixed(2)}, ${'₱'}${cashPortion.toFixed(2)} cash)`;
   document.getElementById('vrApproveCashierLabel').textContent = orig.cashier_name;
   const cashierRadio = document.querySelector('input[name="vrApproveTarget"][value="cashier"]');
-  if (cashierRadio) cashierRadio.checked = true;
+  const managerRadio = document.querySelector('input[name="vrApproveTarget"][value="manager"]');
+  const cashierWarn = document.getElementById('vrApproveCashierWarn');
+  const mgrWarn = document.getElementById('vrApproveMgrWarn');
+  if (cashierRadio) { cashierRadio.disabled = false; cashierRadio.checked = true; }
+  cashierWarn.style.display = 'none';
+  mgrWarn.style.display = 'none';
+  // A Refund means real cash has to physically leave someone's hand right
+  // now — a Void is just cancelling the order on the spot, no cash decision
+  // to gate, so only Refund gets these insufficient-funds checks.
+  if (r.type === 'refund') {
+    const { data: staffRows } = await _sb.from('store_users').select('username,full_name').eq('store_id', MGR.store_id);
+    const cashierStaff = (staffRows || []).find(s => (s.full_name || s.username) === orig.cashier_name);
+    const cashierBalance = await _getCashierDrawerBalance(orig.cashier_name, cashierStaff?.username || '');
+    const cashierOk = cashierBalance >= cashPortion - 0.01;
+    const mgrOk = (_cashNetTotal || 0) >= cashPortion - 0.01;
+    _vrApproveCtx.mgrOk = mgrOk;
+    if (!cashierOk) {
+      if (cashierRadio) { cashierRadio.checked = false; cashierRadio.disabled = true; }
+      cashierWarn.textContent = `Only ${'₱'}${cashierBalance.toFixed(2)} in her drawer — not enough for this ${'₱'}${cashPortion.toFixed(2)} refund.`;
+      cashierWarn.style.display = '';
+      if (managerRadio) managerRadio.checked = true;
+    }
+    if (!mgrOk) {
+      mgrWarn.textContent = `Only ${'₱'}${(_cashNetTotal || 0).toFixed(2)} in your Net Cash — approving anyway will notify the owner to send funds to cover the shortfall.`;
+      mgrWarn.style.display = '';
+    }
+  }
   document.getElementById('vrApproveModal').classList.add('show');
   if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Approve'; }
 }
@@ -2507,6 +2590,16 @@ async function _finishApproveVoidRefund(target) {
           pos_sales: 0, cash_on_hand: -cashPortion, difference: -cashPortion,
           status: 'refund', description: desc
         });
+        // Net Cash didn't have enough to cover this refund — no owner inbox
+        // exists to message directly, so this logs an alert the owner's own
+        // dashboard surfaces as a banner (see checkRefundFundsAlert there).
+        // Resolving it is manual — the owner sends funds (Send Payment),
+        // same as any other shortfall.
+        if (ctx.mgrOk === false) {
+          await logAction('REFUND_NEEDS_FUNDS', MGR.name, {
+            amount: cashPortion, order_id: r.order_id, net_cash: _cashNetTotal || 0
+          });
+        }
       } else {
         // Reduces what the cashier still owes instead.
         await _sb.from('cash_remittances').insert({
