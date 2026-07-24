@@ -2116,7 +2116,13 @@ async function confirmRemitLogout() {
   const today  = _localToday();
   const pos    = parseFloat(document.getElementById('remitCk3').textContent.replace(/[^0-9.]/g,'')) || 0;
   const cash   = parseFloat(document.getElementById('remitCk4').textContent.replace(/[^0-9.]/g,'')) || 0;
-  const diff   = cash - pos - _remitCarriedFloat + _remitExpensesTotal;
+  // Must match the SAME formula used for the live preview (calcRemitLogDiff)
+  // and the confirmation screen (remitLogStep2) — this used to drop
+  // _remitReceivedFundsTotal and _remitVoidRefundTotal, so a confirmed
+  // Received Fund (or a void/refund adjustment) shown correctly on-screen
+  // right up to the "Confirm & Logout" tap silently vanished from the
+  // actually-saved remittance record, making the money look uncounted.
+  const diff   = cash - pos - _remitCarriedFloat - _remitReceivedFundsTotal - _remitVoidRefundTotal + _remitExpensesTotal;
   const diffLabel = diff<0 ? `Short -${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : diff>0 ? `Over +${CUR||'₱'}${Math.abs(diff).toFixed(2)}` : 'Balanced';
   // Drawer float is opt-in per store — when off, the cashier remits the
   // full count as before and drawer_float is just recorded as 0.
@@ -5755,7 +5761,7 @@ function confirmWeightAdd() {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.20';
+const POS_BUILD = '1.9.21';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;

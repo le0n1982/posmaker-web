@@ -1,7 +1,8 @@
 {
-  "version": "1.9.20",
-  "date": "2026-07-23",
+  "version": "1.9.21",
+  "date": "2026-07-24",
   "changes": [
+    "🔧 CRITICAL FIX: when confirming a Cash Remittance (Logout), the actually-SAVED record used a different, incomplete formula than the one shown on-screen right up to \"Confirm & Logout\" — it silently dropped confirmed Received Funds and Void/Refund adjustments from the saved Over/Short. A confirmed Received Fund could vanish from the official record even though it was correctly shown to the cashier moments before confirming. Now the saved record always matches what was shown.",
     "🎨 Floating widgets (Discount, Add Items) now open centered on screen instead of popping up near their trigger button — a cleaner, more consistent look. Calculator stays bottom-right as before.",
     "🔧 CRITICAL FIX: a product with no explicit inventory link, but with a leftover stock number from before the current linking system existed, never auto-matched to a same-named Inventory Item — its stock badge stayed frozen forever and selling it never touched real inventory. Now correctly auto-links whenever there's no explicit link, same as a brand-new product.",
     "🔧 CRITICAL FIX: when a Void/Refund was charged to \"the owner's own cash\" instead of the cashier's balance, the cashier's own Cash Drawer / POS Sales / Cash Remittance never excluded that sale — she still looked like she was holding cash that was actually given back, showing a false \"Short\" for no real reason. Now correctly excluded in all three screens, whichever side the void/refund was charged to.",
