@@ -1632,7 +1632,7 @@ async function forceLogoutMgrStaff(id, name) {
 
 // ── Send Cash to Cashier (from Net Cash with Manager) ──────────────────────
 let _scCashierName = '', _scCashierUsername = '';
-function openSendCash(username, name) {
+async function openSendCash(username, name) {
   _scCashierUsername = username;
   _scCashierName = name;
   document.getElementById('scRecipient').textContent = name;
@@ -1642,11 +1642,18 @@ function openSendCash(username, name) {
   const btn = document.getElementById('scBtn');
   btn.disabled = false; btn.innerHTML = '&#128176; Send';
   document.getElementById('sendCashModal').classList.add('show');
+  // "Cash" always available, plus whatever banks/e-wallets the owner already
+  // configured under Settings — same list the Deposit-to-Owner picker uses.
+  const walletSel = document.getElementById('scWallet');
+  walletSel.innerHTML = '<option value="Cash">Cash</option>';
+  const { data } = await _sb.from('payment_methods').select('label').eq('store_id', MGR.store_id).order('sort_order');
+  walletSel.innerHTML += (data || []).map(m => `<option value="${m.label.replace(/"/g,'&quot;')}">${m.label}</option>`).join('');
 }
 async function saveSendCash() {
+  const btn = document.getElementById('scBtn');
+  if (btn.disabled) return;
   const amt = parseFloat(document.getElementById('scAmt').value);
   if (!amt || amt <= 0) { showToast('Enter a valid amount.', true); return; }
-  const btn = document.getElementById('scBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Sending…';
   if (amt > (_cashNetTotal || 0) + 0.01) {
     btn.disabled = false; btn.innerHTML = '&#128176; Send';
@@ -1654,8 +1661,10 @@ async function saveSendCash() {
     return;
   }
   const note = document.getElementById('scNote').value.trim();
+  const wallet = document.getElementById('scWallet').value || 'Cash';
   const today = _localToday();
-  const desc = 'Sent to ' + _scCashierName + (note ? ': ' + note : '');
+  const walletSuffix = wallet && wallet !== 'Cash' ? ' via ' + wallet : '';
+  const desc = 'Sent to ' + _scCashierName + walletSuffix + (note ? ': ' + note : '');
   const { error } = await _sb.from('cash_remittances').insert({
     store_id: MGR.store_id, cashier_name: MGR.name, shift_date: today,
     pos_sales: 0, cash_on_hand: -amt, difference: -amt,
@@ -1670,7 +1679,7 @@ async function saveSendCash() {
   const { data: payRow } = await _sb.from('cash_remittances').insert({
     store_id: MGR.store_id, cashier_name: _scCashierUsername, shift_date: today,
     pos_sales: 0, cash_on_hand: amt, difference: 0,
-    status: 'mgr_payment', description: MGR.name + ' sent' + (note ? ': ' + note : '')
+    status: 'mgr_payment', description: MGR.name + ' sent' + walletSuffix + (note ? ': ' + note : '')
   }).select('id').single();
   await _sb.from('activity_logs').insert({
     store_id: MGR.store_id, actor_name: MGR.name, actor_role: 'manager',
@@ -3800,6 +3809,12 @@ _updateThemeIcon();
     <div class="field">
       <label>Amount (&#8369;)</label>
       <input id="scAmt" type="number" min="0.01" step="0.01" placeholder="0.00" style="font-weight:700;color:var(--ok-text)">
+    </div>
+    <div class="field">
+      <label>Wallet / Bank Used</label>
+      <select id="scWallet" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
+        <option value="Cash">Cash</option>
+      </select>
     </div>
     <div class="field">
       <label>Note / Reason (optional)</label>
