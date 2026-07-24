@@ -727,8 +727,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <div style="color:var(--muted);font-weight:600;margin-bottom:6px;text-transform:uppercase;font-size:10px;letter-spacing:.3px">Non-Cash Sales (already settled electronically)</div>
         <div id="remitNonCashList"></div>
       </div>
-      <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (computed automatically from your sales &amp; activity)</label>
-      <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" readonly style="font-size:22px;text-align:center;padding:12px;font-weight:700;background:var(--s2);cursor:default">
+      <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash Drawer Amount</label>
+      <div id="remitLogCOH" style="font-size:22px;text-align:center;padding:12px;font-weight:700;color:var(--accent)">—</div>
       <span id="remitLogDiff" style="display:none">—</span>
       <div id="remitFloatSection" style="display:none;margin-top:12px">
         <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Remittance Amount (how much are you handing over?)</label>
@@ -1819,7 +1819,7 @@ async function openRemitOnLogout() {
   const today = _localToday();
   document.getElementById('remitLogCashier').textContent = name;
   document.getElementById('remitLogDate').textContent = new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
-  document.getElementById('remitLogCOH').value = '';
+  document.getElementById('remitLogCOH').textContent = '—';
   document.getElementById('remitLogDiff').textContent = '—';
   document.getElementById('remitLogDiff').style.color = 'var(--muted)';
   document.getElementById('remitLogCheckBtn').disabled = true;
@@ -1981,7 +1981,7 @@ async function openRemitOnLogout() {
     // void/refund adjustments, expenses), so Cash on Hand is filled in
     // automatically and locked. She only says how much of it she's
     // physically handing over now (Remittance Amount).
-    document.getElementById('remitLogCOH').value = expected.toFixed(2);
+    document.getElementById('remitLogCOH').textContent = expected.toFixed(2);
     calcRemitLogDiff();
     const rfRow = document.getElementById('remitLogReceivedRow');
     if (_remitReceivedFundsTotal > 0) {
@@ -2006,7 +2006,7 @@ async function openRemitOnLogout() {
 function calcRemitLogDiff() {
   const posText = document.getElementById('remitLogPOS').textContent.replace(/[^0-9.]/g,'');
   const pos  = parseFloat(posText) || 0;
-  const cash = parseFloat(document.getElementById('remitLogCOH').value);
+  const cash = parseFloat(document.getElementById('remitLogCOH').textContent);
   const btn  = document.getElementById('remitLogCheckBtn');
   const el   = document.getElementById('remitLogDiff');
   if (isNaN(cash)) { el.textContent='—'; el.style.color='var(--muted)'; btn.disabled=true; btn.style.opacity='.4'; return; }
@@ -2022,7 +2022,7 @@ function calcRemitLogDiff() {
   }
 }
 function calcRemitLogFloat() {
-  const coh = parseFloat(document.getElementById('remitLogCOH').value) || 0;
+  const coh = parseFloat(document.getElementById('remitLogCOH').textContent) || 0;
   const amtEl = document.getElementById('remitLogAmt');
   let amt = parseFloat(amtEl.value);
   if (isNaN(amt)) amt = coh;
@@ -2042,7 +2042,7 @@ function remitLogStep2() {
   confirmBtn.innerHTML = '&#10003; Confirm &amp; Logout';
   const posText = document.getElementById('remitLogPOS').textContent;
   const pos  = parseFloat(posText.replace(/[^0-9.]/g,'')) || 0;
-  const cash = parseFloat(document.getElementById('remitLogCOH').value) || 0;
+  const cash = parseFloat(document.getElementById('remitLogCOH').textContent) || 0;
   // Physical cash counted can never be negative — without this guard a
   // stray minus key (numpad, mistyped) silently produced a nonsensical
   // negative "Cash on Hand" remittance that then showed as a confusing
@@ -2335,7 +2335,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.22';
+const POS_BUILD = '1.9.23';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
