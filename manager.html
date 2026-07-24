@@ -2118,7 +2118,7 @@ function renderRemit() {
           <button class="btn btn-sm" data-tip="Owner marked your uploaded receipt as invalid. Upload a new clear photo." onclick="openReuploadReceipt('${invalidLog.id}')" style="background:#ef4444;color:#fff;font-weight:600;font-size:11px;padding:5px 10px">&#8635; Upload Receipt Again</button>
         </div>`
       : `<span style="color:var(--muted);font-size:12px">${r.description||'—'}</span>`;
-    return `<tr style="${isPending ? 'background:#1a1200;' : ''}">
+    return `<tr style="${isPending ? 'background:var(--warn-bg);' : ''}">
       <td style="color:var(--muted);font-size:12px;white-space:nowrap">${date}<div style="font-size:11px">${created}</div></td>
       <td><strong>${r.cashier_name}</strong></td>
       <td style="font-weight:600">&#8369;${parseFloat(r.pos_sales).toFixed(2)}</td>
