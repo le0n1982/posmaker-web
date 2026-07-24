@@ -2026,10 +2026,12 @@ function calcRemitLogDiff() {
   el.textContent = (diff>=0?'+':'') + (CUR||'₱') + Math.abs(diff).toFixed(2);
   el.style.color = diff>0 ? '#f97316' : diff<0 ? '#ef4444' : '#00b4d8';
   btn.disabled = false; btn.style.opacity = '1';
-  // Drawer float defaults to remitting the full count — the cashier only
-  // has to touch the Remittance Amount field if they're keeping change.
+  // Remittance Amount starts at 0 — the cashier must explicitly type how
+  // much she's handing over. calcRemitLogFloat() clamps it so she can never
+  // remit MORE than what's in the drawer, but can remit LESS to leave float
+  // for the next cashier.
   if (STORE?.enable_drawer_float) {
-    document.getElementById('remitLogAmt').value = cash.toFixed(2);
+    document.getElementById('remitLogAmt').value = '0.00';
     calcRemitLogFloat();
   }
 }
@@ -2342,7 +2344,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.23';
+const POS_BUILD = '1.9.24';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
