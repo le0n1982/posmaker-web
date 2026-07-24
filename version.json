@@ -1,7 +1,8 @@
 {
-  "version": "1.9.21",
+  "version": "1.9.22",
   "date": "2026-07-24",
   "changes": [
+    "💰 Cash Remittance (Logout) no longer asks the cashier to manually count and type \"Cash on Hand\" — it's now filled in automatically from sales, received funds, void/refund adjustments, and expenses, and locked. She only enters the Remittance Amount (how much she's actually handing over now); the rest stays shown as \"Remaining for drawer\". This removes Over/Short reconciliation in favor of a simpler handoff.",
     "🔧 CRITICAL FIX: when confirming a Cash Remittance (Logout), the actually-SAVED record used a different, incomplete formula than the one shown on-screen right up to \"Confirm & Logout\" — it silently dropped confirmed Received Funds and Void/Refund adjustments from the saved Over/Short. A confirmed Received Fund could vanish from the official record even though it was correctly shown to the cashier moments before confirming. Now the saved record always matches what was shown.",
     "🎨 Floating widgets (Discount, Add Items) now open centered on screen instead of popping up near their trigger button — a cleaner, more consistent look. Calculator stays bottom-right as before.",
     "🔧 CRITICAL FIX: a product with no explicit inventory link, but with a leftover stock number from before the current linking system existed, never auto-matched to a same-named Inventory Item — its stock badge stayed frozen forever and selling it never touched real inventory. Now correctly auto-links whenever there's no explicit link, same as a brand-new product.",

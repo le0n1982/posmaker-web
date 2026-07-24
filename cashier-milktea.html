@@ -729,8 +729,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <div style="color:var(--muted);font-weight:600;margin-bottom:6px;text-transform:uppercase;font-size:10px;letter-spacing:.3px">Non-Cash Sales (already settled electronically)</div>
         <div id="remitNonCashList"></div>
       </div>
-      <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (how much is in the drawer?)</label>
-      <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcRemitLogDiff()" style="font-size:22px;text-align:center;padding:12px;font-weight:700">
+      <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Cash on Hand (computed automatically from your sales &amp; activity)</label>
+      <input class="inp" id="remitLogCOH" type="number" min="0" step="0.01" placeholder="0.00" readonly style="font-size:22px;text-align:center;padding:12px;font-weight:700;background:var(--s2);cursor:default">
       <span id="remitLogDiff" style="display:none">—</span>
       <div id="remitFloatSection" style="display:none;margin-top:12px">
         <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Remittance Amount (how much are you handing over?)</label>
@@ -1988,6 +1988,13 @@ async function openRemitOnLogout() {
     _remitVoidRefundTotal = (vrData || []).filter(_isVoidRefundAdjRow).reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
     const expected = _remitCarriedFloat + total + _remitReceivedFundsTotal + _remitVoidRefundTotal - _remitExpensesTotal;
     document.getElementById('remitLogExpected').textContent = (CUR||'₱') + expected.toFixed(2);
+    // Cashier no longer manually counts/types this — the system already
+    // knows exactly what should be in the drawer (sales, received funds,
+    // void/refund adjustments, expenses), so Cash on Hand is filled in
+    // automatically and locked. She only says how much of it she's
+    // physically handing over now (Remittance Amount).
+    document.getElementById('remitLogCOH').value = expected.toFixed(2);
+    calcRemitLogDiff();
     const rfRow = document.getElementById('remitLogReceivedRow');
     if (_remitReceivedFundsTotal > 0) {
       rfRow.style.display = 'flex';
@@ -2335,7 +2342,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.21';
+const POS_BUILD = '1.9.22';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
