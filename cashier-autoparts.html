@@ -2384,7 +2384,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.28';
+const POS_BUILD = '1.9.29';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -4058,7 +4058,7 @@ async function openMySales() {
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const carriedFromPrevDay = queryStart < dayStart;
-  const [{ data: orders, error }, { data: logs }, { data: remits }, { data: confirmedPayments }] = await Promise.all([
+  const [{ data: orders, error }, { data: logs }, { data: remits }, { data: confirmedPayments }, { data: mgrVoidRefunds }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
       .gte('timestamp', queryStart).order('timestamp', { ascending: false }),
@@ -4081,7 +4081,17 @@ async function openMySales() {
       ? _sb.from('cash_remittances').select('id,cash_on_hand,description,status,created_at')
           .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username).eq('status', 'payment_confirmed')
           .gte('created_at', queryStart).order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [] }),
+    // Void/Refund adjustments charged to the MANAGER's own cash (target=
+    // manager, see approveVoidRefund) — never touch this cashier's own
+    // cash_remittances, so `remits` above never sees them. She still
+    // deserves to SEE that one of her orders was voided/refunded, even
+    // though the manager (not her) absorbed the cash — matched against her
+    // own orders below since this query has to be store-wide (status=
+    // 'refund' rows are keyed to whichever manager approved it, not her).
+    _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
+      .eq('store_id', STORE_ID).eq('status', 'refund')
+      .gte('created_at', queryStart)
   ]);
   if (error) {
     document.getElementById('mySalesList').innerHTML = `<div style="text-align:center;color:#ef4444;padding:20px;font-size:13px">${error.message}</div>`;
@@ -4209,6 +4219,13 @@ async function openMySales() {
   });
   (confirmedPayments || []).forEach(r => {
     feed.push({ type: 'received_fund', t: new Date(r.created_at), amount: parseFloat(r.cash_on_hand) || 0, note: r.description || '' });
+  });
+  // Informational only — doesn't affect Cash Drawer (the manager already
+  // absorbed the cash), matched to her own orders so she still sees it.
+  (mgrVoidRefunds || []).forEach(r => {
+    const m = /Order #(\d+)/.exec(r.description || '');
+    if (!m || !orderIds.includes(parseInt(m[1], 10))) return;
+    feed.push({ type: 'void_adjustment', t: new Date(r.created_at), amount: parseFloat(r.cash_on_hand || 0), note: (r.description || '') + ' (handled by manager)' });
   });
   (remits || []).forEach(r => {
     // A void/refund cash adjustment is stored as a 'pending' or 'refund'
