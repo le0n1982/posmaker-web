@@ -1352,7 +1352,7 @@ input:checked + .slider:before{transform:translateX(18px)}
           style="width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid #252540;border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
         <div id="invQcResult" style="margin-top:6px;font-size:13px;color:#00b4d8;font-weight:600;min-height:18px"></div>
         <select id="invWallet" style="width:100%;margin-top:8px;padding:8px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:Inter,sans-serif;outline:none">
-          <option value="Wallet">Paid from: Cash (Drawer)</option>
+          <option value="Cash">Paid from: Cash</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);font-weight:400;cursor:pointer">
           <input type="checkbox" id="invOutsideWallet" onchange="document.getElementById('invWallet').disabled=this.checked" style="width:auto">
@@ -1446,7 +1446,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="field" id="addStockWalletField" style="display:none">
       <label>Paid From</label>
       <select id="addStockWallet" style="width:100%;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:Inter,sans-serif;outline:none">
-        <option value="Wallet">Cash (Drawer)</option>
+        <option value="Cash">Cash</option>
       </select>
       <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--muted);font-weight:400;cursor:pointer">
         <input type="checkbox" id="addStockOutsideWallet" onchange="document.getElementById('addStockWallet').disabled=this.checked" style="width:auto">
@@ -2706,16 +2706,17 @@ async function loadWallet() {
     _bump(method, r.owner_confirmed ? amt : 0, { _kind: 'deposit', id: r.id, amount: amt, created_at: r.created_at, cashier: r.cashier_name, note: (r.description || '').replace(/^Deposit to owner:?\s*/i, '').trim(), confirmed: r.owner_confirmed });
     if (d.receipt_b64) _receiptCache[r.id] = { b64: d.receipt_b64, actorName: r.cashier_name, label: `Deposit from ${r.cashier_name} · ${method} · ${CUR}${amt.toFixed(2)}` };
   });
-  // Restocking with "Paid From" set to an actual bank (not plain Wallet
-  // cash, not "paid outside the Wallet") pulled that money out of the
-  // matching bank balance \u2014 deduct it from both the total and that bank's
-  // own bucket, same as a "Send Payment" deduction.
+  // Restocking with "Paid From" set to Cash or an actual configured bank
+  // (not "paid outside the Wallet") pulled that money out of business funds
+  // \u2014 deduct it from both the total and that method's own bucket, same as
+  // a "Send Payment" deduction. "Cash" is a valid bucket here because it's
+  // the same bucket manager cash deposits ("Deposit To: Cash") land in.
   const configuredLabelsForStock = (payMethods || []).map(m => m.label);
   let stockPurchaseTotal = 0;
   (stockPurchases || []).forEach(e => {
     const m = /\svia\s(.+)$/.exec(e.notes || '');
     const bank = m ? m[1].trim() : '';
-    if (!bank || !configuredLabelsForStock.includes(bank)) return;
+    if (!bank || (bank !== 'Cash' && !configuredLabelsForStock.includes(bank))) return;
     const amt = parseFloat(e.amount) || 0;
     if (!amt) return;
     stockPurchaseTotal += amt;
@@ -7448,12 +7449,7 @@ function renderInv(items) {
       <td style="color:var(--muted)">${i.category||'&#8212;'}</td>
       <td style="color:var(--muted)">${i.unit||'pc'}</td>
       <td style="color:var(--muted)">${CUR}${parseFloat(i.cost_price||0).toFixed(2)}</td>
-      <td><div style="display:flex;align-items:center;gap:4px">
-        ${unlimited ? '<span style="min-width:32px;text-align:center;font-weight:700;color:var(--muted)">&#8734;</span>' : `
-        <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="adjInvStock('${i.id}',-1)">&#8722;</button>
-        <span style="min-width:32px;text-align:center;font-weight:700;color:${out?'#ef4444':low?'#f59e0b':'var(--text)'}">${Number.isInteger(stock)?stock:stock.toFixed(2)}</span>
-        <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="adjInvStock('${i.id}',1)">+</button>`}
-      </div></td>
+      <td>${unlimited ? '<span style="font-weight:700;color:var(--muted)">&#8734;</span>' : `<span style="font-weight:700;color:${out?'#ef4444':low?'#f59e0b':'var(--text)'}">${Number.isInteger(stock)?stock:stock.toFixed(2)}</span>`}</td>
       <td style="color:var(--muted);font-weight:600">${CUR}${(parseFloat(i.cost_price||0)*stock).toFixed(2)}</td>
       <td>${badge}</td>
       <td>${expiryCell}</td>
@@ -7537,7 +7533,7 @@ async function openInvModal(item){
   // e-wallets the owner already configured under Settings — same list used
   // for Send Payment and the quick "+Add Stock" button.
   const invWalletSel=document.getElementById('invWallet');
-  invWalletSel.innerHTML='<option value="Wallet">Paid from: Cash (Drawer)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">Paid from: ${m.label}</option>`).join('');
+  invWalletSel.innerHTML='<option value="Cash">Paid from: Cash</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">Paid from: ${m.label}</option>`).join('');
   invWalletSel.disabled=false;
   document.getElementById('invOutsideWallet').checked=false;
   if(costPer>0) calcUsageCost();
@@ -7704,7 +7700,7 @@ async function saveInvItem(btnEl){
   const stockBefore = id ? stockBeforeEdit : (restockOf ? (parseFloat(restockOf.stock) || 0) : 0);
   const stockAdded = Math.max(0, stock - stockBefore);
   const outsideWallet = document.getElementById('invOutsideWallet').checked;
-  const wallet = outsideWallet ? 'Outside Wallet' : (document.getElementById('invWallet').value || 'Wallet');
+  const wallet = outsideWallet ? 'Outside Wallet' : (document.getElementById('invWallet').value || 'Cash');
   const imgData=_invPendingImgs.length>0?JSON.stringify(_invPendingImgs):null;
   const _expiry = document.getElementById('invExpiry').value || null;
   const _onPromo = document.getElementById('invOnPromo').checked;
@@ -7760,13 +7756,6 @@ async function saveInvItem(btnEl){
     showToast('Item saved.');
   }
 }
-async function adjInvStock(id,delta){
-  const item=invItems.find(x=>x.id===id);if(!item)return;
-  const newVal=Math.max(0,parseFloat(item.stock??0)+delta);
-  await _sb.from('inventory_items').update({stock:newVal}).eq('id',id);
-  _sb.from('stock_history').insert({ store_id: STORE.id, inventory_item_id: id, change_type: 'MANUAL_ADJUST', qty_change: delta }).then(() => {});
-  item.stock=newVal;renderInv(invItems);
-}
 async function openAddStock(id){
   const i=invItems.find(x=>x.id===id);if(!i)return;
   document.getElementById('addStockId').value=id;
@@ -7783,7 +7772,7 @@ async function openAddStock(id){
   // e-wallets the owner already configured under Settings — same list used
   // for Send Payment.
   const walletSel=document.getElementById('addStockWallet');
-  walletSel.innerHTML='<option value="Wallet">Cash (Drawer)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
+  walletSel.innerHTML='<option value="Cash">Cash</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">${m.label}</option>`).join('');
   walletSel.disabled=false;
   document.getElementById('addStockOutsideWallet').checked=false;
   setTimeout(()=>document.getElementById('addStockAmt').focus(),50);
@@ -7794,7 +7783,7 @@ async function confirmAddStock(btnEl){
   if(!amt||amt<=0){showToast('Enter a valid amount.',true);return;}
   const price=parseFloat(document.getElementById('addStockPrice').value)||0;
   const outsideWallet=document.getElementById('addStockOutsideWallet').checked;
-  const wallet=outsideWallet?'Outside Wallet':(document.getElementById('addStockWallet').value||'Wallet');
+  const wallet=outsideWallet?'Outside Wallet':(document.getElementById('addStockWallet').value||'Cash');
   const i=invItems.find(x=>x.id===id);if(!i)return;
   if(btnEl){ if(btnEl.disabled) return; btnEl.disabled=true; btnEl.textContent='Adding…'; }
   const newVal=parseFloat(i.stock??0)+amt;
