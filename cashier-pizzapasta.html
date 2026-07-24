@@ -1624,10 +1624,12 @@ async function _calcCashDrawerBalance() {
     .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false }).limit(5);
   const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
-  let _sinceRemit;
-  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
-  const _dbLastRemit = lastRemit?.created_at;
-  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
+  // The database's last remit is the single source of truth — a per-device
+  // localStorage cache used to be merged in here too, but a stale cached
+  // value (e.g. left over from earlier testing on this device) could
+  // override the correct DB timestamp and silently drop real received
+  // funds/sales out of the window.
+  let _sinceRemit = lastRemit?.created_at;
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const [{ data: orders }, { data: logs }, { data: confirmedPayments }, { data: voidRows }] = await Promise.all([
@@ -1920,12 +1922,10 @@ async function openRemitOnLogout() {
       .order('created_at', { ascending: false }).limit(5);
     const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
     await refreshCarriedFloat();
-    const _lsRemitKey = 'pm_last_remit_' + STORE_ID + '_' + name;
-    const _lsRemitTime = localStorage.getItem(_lsRemitKey);
-    const _dbRemitTime = lastRemit?.created_at;
-    let from = (_lsRemitTime && _dbRemitTime)
-      ? (_lsRemitTime > _dbRemitTime ? _lsRemitTime : _dbRemitTime)
-      : (_lsRemitTime || _dbRemitTime);
+    // The database's last remit is the single source of truth — see
+    // _calcCashDrawerBalance for why a per-device localStorage cache isn't
+    // merged in here anymore.
+    let from = lastRemit?.created_at;
     if (!from) {
       // Never remitted before — count every sale since this cashier's very
       // first login, not just "since midnight today" (that silently dropped
@@ -2168,7 +2168,6 @@ async function confirmRemitLogout() {
   const floatLabel = drawerFloat > 0 ? ` | Remitted: ${CUR||'₱'}${remitAmt.toFixed(2)} | Float: ${CUR||'₱'}${drawerFloat.toFixed(2)}` : '';
   const remitRow = { store_id: STORE_ID, cashier_name: name, shift_date: today, pos_sales: pos, cash_on_hand: cash, remit_amount: remitAmt, drawer_float: drawerFloat, difference: diff, status: 'pending', online_sales: _remitOnlineSales };
   const logRow = { store_id: STORE_ID, actor_name: name, actor_role: CASHIER?.role||'cashier', action: 'REMITTANCE', target_name: name, details: `POS: ${CUR||'₱'}${pos.toFixed(2)} | Cash: ${CUR||'₱'}${cash.toFixed(2)}${floatLabel} | ${diffLabel}` };
-  try { localStorage.setItem('pm_last_remit_' + STORE_ID + '_' + name, new Date().toISOString()); } catch(_e) {}
   // Queue locally first so logout is instant no matter how slow the network
   // is, then kick off a background sync. Previously this waited (up to 8s)
   // for the live insert to finish before letting the cashier log out — on a
@@ -2400,7 +2399,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.27';
+const POS_BUILD = '1.9.28';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
@@ -4085,10 +4084,10 @@ async function openMySales() {
     .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false }).limit(5);
   const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
-  let _sinceRemit;
-  try { _sinceRemit = localStorage.getItem('pm_last_remit_' + STORE_ID + '_' + CASHIER_NAME); } catch(_) { _sinceRemit = null; }
-  const _dbLastRemit = lastRemit?.created_at;
-  if (_dbLastRemit && (!_sinceRemit || _dbLastRemit > _sinceRemit)) _sinceRemit = _dbLastRemit;
+  // The database's last remit is the single source of truth — see
+  // _calcCashDrawerBalance for why a per-device localStorage cache isn't
+  // merged in here anymore.
+  let _sinceRemit = lastRemit?.created_at;
   if (!_sinceRemit) _sinceRemit = dayStart;
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const carriedFromPrevDay = queryStart < dayStart;
