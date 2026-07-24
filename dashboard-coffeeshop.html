@@ -3777,7 +3777,7 @@ async function checkStaleRemittances() {
   if (!cashiers?.length) { alertEl.style.display = 'none'; return; }
 
   const { data: remits } = await _sb.from('cash_remittances')
-    .select('cashier_name,created_at').eq('store_id', STORE.id).neq('status', 'fund_transfer')
+    .select('cashier_name,created_at').eq('store_id', STORE.id).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false });
   const lastRemitByName = {};
   (remits || []).forEach(r => { if (!lastRemitByName[r.cashier_name]) lastRemitByName[r.cashier_name] = r.created_at; });
@@ -6098,7 +6098,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     // remit" either — see cashier-*.html's _calcCashDrawerBalance for why.
     const { data: lastRemitRows } = await _sb.from('cash_remittances')
       .select('created_at,description').eq('store_id', STORE.id).eq('cashier_name', displayName)
-      .neq('status', 'fund_transfer').order('created_at', { ascending: false }).limit(5);
+      .in('status', ['pending', 'over', 'short', 'balanced']).order('created_at', { ascending: false }).limit(5);
     const lastRemit = (lastRemitRows || []).find(r => !isVoidRefundAdj(r));
     let liveFrom = lastRemit?.created_at;
     if (!liveFrom) {

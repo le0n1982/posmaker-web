@@ -1642,7 +1642,7 @@ async function _calcCashDrawerBalance() {
   // timestamp, silently dropping real sales (and the carried float) that
   // came before it out of the Cash Drawer total.
   const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
-    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false }).limit(5);
   const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
   let _sinceRemit;
@@ -1767,7 +1767,7 @@ async function openReceivedFunds() {
   // drawer anymore, so listing it here would be misleading.
   const { data: lastRemitRows } = await _sb.from('cash_remittances')
     .select('created_at,description').eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username)
-    .neq('status', 'fund_transfer').order('created_at', { ascending: false }).limit(5);
+    .in('status', ['pending', 'over', 'short', 'balanced']).order('created_at', { ascending: false }).limit(5);
   const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
   const sinceRemit = lastRemit?.created_at || '1970-01-01T00:00:00Z';
   const [{ data }, { data: confirmedData }] = await Promise.all([
@@ -1943,7 +1943,7 @@ async function openRemitOnLogout() {
     // excluded the same way — otherwise it gets mistaken for the last remit
     // and everything sold before the void silently drops out of POS Sales.
     const { data: lastRemitRows } = await _sb.from('cash_remittances')
-      .select('created_at,description').eq('store_id', STORE_ID).eq('cashier_name', name).neq('status', 'fund_transfer')
+      .select('created_at,description').eq('store_id', STORE_ID).eq('cashier_name', name).in('status', ['pending', 'over', 'short', 'balanced'])
       .order('created_at', { ascending: false }).limit(5);
     const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
     await refreshCarriedFloat();
@@ -4148,7 +4148,7 @@ async function openMySales() {
   // the void's own timestamp and drop real earlier sales/float out of both
   // the feed and the Cash Drawer total).
   const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
-    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false }).limit(5);
   const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
   let _sinceRemit;
@@ -4173,7 +4173,7 @@ async function openMySales() {
     // end-of-shift cash count, and are already shown as their own "Fund
     // Transfer" expense card in this same feed.
     _sb.from('cash_remittances').select('cash_on_hand,remit_amount,drawer_float,difference,status,created_at,description')
-      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).neq('status', 'fund_transfer')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
       .gte('created_at', queryStart).order('created_at', { ascending: false }),
     // Confirmed "Received Fund" payments — keyed by USERNAME (how the
     // sender addressed them), not full name like every other query here.
@@ -5825,7 +5825,7 @@ function confirmWeightAdd() {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.26';
+const POS_BUILD = '1.9.27';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
