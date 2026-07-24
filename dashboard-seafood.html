@@ -1365,6 +1365,13 @@ input:checked + .slider:before{transform:translateX(18px)}
         <input id="invQcPrice" type="number" min="0" step="0.01" placeholder="e.g. 300" oninput="qcCalc()"
           style="width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid #252540;border-radius:8px;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s">
         <div id="invQcResult" style="margin-top:6px;font-size:13px;color:#00b4d8;font-weight:600;min-height:18px"></div>
+        <select id="invWallet" style="width:100%;margin-top:8px;padding:8px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:Inter,sans-serif;outline:none">
+          <option value="Wallet">Paid from: Wallet (Cash)</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);font-weight:400;cursor:pointer">
+          <input type="checkbox" id="invOutsideWallet" onchange="document.getElementById('invWallet').disabled=this.checked" style="width:auto">
+          Paid outside the Wallet <span style="color:var(--dim)">(won't deduct from your Wallet)</span>
+        </label>
       </div>
     </div>
     <div class="field" id="invPiecesPerUnitField" style="display:none;background:var(--ok-bg);border:1px solid #1a4a25;border-radius:8px;padding:10px 12px;margin-bottom:16px">
@@ -7431,6 +7438,13 @@ async function openInvModal(item){
   document.getElementById('invQcPrice').value=estPrice;
   document.getElementById('invQcResult').textContent=costPer>0?`= ${CUR}${parseFloat(costPer).toFixed(4)} per ${u}`:'';
   document.getElementById('invQcUnit').value=u;
+  // "Wallet" covers cash straight from the till, plus whatever banks/
+  // e-wallets the owner already configured under Settings — same list used
+  // for Send Payment and the quick "+Add Stock" button.
+  const invWalletSel=document.getElementById('invWallet');
+  invWalletSel.innerHTML='<option value="Wallet">Paid from: Wallet (Cash)</option>'+(PAY_METHODS||[]).map(m=>`<option value="${m.label}">Paid from: ${m.label}</option>`).join('');
+  invWalletSel.disabled=false;
+  document.getElementById('invOutsideWallet').checked=false;
   if(costPer>0) calcUsageCost();
   populateInvCatSelect(document.getElementById('invCat'),item?item.category:'');
   document.getElementById('invExpiry').value = item ? (item.expiry_date || '') : '';
@@ -7577,6 +7591,10 @@ async function saveInvItem(btnEl){
   // silently force Unit to "pcs" and rewrite Stock Qty on save, overriding
   // whatever unit (e.g. "bag") the owner explicitly chose in the dropdown.
   // The owner's Unit selection is now always respected as-is.
+  const stockBefore = id ? (parseFloat(invItems.find(x=>x.id===id)?.stock) || 0) : 0;
+  const stockAdded = Math.max(0, stock - stockBefore);
+  const outsideWallet = document.getElementById('invOutsideWallet').checked;
+  const wallet = outsideWallet ? 'Outside Wallet' : (document.getElementById('invWallet').value || 'Wallet');
   const imgData=_invPendingImgs.length>0?JSON.stringify(_invPendingImgs):null;
   const _expiry = document.getElementById('invExpiry').value || null;
   const _onPromo = document.getElementById('invOnPromo').checked;
@@ -7594,6 +7612,17 @@ async function saveInvItem(btnEl){
     usageNotSaved=true;
   }
   if(err){showToast(err.message,true);_restore();return;}
+  // Only record a real expense when stock actually went UP and a cost was
+  // entered — editing other fields (name, category, photo…) or lowering a
+  // stock count (correction) shouldn't create a phantom purchase.
+  if(stockAdded>0 && cost>0){
+    const today=_localToday();
+    _sb.from('expenses').insert({
+      store_id: STORE.id, name: `Restock: ${name}`, amount: cost*stockAdded, billing_cycle:'one-time',
+      category:'Stock Purchase', expense_date: today,
+      notes: `${stockAdded} ${unit} @ ${CUR}${cost.toFixed(2)}/${unit}` + (outsideWallet ? ' — paid outside the Wallet, not deducted' : ` via ${wallet}`)
+    }).then(({error})=>{ if(!error && typeof loadExpenses==='function') loadExpenses(_expPeriod); });
+  }
   // Sync photos to matching product for visual scanner (best effort, non-blocking)
   if(imgData){
     _invPendingImgs=[];
