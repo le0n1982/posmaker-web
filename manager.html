@@ -2734,7 +2734,15 @@ async function loadCashSummary() {
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
+  // A Void/Refund charged to "the manager's own cash" (approveVoidRefund,
+  // target='manager') is already saved with status='refund', so it's
+  // already caught by adjStatuses above — that's the ONLY case that's
+  // actually the manager's own money. Anything else matching pending+Void/
+  // Refund is target='cashier' (see approveVoidRefund's else branch),
+  // reducing what THAT CASHIER still owes, never money the manager ever
+  // held — including it here used to subtract every cashier's voids from
+  // the manager's own Net Cash total, which was wrong.
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   // Money the OWNER sent directly to the MANAGER herself (not to a cashier,
   // and not general Staff Funds for disbursement) — once confirmed received,

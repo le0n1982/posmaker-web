@@ -4082,7 +4082,13 @@ async function openMgrCohModal() {
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
+  // A Void/Refund charged to "the manager's own cash" (target='manager') is
+  // already saved with status='refund', caught by adjStatuses above — the
+  // ONLY case that's actually the manager's own money. Anything else
+  // matching pending+Void/Refund is target='cashier', reducing what THAT
+  // CASHIER still owes, never money the manager held — including it here
+  // used to subtract every cashier's voids from the manager's own total.
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   // Money the owner sent directly to a MANAGER (not a cashier, and not
   // general Staff Funds) — once confirmed received, it's physically in that
@@ -4197,7 +4203,13 @@ async function loadManagerCash() {
   const mgrRemitStatuses = ['mgr_remit'];
   const paymentStatuses = ['owner_payment','mgr_payment','payment_confirmed'];
   const cashierRows  = rows.filter(r => !adjStatuses.includes(r.status) && !mgrRemitStatuses.includes(r.status) && !paymentStatuses.includes(r.status) && !isVoidRefundAdj(r));
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) || (r.status === 'pending' && isVoidRefundAdj(r)));
+  // A Void/Refund charged to "the manager's own cash" (target='manager') is
+  // already saved with status='refund', caught by adjStatuses above — the
+  // ONLY case that's actually the manager's own money. Anything else
+  // matching pending+Void/Refund is target='cashier', reducing what THAT
+  // CASHIER still owes, never money the manager held — including it here
+  // used to subtract every cashier's voids from the manager's own total.
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   // Money the owner sent directly to a MANAGER (not a cashier, and not
   // general Staff Funds) — once confirmed received, it's physically in that
