@@ -1388,6 +1388,41 @@ input:checked + .slider:before{transform:translateX(18px)}
   </div>
 </div>
 
+<!-- BARBER MODAL -->
+<div class="modal" id="barberModal">
+  <div class="mbox">
+    <h3 id="barberModalTitle">Add Barber</h3>
+    <input type="hidden" id="barberId">
+    <!-- Photo capture row -->
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" class="btn btn-accent btn-sm" style="flex:0 0 auto" id="btnBarberCam" onclick="openImgUploadQR('barber_photo',1)">&#128248; Scan QR to Upload</button>
+        <button type="button" class="btn btn-ghost btn-sm" style="flex:0 0 auto" onclick="document.getElementById('barberImgInput').click()">&#128193; Upload from File</button>
+        <span id="barberCamHint" style="font-size:11px;color:var(--dim);flex:1">Photo of the barber's face.</span>
+      </div>
+      <div id="barberImgThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+      <input type="file" id="barberImgInput" accept="image/*" style="display:none" onchange="handleBarberImg(this)">
+    </div>
+    <div class="row2">
+      <div class="field"><label>Full Name</label><input id="brName" type="text" placeholder="e.g. Juan Dela Cruz"></div>
+      <div class="field"><label>Nickname <span style="color:var(--dim);font-weight:400">(optional)</span></label><input id="brNickname" type="text" placeholder="e.g. Jun"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Contact Number</label><input id="brContact" type="text" placeholder="e.g. 0917xxxxxxx"></div>
+      <div class="field"><label>Address</label><input id="brAddress" type="text" placeholder="e.g. Brgy. San Jose"></div>
+    </div>
+    <div class="field">
+      <label>Skills / Services <span style="color:var(--dim);font-weight:400">(commission % per service)</span></label>
+      <div id="brSkillsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="_addBarberSkillRow()">+ Add Skill</button>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" onclick="closeModal('barberModal')">Cancel</button>
+      <button class="btn btn-accent" id="saveBarberBtn" onclick="saveBarber(this)">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- INVENTORY ITEM MODAL -->
 <div class="modal" id="invModal">
   <div class="mbox">
@@ -8698,6 +8733,8 @@ async function openBarberModal(editId) {
     (b?.skills || []).forEach(s => _addBarberSkillRow(s.product_id, s.product_name, s.percentage));
     _barberPendingImgs = (b && b.photo_b64) ? [b.photo_b64] : [];
     renderBarberThumbs();
+    const saveBtn = document.getElementById('saveBarberBtn');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     document.getElementById('barberModal').classList.add('show');
   } catch (err) {
     console.error('openBarberModal error:', err);
@@ -8705,9 +8742,11 @@ async function openBarberModal(editId) {
   }
 }
 
-async function saveBarber() {
+async function saveBarber(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; } };
   const name = document.getElementById('brName').value.trim();
-  if (!name) { alert('Full name is required.'); return; }
+  if (!name) { alert('Full name is required.'); _restore(); return; }
   const nickname = document.getElementById('brNickname').value.trim();
   const contact = document.getElementById('brContact').value.trim();
   const address = document.getElementById('brAddress').value.trim();
@@ -8731,7 +8770,8 @@ async function saveBarber() {
   } else {
     ({ error: dbErr } = await _sb.from('barbers').insert(row));
   }
-  if (dbErr) { alert('Save failed: ' + dbErr.message); return; }
+  if (dbErr) { alert('Save failed: ' + dbErr.message); _restore(); return; }
+  _restore();
   closeModal('barberModal');
   _barberPendingImgs = [];
   await loadBarbers();
