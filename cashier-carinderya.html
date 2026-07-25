@@ -1451,6 +1451,16 @@ async function doLogin() {
       return;
     }
 
+    // A manager's credentials also work here (same store_users table), but
+    // this page has no manager dashboard to show — send them to the right
+    // place instead of quietly dropping them into the cashier POS, which is
+    // what used to happen and looked like a broken/stuck login.
+    if (found.role === 'manager') {
+      errEl.textContent = 'This is a Manager account — redirecting you to the Manager Dashboard…';
+      setTimeout(() => { location.href = 'manager.html?sid=' + STORE_ID; }, 900);
+      return;
+    }
+
     if (!IS_PRO) {
       const { data: allStaff } = await _sb.from('store_users').select('id,created_at').eq('store_id', STORE_ID);
       const frozenStaffIds = computeFrozenIds(allStaff || [], FREE_STAFF_LIMIT, IS_PRO);
@@ -2400,7 +2410,7 @@ function showToast(msg) {
    Polls version.json on GitHub Pages; when the published
    version differs from this build, shows a banner so the
    cashier can refresh without re-downloading anything. */
-const POS_BUILD = '1.9.29';
+const POS_BUILD = '1.9.30';
 let _updShown = false;
 async function checkForUpdate() {
   if (_updShown) return;
