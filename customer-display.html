@@ -292,6 +292,13 @@ async function loadStoreAndSubscribe() {
     return;
   }
   STORE = store;
+  // Payment Methods (Settings → Payment Methods) is now the primary source
+  // for a payment method's QR — supports ANY bank/e-wallet the owner has
+  // configured, not just the 6 hardcoded columns below (gcash/maya/bpi/bdo/
+  // unionbank/metrobank), which only exist as a fallback for stores that
+  // saved a QR under the old per-bank Settings fields and haven't re-added
+  // it under Payment Methods yet.
+  _sb.from('payment_methods').select('label,qr_b64,qr_payload').eq('store_id', STORE_ID).then(({ data }) => { STORE._paymentMethods = data || []; });
   _ssEnabled = !!store.screensaver_enabled;
   if (store.logo_b64) {
     const img = document.getElementById('idleLogo');
@@ -325,6 +332,7 @@ async function loadStoreAndSubscribe() {
       // Re-build slides if screensaver images changed
       if (s.screensaver_images !== undefined) buildSsSlides(null);
     }
+    _sb.from('payment_methods').select('label,qr_b64,qr_payload').eq('store_id', STORE_ID).then(({ data }) => { STORE._paymentMethods = data || []; });
   }, 2 * 60 * 1000);
 }
 
@@ -436,11 +444,16 @@ function render(payload) {
   }
 
   // Bank payment methods — dual QR:
-  //   LEFT (big)  : dynamic GCash QR with amount embedded → customer scans with GCash → exact amount auto-filled
+  //   LEFT (big)  : dynamic payment QR with amount embedded → customer scans → exact amount auto-filled
   //   RIGHT (small): URL QR → customer scans with camera FIRST to open payment-page.html in background → auto-notifies cashier when they return
+  // Payment Methods (Settings → Payment Methods) is the primary source —
+  // supports ANY bank/e-wallet the owner configured. The 6 hardcoded
+  // columns below are a fallback for stores that saved a QR under the old
+  // per-bank Settings fields and haven't re-added it under Payment Methods.
   const BANK_METHODS = { GCash:'gcash', Maya:'maya', BPI:'bpi', BDO:'bdo', UnionBank:'unionbank', Metrobank:'metrobank' };
   const QR_COLS = { gcash:'gcash_qr_b64', maya:'maya_qr_b64', bpi:'bpi_qr_b64', bdo:'bdo_qr_b64', unionbank:'unionbank_qr_b64', metrobank:'metrobank_qr_b64' };
-  if (BANK_METHODS[payload.payMeth]) {
+  const matchedMethod = (STORE._paymentMethods || []).find(m => m.label === payload.payMeth);
+  if (BANK_METHODS[payload.payMeth] || matchedMethod) {
     resetQrView();
     document.getElementById('orderView').classList.remove('show');
     document.getElementById('qrView').classList.add('show');
@@ -448,7 +461,7 @@ function render(payload) {
     document.getElementById('bayadNaSent').style.display = 'none';
     document.getElementById('qrImg').style.display = 'none';
     const _total = Number(payload.total || 0).toFixed(2);
-    const _method = BANK_METHODS[payload.payMeth];
+    const _method = BANK_METHODS[payload.payMeth] || payload.payMeth.toLowerCase().replace(/\s+/g, '');
     const _ref = payload.payRef || '';
     const _appName = payload.payMeth;
 
@@ -462,7 +475,19 @@ function render(payload) {
     document.getElementById('bankStoreQrLabel').innerHTML = 'Open <strong>' + _appName + '</strong> → Pay QR → Scan this';
 
     let leftQrShown = false;
-    if (_method === 'gcash' && STORE.gcash_qr_payload) {
+    if (matchedMethod?.qr_payload) {
+      const dynPayload = _buildDynamicQr(matchedMethod.qr_payload, parseFloat(_total));
+      if (dynPayload) {
+        storeQrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=760x760&ecc=M&data=' + encodeURIComponent(dynPayload);
+        leftQrShown = true;
+      }
+    }
+    if (!leftQrShown && matchedMethod?.qr_b64) {
+      storeQrEl.src = 'data:image/png;base64,' + matchedMethod.qr_b64;
+      leftQrShown = true;
+    }
+    // Fallback: old per-bank Settings columns (pre-Payment-Methods stores)
+    if (!leftQrShown && _method === 'gcash' && STORE.gcash_qr_payload) {
       const dynPayload = _buildDynamicQr(STORE.gcash_qr_payload, parseFloat(_total));
       if (dynPayload) {
         storeQrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=760x760&ecc=M&data=' + encodeURIComponent(dynPayload);

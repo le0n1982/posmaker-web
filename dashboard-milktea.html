@@ -930,19 +930,27 @@ input:checked + .slider:before{transform:translateX(18px)}
         </div>
       </div>
       <div class="info-card">
-        <h3>GCash QR Code</h3>
-        <p style="color:#9aa0c0;font-size:12px;margin-bottom:10px">Upload your personal/business GCash QR (open GCash app &gt; Show My QR &gt; screenshot it). Shown on the Customer Display screen with the exact amount so customers can scan and pay.</p>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <button type="button" class="btn btn-accent btn-sm" onclick="openImgUploadQR('gcash_qr',1)">&#128248; Scan QR to Upload</button>
-        </div>
-        <div class="logo-drop" id="gcashQrDrop" onclick="document.getElementById('gcashQrInput').click()">
-          <img id="gcashQrPreview" style="display:none">
-          <p id="gcashQrHint">Click to upload GCash QR (PNG or JPG)</p>
-        </div>
-        <input type="file" id="gcashQrInput" accept="image/*" style="display:none" onchange="handleGcashQr(event)">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-accent" id="saveGcashQrBtn" style="display:none" onclick="saveGcashQr()">Save QR</button>
-          <button class="btn btn-ghost" id="removeGcashQrBtn" style="display:none" onclick="removeGcashQr()">Remove QR</button>
+        <h3>Payment Methods</h3>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px">Add your bank/e-wallet QR codes (GCash, BDO, BPI, Maya, etc.) — whichever you add here shows up as an option in the POS's E-Pay widget, with the exact amount to pay.</p>
+        <div id="payMethodList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+        <button class="btn btn-accent" onclick="openAddPayMethod()">+ Add Payment Method</button>
+      </div>
+      <div class="modal" id="mAddPayMethod">
+        <div class="mbox">
+          <h3>Add Payment Method</h3>
+          <div class="field"><label>Label</label><input id="pmLabel" type="text" placeholder="e.g. GCash, BDO, Maya"></div>
+          <div class="logo-drop" id="pmQrDrop" onclick="document.getElementById('pmQrInput').click()">
+            <img id="pmQrPreview" style="display:none">
+            <p id="pmQrHint">Click to upload QR (PNG or JPG)</p>
+          </div>
+          <input type="file" id="pmQrInput" accept="image/*" style="display:none" onchange="handleAddPayMethodQr(event)">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="button" class="btn btn-ghost" style="flex:1" onclick="openImgUploadQR('paymethod',1)">&#128241; Scan QR w/ Phone</button>
+          </div>
+          <div class="m-actions">
+            <button class="btn-cancel" onclick="closeModal('mAddPayMethod')">Cancel</button>
+            <button class="btn-confirm" id="savePayMethodBtn" onclick="savePaymentMethod(this)">Save</button>
+          </div>
         </div>
       </div>
       <div class="info-card">
@@ -1973,8 +1981,9 @@ let allProds = [], allStaff = [];
 let frozenProdIds = new Set(), frozenInvIds = new Set(), frozenStaffIds = new Set(), frozenStoreIds = new Set();
 let pendingLogob64 = null;
 let pendingBirCorb64 = null;
-let pendingGcashQrb64 = null;
-let pendingGcashQrPayload = null;
+let PAY_METHODS = [];
+let pendingPmQrb64 = null;
+let pendingPmQrPayload = null;
 let pendingProdImg = null;
 let _prodPendingImgs = [];
 let pInvLinks = []; // array of {id, qty} — qty = amount used per 1 order
@@ -2124,14 +2133,7 @@ function _sig(ms = 25000) {
     document.getElementById('birCorDrop').classList.add('has-img');
     document.getElementById('removeBirCorBtn').style.display = 'inline-flex';
   }
-  if (store.gcash_qr_b64) {
-    const qimg = document.getElementById('gcashQrPreview');
-    qimg.src = 'data:image/png;base64,' + store.gcash_qr_b64;
-    qimg.style.display = 'block';
-    document.getElementById('gcashQrHint').style.display = 'none';
-    document.getElementById('gcashQrDrop').classList.add('has-img');
-    document.getElementById('removeGcashQrBtn').style.display = 'inline-flex';
-  }
+  loadPaymentMethods();
 
   loadDashboard();
   await Promise.race([loadDbCategories(), new Promise(r => setTimeout(r, 8000))]);
@@ -6992,49 +6994,69 @@ async function _decodeQrPayload(dataUrl) {
     img.src = dataUrl;
   });
 }
-function handleGcashQr(e) {
+async function loadPaymentMethods() {
+  const list = document.getElementById('payMethodList');
+  if (!list || !STORE?.id) return;
+  list.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading...</div>';
+  const { data, error } = await _sb.from('payment_methods').select('*').eq('store_id', STORE.id).order('sort_order');
+  if (error) { list.innerHTML = `<div style="font-size:12px;color:var(--danger-text)">Error: ${error.message}</div>`; return; }
+  PAY_METHODS = data || [];
+  if (!PAY_METHODS.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted)">No payment methods yet — add your bank/e-wallet QR code below.</div>';
+    return;
+  }
+  list.innerHTML = PAY_METHODS.map(m => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+      ${m.qr_b64 ? `<img src="data:image/png;base64,${m.qr_b64}" style="width:36px;height:36px;border-radius:4px;background:#fff;object-fit:contain">` : ''}
+      <span style="flex:1;font-weight:600">${m.label}</span>
+      ${m.qr_payload ? '<span style="font-size:11px;color:var(--ok-text)">Dynamic QR</span>' : ''}
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger-text)" onclick="removePaymentMethod('${m.id}')">Remove</button>
+    </div>`).join('');
+}
+function openAddPayMethod() {
+  document.getElementById('pmLabel').value = '';
+  document.getElementById('pmQrPreview').style.display = 'none';
+  document.getElementById('pmQrHint').style.display = '';
+  document.getElementById('pmQrDrop').classList.remove('has-img');
+  pendingPmQrb64 = null; pendingPmQrPayload = null;
+  document.getElementById('mAddPayMethod').classList.add('show');
+}
+function handleAddPayMethodQr(e) {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = async ev => {
     const b64 = ev.target.result.split(',')[1];
-    pendingGcashQrb64 = b64;
-    const img = document.getElementById('gcashQrPreview');
+    pendingPmQrb64 = b64;
+    const img = document.getElementById('pmQrPreview');
     img.src = ev.target.result; img.style.display = 'block';
-    document.getElementById('gcashQrHint').style.display = 'none';
-    document.getElementById('gcashQrDrop').classList.add('has-img');
-    document.getElementById('saveGcashQrBtn').style.display = 'inline-flex';
-    document.getElementById('removeGcashQrBtn').style.display = 'inline-flex';
-    pendingGcashQrPayload = await _decodeQrPayload(ev.target.result);
-    if (pendingGcashQrPayload) showToast('✅ GCash QR decoded — click Save QR.');
-    else showToast('⚠️ Could not read QR from image. Try a clearer photo.', true);
+    document.getElementById('pmQrHint').style.display = 'none';
+    document.getElementById('pmQrDrop').classList.add('has-img');
+    pendingPmQrPayload = await _decodeQrPayload(ev.target.result);
+    if (pendingPmQrPayload) showToast('✅ QR decoded — exact amount will pre-fill for the customer.');
+    else showToast('⚠️ Could not read QR from image. Customer will need to type the amount manually.', true);
   };
   reader.readAsDataURL(file);
 }
-async function saveGcashQr() {
-  if (!pendingGcashQrb64) return;
-  // Try saving both image + payload; fallback to image-only if payload column missing
-  let { error } = await _sb.from('stores').update({ gcash_qr_b64: pendingGcashQrb64, gcash_qr_payload: pendingGcashQrPayload || null }).eq('id', STORE.id);
-  if (error) {
-    const { error: e2 } = await _sb.from('stores').update({ gcash_qr_b64: pendingGcashQrb64 }).eq('id', STORE.id);
-    if (e2) { showToast('❌ Save failed: ' + e2.message, true); return; }
-  }
-  STORE.gcash_qr_b64 = pendingGcashQrb64;
-  STORE.gcash_qr_payload = error ? null : (pendingGcashQrPayload || null);
-  document.getElementById('saveGcashQrBtn').style.display = 'none';
-  pendingGcashQrb64 = null; pendingGcashQrPayload = null;
-  showToast(STORE.gcash_qr_payload ? 'GCash QR saved ✅ Dynamic QR active!' : 'GCash QR image saved.');
+async function savePaymentMethod(btnEl) {
+  if (btnEl) { if (btnEl.disabled) return; btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+  const _restore = () => { if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save'; } };
+  const label = document.getElementById('pmLabel').value.trim();
+  if (!label) { showToast('Enter a label (e.g. GCash).', true); _restore(); return; }
+  if (!pendingPmQrb64) { showToast('Upload a QR code image.', true); _restore(); return; }
+  const { error } = await _sb.from('payment_methods').insert({
+    store_id: STORE.id, label, qr_b64: pendingPmQrb64, qr_payload: pendingPmQrPayload || null, sort_order: PAY_METHODS.length
+  });
+  if (error) { showToast('❌ Save failed: ' + error.message, true); _restore(); return; }
+  _restore();
+  closeModal('mAddPayMethod');
+  showToast('Payment method added.');
+  loadPaymentMethods();
 }
-async function removeGcashQr() {
-  if (!confirm('Remove GCash QR?')) return;
-  await _sb.from('stores').update({ gcash_qr_b64: '', gcash_qr_payload: null }).eq('id', STORE.id);
-  STORE.gcash_qr_b64 = ''; STORE.gcash_qr_payload = null;
-  document.getElementById('gcashQrPreview').style.display = 'none';
-  document.getElementById('gcashQrHint').style.display = '';
-  document.getElementById('gcashQrDrop').classList.remove('has-img');
-  document.getElementById('saveGcashQrBtn').style.display = 'none';
-  document.getElementById('removeGcashQrBtn').style.display = 'none';
-  pendingGcashQrb64 = null;
-  showToast('Logo removed.');
+async function removePaymentMethod(id) {
+  if (!confirm('Remove this payment method?')) return;
+  await _sb.from('payment_methods').delete().eq('id', id);
+  showToast('Payment method removed.');
+  loadPaymentMethods();
 }
 async function sendResetEmail() {
   const email = document.getElementById('resetEmail').value.trim();
@@ -8211,16 +8233,14 @@ async function openImgUploadQR(type,maxImages){
     if(_imgQRType==='inventory'){
       if(_invPendingImgs.length===0) _invPendingImgs.push(imgs[0]);
       renderInvThumbs();
-    } else if(_imgQRType==='gcash_qr'){
-      pendingGcashQrb64=imgs[0];
-      const _gimg=document.getElementById('gcashQrPreview');
-      _gimg.src='data:image/jpeg;base64,'+imgs[0]; _gimg.style.display='block';
-      document.getElementById('gcashQrHint').style.display='none';
-      document.getElementById('gcashQrDrop').classList.add('has-img');
-      document.getElementById('saveGcashQrBtn').style.display='inline-flex';
-      document.getElementById('removeGcashQrBtn').style.display='inline-flex';
-      pendingGcashQrPayload=await _decodeQrPayload('data:image/jpeg;base64,'+imgs[0]);
-      if(pendingGcashQrPayload) document.getElementById('imgQRStatus').textContent='✅ QR decoded!';
+    } else if(_imgQRType==='paymethod'){
+      pendingPmQrb64=imgs[0];
+      const _pimg=document.getElementById('pmQrPreview');
+      _pimg.src='data:image/jpeg;base64,'+imgs[0]; _pimg.style.display='block';
+      document.getElementById('pmQrHint').style.display='none';
+      document.getElementById('pmQrDrop').classList.add('has-img');
+      pendingPmQrPayload=await _decodeQrPayload('data:image/jpeg;base64,'+imgs[0]);
+      if(pendingPmQrPayload) document.getElementById('imgQRStatus').textContent='✅ QR decoded!';
     } else {
       imgs.forEach(b=>{if(_prodPendingImgs.length<4)_prodPendingImgs.push(b);});
       renderProdThumbs();
