@@ -5167,11 +5167,12 @@ async function loadDbCategories(){
   try{
     const{data,error}=await _sb.from('categories').select('name,type').eq('store_id',STORE.id).order('name').abortSignal(_sig());
     if(error)return; // table may not exist yet — fail silently
-    // Categories are shared between Products and Inventory — merge both
-    // legacy 'prod'/'inv' rows into one deduped list instead of keeping
-    // two separate category systems.
-    dbCats=[...new Set((data||[]).map(r=>r.name))].sort();
-    dbInvCats=dbCats;
+    // Food & Beverage: raw materials (Inventory) and finished products are
+    // conceptually different lists ("Flour"/"Sugar" vs "Bread"/"Cake"), so
+    // they stay in separate category dropdowns instead of one merged list —
+    // untyped/legacy rows default to Products so they don't disappear.
+    dbCats=[...new Set((data||[]).filter(r=>r.type!=='inv').map(r=>r.name))].sort();
+    dbInvCats=[...new Set((data||[]).filter(r=>r.type==='inv').map(r=>r.name))].sort();
   }catch(e){/* categories table not yet created */}
 }
 function getCategoryList() {
