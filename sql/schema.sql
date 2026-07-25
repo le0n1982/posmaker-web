@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 );
 
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS default_usage_qty NUMERIC DEFAULT 1;
+-- "How many pcs in 1 [unit]?" on the Add/Edit Inventory Item form — optional,
+-- informational split-into-pieces preview; NULL means not set.
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS pcs_per_unit NUMERIC;
 
 ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS inv_owner        ON inventory_items;

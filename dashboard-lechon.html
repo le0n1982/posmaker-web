@@ -7576,10 +7576,10 @@ async function openInvModal(item){
   document.getElementById('invUnitHint').textContent=u;
   document.getElementById('invStockUnitLabel').textContent=u;
   document.getElementById('invUsageUnit').textContent=u;
-  document.getElementById('invPiecesPerUnit').value='';
+  document.getElementById('invPiecesPerUnit').value=item&&item.pcs_per_unit?item.pcs_per_unit:'';
   document.getElementById('invPiecesPerUnitField').style.display=['pc','pcs'].includes(u)?'none':'';
   document.getElementById('invPiecesPerUnitLabel').textContent=u;
-  document.getElementById('invPiecesTotalPreview').textContent='';
+  calcPiecesTotal();
   document.getElementById('invUsageQty').value=item?(item.default_usage_qty??1):1;
   document.getElementById('invUsageCost').textContent='';
   // Pre-fill purchase price = cost_per_unit × stock (best estimate when editing)
@@ -7732,6 +7732,7 @@ async function saveInvItem(btnEl){
   let cost=parseFloat(document.getElementById('invCost').value)||0;
   const lowStock=parseFloat(document.getElementById('invLowStock').value)||5;
   const usageQty=parseFloat(document.getElementById('invUsageQty').value)||1;
+  const pcsPerUnit=parseFloat(document.getElementById('invPiecesPerUnit').value)||null;
   if(!name){showToast('Item name is required.',true);_restore();return;}
   if(!cat){showToast('Please select a category.',true);_restore();return;}
   if(!sku) sku=genAutoSku(cat, invItems);
@@ -7748,13 +7749,13 @@ async function saveInvItem(btnEl){
   const _expiry = document.getElementById('invExpiry').value || null;
   const _onPromo = document.getElementById('invOnPromo').checked;
   const _salePrice = _onPromo ? (parseFloat(document.getElementById('invSalePrice').value) || null) : null;
-  const payload={name,sku,category:cat,unit,stock,cost_price:cost,low_stock_threshold:lowStock,default_usage_qty:usageQty,...(imgData?{image_b64:imgData}:{}),expiry_date:_expiry,is_on_promo:_onPromo,sale_price:_salePrice};
+  const payload={name,sku,category:cat,unit,stock,cost_price:cost,low_stock_threshold:lowStock,default_usage_qty:usageQty,pcs_per_unit:pcsPerUnit,...(imgData?{image_b64:imgData}:{}),expiry_date:_expiry,is_on_promo:_onPromo,sale_price:_salePrice};
   let err;
   if(id){({error:err}=await _sb.from('inventory_items').update(payload).eq('id',id));}
   else{({error:err}=await _sb.from('inventory_items').insert({store_id:STORE.id,...payload}));}
   // Fallback if optional columns don't exist yet
   let usageNotSaved=false;
-  if(err&&err.message&&(err.message.includes('default_usage_qty')||err.message.includes('image_b64')||err.message.includes('column'))){
+  if(err&&err.message&&(err.message.includes('default_usage_qty')||err.message.includes('pcs_per_unit')||err.message.includes('image_b64')||err.message.includes('column'))){
     const p2={name,sku,category:cat,unit,stock,cost_price:cost,low_stock_threshold:lowStock};
     if(id){({error:err}=await _sb.from('inventory_items').update(p2).eq('id',id));}
     else{({error:err}=await _sb.from('inventory_items').insert({store_id:STORE.id,...p2}));}
@@ -7792,7 +7793,7 @@ async function saveInvItem(btnEl){
     document.getElementById('prodModal').classList.add('show');
   }
   if(usageNotSaved){
-    showToast('Item saved. To save the "I use" value, run this SQL in Supabase: ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS default_usage_qty NUMERIC DEFAULT 1;',true);
+    showToast('Item saved. To save the "I use" and "pcs per unit" values, run this SQL in Supabase: ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS default_usage_qty NUMERIC DEFAULT 1; ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS pcs_per_unit NUMERIC;',true);
   }else{
     showToast('Item saved.');
   }
