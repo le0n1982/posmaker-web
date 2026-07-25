@@ -6417,7 +6417,8 @@ async function toggleStaff(id, val) {
 }
 async function deleteStaff(id) {
   if (!confirm('Delete this staff account?')) return;
-  await _sb.from('store_users').delete().eq('id', id);
+  const { error } = await _sb.from('store_users').delete().eq('id', id);
+  if (error) { showToast('Could not delete: ' + error.message, true); return; }
   await loadStaff(); showToast('Staff deleted.');
 }
 async function forceLogoutStaff(id, username) {
