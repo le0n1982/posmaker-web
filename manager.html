@@ -841,6 +841,12 @@ async function init(){
   if(Date.now() - MGR.ts > 8*60*60*1000){ localStorage.removeItem('pm_mgr'); goLogin(); return; }
   if(SID && MGR.store_id !== SID){ show('noAccess'); return; }
   if(MGR.role !== 'manager'){ show('noAccess'); return; }
+  // Re-verify against the DB — a cached session can outlive a role change
+  // or account deactivation by up to 8 hours otherwise.
+  if(MGR.staff_id){
+    const {data:cur} = await _sb.from('store_users').select('role,active').eq('id', MGR.staff_id).maybeSingle();
+    if(!cur || !cur.active || cur.role !== 'manager'){ localStorage.removeItem('pm_mgr'); goLogin(); return; }
+  }
   document.getElementById('sbUser').innerHTML = '&#128100; ' + MGR.name;
   _OPS_STORE_ID = MGR.store_id;
   _OPS_READONLY_ITEMS = true;

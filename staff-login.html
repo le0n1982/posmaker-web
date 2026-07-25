@@ -82,14 +82,20 @@ const SID = new URLSearchParams(location.search).get('sid') || '';
 async function init() {
   if (!SID) { document.getElementById('noStore').style.display = ''; return; }
 
-  // Check existing session
+  // Check existing session — re-verify role against the DB before trusting
+  // it, since a role can change (e.g. cashier promoted to manager) while an
+  // old cached session on this device still says the old role.
   const raw = localStorage.getItem('pm_mgr');
   if (raw) {
     try {
       const s = JSON.parse(raw);
-      if (s.store_id === SID && s.ts && (Date.now() - s.ts) < 8 * 3600 * 1000) {
-        location.href = s.role === 'manager' ? 'manager.html?sid=' + SID : 'cashier.html?store=' + SID;
-        return;
+      if (s.store_id === SID && s.ts && (Date.now() - s.ts) < 8 * 3600 * 1000 && s.staff_id) {
+        const { data: cur } = await _sb.from('store_users').select('role,active').eq('id', s.staff_id).maybeSingle();
+        if (cur && cur.active) {
+          if (cur.role !== s.role) { s.role = cur.role; localStorage.setItem('pm_mgr', JSON.stringify(s)); }
+          location.href = cur.role === 'manager' ? 'manager.html?sid=' + SID : 'cashier.html?store=' + SID;
+          return;
+        }
       }
     } catch(_) {}
     localStorage.removeItem('pm_mgr');
