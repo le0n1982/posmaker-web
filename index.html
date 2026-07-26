@@ -298,7 +298,7 @@ nav{
   margin-bottom:14px;display:flex;align-items:center;gap:6px;
   padding-bottom:10px;border-bottom:1px solid var(--border);
 }
-.row3{display:grid;grid-template-columns:1fr 72px 60px;gap:8px;margin-bottom:24px}
+.row3{display:grid;grid-template-columns:1fr 112px 60px;gap:8px;margin-bottom:24px}
 .row-add{display:grid;grid-template-columns:1fr 88px 88px auto;gap:8px;margin-bottom:14px}
 .inp-wrap{display:flex;flex-direction:column;gap:4px}
 .inp-lbl{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.3px}
@@ -673,7 +673,20 @@ footer{background:var(--s1);border-top:1px solid var(--border);padding:44px 5vw 
           </div>
           <div class="inp-wrap">
             <label class="inp-lbl">Currency</label>
-            <input class="inp" id="idxCurrency" type="text" maxlength="4" value="₱" oninput="updatePreview()" style="text-align:center;font-size:16px;font-weight:700">
+            <select class="inp" id="idxCurrency" onchange="updatePreview()" style="text-align:center;font-size:14px;font-weight:700">
+              <option value="₱">₱ PHP</option>
+              <option value="$">$ USD</option>
+              <option value="€">€ EUR</option>
+              <option value="£">£ GBP</option>
+              <option value="¥">¥ JPY</option>
+              <option value="Rp">Rp IDR</option>
+              <option value="RM">RM MYR</option>
+              <option value="₹">₹ INR</option>
+              <option value="₩">₩ KRW</option>
+              <option value="฿">฿ THB</option>
+              <option value="₫">₫ VND</option>
+              <option value="A$">A$ AUD</option>
+            </select>
           </div>
           <div class="inp-wrap">
             <label class="inp-lbl">Tax %</label>
