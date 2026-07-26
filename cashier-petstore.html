@@ -877,11 +877,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div style="margin-bottom:10px">
       <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Order Number</label>
       <div style="display:flex;gap:6px">
-        <input type="number" id="vrOrderNum" placeholder="e.g. 423" class="disc-inp" style="padding:9px 10px;font-size:14px">
+        <input type="text" id="vrOrderNum" placeholder="e.g. 423" class="disc-inp" style="padding:9px 10px;font-size:14px">
         <button type="button" class="btn-cancel" style="flex:0 0 auto;padding:9px 14px" onclick="lookupVoidRefundOrder()">Look Up</button>
       </div>
       <div id="vrLookupMsg" style="font-size:11px;color:#f59e0b;margin-top:4px"></div>
     </div>
+    <div id="vrOfflineNote" style="display:none;background:rgba(245,158,11,.12);border:1px solid #f59e0b55;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#f59e0b">&#9888; Offline — only orders made on this device today can be looked up. It will be applied immediately (no manager approval needed while offline) and synced once back online.</div>
     <div id="vrOrderSummary" style="display:none;background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--text)"></div>
     <div id="vrDetailsWrap" style="display:none">
       <div style="margin-bottom:10px">
@@ -1542,7 +1543,7 @@ function startPing() {
   if (CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {});
   _pingInterval = setInterval(() => { if (CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); }, 30 * 1000);
   if (_syncRetryInterval) clearInterval(_syncRetryInterval);
-  _syncRetryInterval = setInterval(() => { if (navigator.onLine) { syncOfflineQueue(); syncRemitQueue(); syncLogoutQueue(); } }, 30 * 1000);
+  _syncRetryInterval = setInterval(() => { if (navigator.onLine) { syncOfflineQueue(); syncRemitQueue(); syncLogoutQueue(); syncVoidQueue(); } }, 30 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && CASHIER?.id) _sb.rpc('ping_staff_online', { p_staff_id: CASHIER.id }).then(() => {}); if (!document.hidden) checkStorePermissions(); });
   checkCashierInbox();
   setInterval(checkCashierInbox, 60000);
@@ -1567,6 +1568,7 @@ function showPOS(name) {
   syncOfflineQueue();
   syncRemitQueue();
   syncLogoutQueue();
+  syncVoidQueue();
   startPing();
   startPermissionsPoll();
   refreshCarriedFloat();
@@ -1740,6 +1742,7 @@ async function _calcCashDrawerBalance() {
 }
 let _ftDrawerBalance = 0;
 async function openFundTransfer() {
+  if (!navigator.onLine) { showToast('Fund Transfer needs an internet connection.', true); return; }
   document.getElementById('ftAmount').value = '';
   document.getElementById('ftReason').value = '';
   document.getElementById('mFundTransfer').classList.add('show');
@@ -1778,6 +1781,7 @@ async function checkReceivedFundsBadge() {
   if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
 }
 async function openReceivedFunds() {
+  if (!navigator.onLine) { showToast('Received Funds needs an internet connection.', true); return; }
   const listEl = document.getElementById('rfList');
   listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Loading…</div>';
   document.getElementById('mReceivedFunds').classList.add('show');
@@ -1945,7 +1949,41 @@ async function openRemitOnLogout() {
   document.getElementById('remitLogPOS').textContent = 'Loading…';
   _remitExpensesTotal = 0;
   if (!navigator.onLine) {
-    document.getElementById('remitLogPOS').textContent = '—';
+    // No DB access at all — Expense/Fund Transfer/Received Funds are all
+    // blocked while offline (see their own guards), so the ONLY thing that
+    // can have changed the drawer since the last known state is sales made
+    // on THIS device (queued or already-synced-earlier-today), tracked in
+    // _getLocalOrders(). Void/Refund adjustments from a manager can't be
+    // known offline at all — called out explicitly rather than silently
+    // assumed to be zero, so this never gets mistaken for the real,
+    // DB-verified figure the online path produces.
+    _remitReceivedFundsTotal = 0;
+    _remitVoidRefundTotal = 0;
+    const localOrders = _getLocalOrders().filter(o => !o.voided);
+    const cashSince = localOrders.filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+    const splitCashSince = localOrders.filter(o => o.payment_method === 'Split').reduce((s,o) => s + (parseFloat(o.amount_tendered)||0), 0);
+    const cashPortion = cashSince + splitCashSince;
+    const posTotal = localOrders.reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+    _remitOnlineSales = posTotal - cashPortion;
+    const expected = _remitCarriedFloat + cashPortion;
+    // remitLogPOS must hold the CASH-only portion here — same meaning the
+    // online branch above gives it (its "total" variable is a cash-portion
+    // sum, not the full sales total) — this value flows straight through to
+    // remitLogStep2/confirmRemitLogout's saved pos_sales field and into
+    // calcRemitLogDiff's formula. Using the full posTotal here made the
+    // difference always show a false "Short" equal to the non-cash sales.
+    document.getElementById('remitLogPOS').textContent = (CUR||'₱') + cashPortion.toFixed(2);
+    document.getElementById('remitLogExpected').innerHTML = (CUR||'₱') + expected.toFixed(2) + ' <span style="font-size:10px;color:#f59e0b">(offline estimate)</span>';
+    document.getElementById('remitLogCOH').textContent = expected.toFixed(2);
+    // Fill the LIST child only, not remitNonCashSection itself — overwriting
+    // the section's innerHTML would also delete this same #remitNonCashList
+    // element, so the next time the online branch below runs in this same
+    // page session (e.g. connection comes back and this screen reopens) its
+    // document.getElementById('remitNonCashList') would return null and
+    // throw, breaking remittance entirely until the page is reloaded.
+    document.getElementById('remitNonCashList').innerHTML = '<div style="font-size:11px;color:#f59e0b;text-align:center">&#9888; Offline — this total excludes any void/refund made by a manager while you were offline. It will reconcile automatically once back online.</div>';
+    document.getElementById('remitNonCashSection').style.display = '';
+    calcRemitLogDiff();
     return;
   }
   try {
@@ -2212,6 +2250,7 @@ async function confirmRemitLogout() {
   // for the live insert to finish before letting the cashier log out — on a
   // slow connection that made "Saving…" hang noticeably.
   queueOfflineRemit({ remitRow, logRow });
+  _clearLocalOrders(); // new "since last remit" window starts now
   if (navigator.onLine) syncRemitQueue();
   else showToast('Offline — remittance saved locally, will upload once back online.', true);
   document.getElementById('mRemitLogout').classList.remove('show');
@@ -3236,6 +3275,35 @@ function getLogoutQueue(){ try{ return JSON.parse(localStorage.getItem(logoutOff
 function setLogoutQueue(q){ localStorage.setItem(logoutOfflineKey(), JSON.stringify(q)); }
 function queueOfflineLogout(entry){ const q=getLogoutQueue(); q.push(entry); setLogoutQueue(q); }
 
+// Lightweight local record of every order this device has made since the
+// last confirmed remittance (synced OR still-queued-offline — both get
+// added here) — separate from the sync queue above, purely so the logout
+// screen can show a real sales estimate even with no internet at all,
+// instead of just "—". Cleared on remit, same "since last remit" window
+// the online computation already uses.
+function _localOrdersKey(){ return `pm_localorders_${STORE_ID}_${CASHIER_NAME}`; }
+function _getLocalOrders(){ try{ return JSON.parse(localStorage.getItem(_localOrdersKey())||'[]'); }catch{ return []; } }
+function _setLocalOrders(arr){ localStorage.setItem(_localOrdersKey(), JSON.stringify(arr)); }
+function _addLocalOrder(row){ const arr=_getLocalOrders(); arr.push(row); _setLocalOrders(arr); }
+function _clearLocalOrders(){ localStorage.removeItem(_localOrdersKey()); }
+// Void/Refund processed while offline (cashier-only, self-applied — see
+// submitVoidRefundOffline) — queued here for the compensating order + cash
+// entry to actually post once back online. Stock is NOT auto-restored for
+// these (that logic lives in manager.html and depends on live inv_links/
+// inventory lookups this file can't safely replicate offline) — the owner
+// may need to manually adjust stock for anything voided/refunded offline.
+function voidOfflineKey(){ return `pm_voidq_${STORE_ID}`; }
+function getVoidQueue(){ try{ return JSON.parse(localStorage.getItem(voidOfflineKey())||'[]'); }catch{ return []; } }
+function setVoidQueue(q){ localStorage.setItem(voidOfflineKey(), JSON.stringify(q)); }
+function queueOfflineVoid(entry){ const q=getVoidQueue(); q.push(entry); setVoidQueue(q); }
+
+// Lightweight local record of every order this device has made since the
+// last confirmed remittance (synced OR still-queued-offline — both get
+// added here) — separate from the sync queue above, purely so the logout
+// screen can show a real sales estimate even with no internet at all,
+// instead of just "—". Cleared on remit, same "since last remit" window
+// the online computation already uses.
+
 let _logoutSyncInFlight=false;
 async function syncLogoutQueue(){
   if(_logoutSyncInFlight)return;
@@ -3351,7 +3419,7 @@ async function syncOfflineQueue(){
   }finally{_syncInFlight=false;}
 }
 
-window.addEventListener('online', ()=>{ updateNetStatus(); syncOfflineQueue(); syncRemitQueue(); syncLogoutQueue(); });
+window.addEventListener('online', ()=>{ updateNetStatus(); syncOfflineQueue(); syncRemitQueue(); syncLogoutQueue(); syncVoidQueue(); });
 window.addEventListener('offline', ()=>{ updateNetStatus(); });
 
 // ── Confirm Order ─────────────────────────────────────────────────────────
@@ -3454,6 +3522,7 @@ async function __doConfirmOrderImpl() {
       is_kot:          isKOT,
       items: items.map(i => ({ product_id: i.id, name: i.name, price: i.price, qty: i.qty })),
     });
+    _addLocalOrder({ id: offlineId, timestamp: new Date().toISOString(), total, subtotal: sub, tax, payment_method: payMeth, amount_tendered: tender, voided: false });
     receiptData.order_id = offlineId + ' (saved offline)';
     showReceipt(receiptData);
     return;
@@ -3480,6 +3549,7 @@ async function __doConfirmOrderImpl() {
   }
 
   if (oErr) { alert(oErr.message); return; }
+  _addLocalOrder({ id: ord.id, timestamp: new Date().toISOString(), total, subtotal: sub, tax, payment_method: payMeth, amount_tendered: tender, voided: false });
 
   // Proof-of-payment photo (E-Pay/Split only) — logged the same way other
   // receipt/proof photos are (activity_logs.details.receipt_b64), so it
@@ -4151,8 +4221,26 @@ document.addEventListener('keydown', function(e) {
 // other cashiers' sales, since this button is visible to cashiers, not
 // managers/owners.
 async function openMySales() {
-  document.getElementById('mySalesList').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Loading...</div>';
   document.getElementById('mMySales').classList.add('show');
+  if (!navigator.onLine) {
+    // Same "since last remit" local cache the logout screen uses — see
+    // _getLocalOrders(). Only a real estimate (no void/refund awareness
+    // possible without the DB), so it's labeled as such rather than shown
+    // as if it were the verified figure.
+    const localOrders = _getLocalOrders().filter(o => !o.voided);
+    const cashSince = localOrders.filter(o => (o.payment_method || 'Cash') === 'Cash').reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+    const splitCashSince = localOrders.filter(o => o.payment_method === 'Split').reduce((s,o) => s + (parseFloat(o.amount_tendered)||0), 0);
+    const cashPortion = cashSince + splitCashSince;
+    const posTotal = localOrders.reduce((s,o) => s + (parseFloat(o.total)||0), 0);
+    document.getElementById('mySalesTotal').textContent = (CUR||'₱') + posTotal.toFixed(2);
+    document.getElementById('mySalesCount').textContent = localOrders.length + ' order(s) — since last remit';
+    document.getElementById('myCashDrawer').textContent = (CUR||'₱') + (_remitCarriedFloat + cashPortion).toFixed(2);
+    document.getElementById('myCashDrawerNote').textContent = 'offline estimate';
+    document.getElementById('myEpayTotal').textContent = (CUR||'₱') + (posTotal - cashPortion).toFixed(2);
+    document.getElementById('mySalesList').innerHTML = '<div style="text-align:center;color:#f59e0b;padding:16px;font-size:12px">&#9888; Offline — showing sales made on this device only. Excludes any void/refund made by a manager while offline. Full details load once back online.</div>';
+    return;
+  }
+  document.getElementById('mySalesList').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Loading...</div>';
   // _remitCarriedFloat is normally kept fresh by the 20s permissions poll,
   // but a long-lived session (device left open for days) can miss updates
   // if that poll stalls — refresh it here too so a shift-over petty cash
@@ -4442,6 +4530,7 @@ async function saveExpenseFromCashier() {
   const notes    = document.getElementById('cexpNotes').value.trim();
   if (!name) { showToast('Enter expense name.', true); return; }
   if (!amount || amount <= 0) { showToast('Enter a valid amount.', true); return; }
+  if (!navigator.onLine) { showToast('Recording an expense needs an internet connection.', true); return; }
   const btn = document.getElementById('cexpSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
   const today = _localToday();
@@ -4473,11 +4562,16 @@ function openVoidRefundModal() {
   document.getElementById('vrReason').value = '';
   document.getElementById('vrPreview').style.display = 'none';
   document.getElementById('vrPhotoImg').src = '';
-  document.getElementById('vrProofSection').style.display = STORE?.require_void_refund_proof === false ? 'none' : '';
+  // The proof photo is uploaded via a manager's phone scanning a live QR
+  // link (see openVrQR) — impossible with no internet at all, so it's
+  // skipped entirely offline regardless of the store's usual requirement.
+  document.getElementById('vrProofSection').style.display = (!navigator.onLine || STORE?.require_void_refund_proof === false) ? 'none' : '';
+  document.getElementById('vrOfflineNote').style.display = navigator.onLine ? 'none' : '';
   document.getElementById('mVoidRefund').classList.add('show');
 }
 
 async function lookupVoidRefundOrder() {
+  if (!navigator.onLine) { _lookupVoidRefundOrderOffline(); return; }
   const numInt = parseInt(document.getElementById('vrOrderNum').value, 10);
   const msgEl = document.getElementById('vrLookupMsg');
   const sumEl = document.getElementById('vrOrderSummary');
@@ -4508,6 +4602,28 @@ async function lookupVoidRefundOrder() {
 
   _vrOrder = ord;
   sumEl.innerHTML = `Order #${ord.id} &middot; ${new Date(ord.timestamp).toLocaleString()}<br>Cashier: ${ord.cashier_name} &middot; ${ord.payment_method}<br><strong style="color:var(--accent)">${CUR}${parseFloat(ord.total).toFixed(2)}</strong>`;
+  sumEl.style.display = '';
+  detailsEl.style.display = '';
+}
+
+// Offline lookup — only orders this device knows about (see _getLocalOrders),
+// since there's no way to query the DB at all right now.
+function _lookupVoidRefundOrderOffline() {
+  const raw = document.getElementById('vrOrderNum').value.trim();
+  const msgEl = document.getElementById('vrLookupMsg');
+  const sumEl = document.getElementById('vrOrderSummary');
+  const detailsEl = document.getElementById('vrDetailsWrap');
+  msgEl.textContent = '';
+  sumEl.style.display = 'none';
+  detailsEl.style.display = 'none';
+  document.getElementById('vrSubmitBtn').style.display = 'none';
+  _vrOrder = null;
+  if (!raw) { msgEl.textContent = 'Enter an order number.'; return; }
+  const match = _getLocalOrders().find(o => String(o.id).toUpperCase() === raw.toUpperCase());
+  if (!match) { msgEl.textContent = 'Order not found on this device — only orders made on this device today can be voided/refunded while offline.'; return; }
+  if (match.voided) { msgEl.textContent = `Order #${match.id} was already voided/refunded.`; return; }
+  _vrOrder = match;
+  sumEl.innerHTML = `Order #${match.id} &middot; ${new Date(match.timestamp).toLocaleString()}<br>${match.payment_method}<br><strong style="color:var(--accent)">${CUR}${parseFloat(match.total).toFixed(2)}</strong>`;
   sumEl.style.display = '';
   detailsEl.style.display = '';
 }
@@ -4552,6 +4668,7 @@ function closeVrQR() {
 }
 
 async function submitVoidRefundRequest() {
+  if (!navigator.onLine) { await submitVoidRefundOffline(); return; }
   if (!_vrOrder) { alert('Look up an order first.'); return; }
   if (!_vrType) { alert('Select Void or Refund.'); return; }
   const reason = document.getElementById('vrReason').value.trim();
@@ -4577,6 +4694,78 @@ async function submitVoidRefundRequest() {
   }
   closeM('mVoidRefund');
   showToast('Void/Refund request sent to manager for approval.');
+}
+
+// Offline void/refund — applied immediately to the cashier's own drawer, no
+// manager approval (there's no way to reach one right now anyway), queued
+// for the actual database write once back online. Note: stock is NOT
+// restored for these — that logic depends on live inv_links/inventory
+// lookups that can't be safely replicated offline; the owner may need to
+// manually adjust stock for anything voided/refunded while offline.
+async function submitVoidRefundOffline() {
+  if (!_vrOrder) { alert('Look up an order first.'); return; }
+  if (!_vrType) { alert('Select Void or Refund.'); return; }
+  const reason = document.getElementById('vrReason').value.trim();
+  if (!reason) { alert('Enter a reason.'); return; }
+
+  const btn = document.getElementById('vrSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const cashPortion = _vrOrder.payment_method === 'Cash' ? (parseFloat(_vrOrder.total) || 0)
+                     : _vrOrder.payment_method === 'Split' ? (parseFloat(_vrOrder.amount_tendered) || 0)
+                     : 0;
+  queueOfflineVoid({
+    orderId: _vrOrder.id,
+    orderSnapshot: { subtotal: _vrOrder.subtotal, tax: _vrOrder.tax, total: _vrOrder.total, payment_method: _vrOrder.payment_method },
+    type: _vrType, reason, cashierName: CASHIER_NAME, cashPortion,
+    timestamp: new Date().toISOString(),
+  });
+  // Mark it voided locally right away so My Sales / the logout screen reflect
+  // it immediately — this is what makes the offline drawer total exact
+  // instead of an estimate.
+  const arr = _getLocalOrders();
+  const idx = arr.findIndex(o => String(o.id) === String(_vrOrder.id));
+  if (idx >= 0) { arr[idx].voided = true; _setLocalOrders(arr); }
+  btn.disabled = false; btn.textContent = 'Submit Request';
+  closeM('mVoidRefund');
+  showToast((_vrType === 'void' ? 'Void' : 'Refund') + ' recorded offline — will sync once back online.');
+}
+
+let _voidSyncInFlight = false;
+async function syncVoidQueue() {
+  if (_voidSyncInFlight) return;
+  const q = getVoidQueue();
+  if (!q.length || !navigator.onLine) return;
+  _voidSyncInFlight = true;
+  try {
+    const failed = [];
+    for (const entry of q) {
+      try {
+        const { subtotal, tax, total, payment_method } = entry.orderSnapshot;
+        const { error: oErr } = await _sb.from('orders').insert({
+          store_id: STORE_ID, cashier_name: entry.cashierName,
+          subtotal: -(parseFloat(subtotal) || 0), tax: -(parseFloat(tax) || 0), total: -(parseFloat(total) || 0),
+          payment_method, amount_tendered: 0, change_given: 0, discount_pct: 0,
+          order_type: entry.type === 'void' ? 'VOID' : 'REFUND',
+          table_no: `Order #${entry.orderId}`,
+        });
+        if (oErr) throw oErr;
+        if (entry.cashPortion > 0) {
+          const { error: crErr } = await _sb.from('cash_remittances').insert({
+            store_id: STORE_ID, cashier_name: entry.cashierName, shift_date: _localToday(),
+            pos_sales: 0, cash_on_hand: -entry.cashPortion, difference: -entry.cashPortion,
+            status: 'pending', description: `${entry.type === 'void' ? 'Void' : 'Refund'}: Order #${entry.orderId}`
+          });
+          if (crErr) throw crErr;
+        }
+        _sb.from('activity_logs').insert({
+          store_id: STORE_ID, actor_name: entry.cashierName, actor_role: CASHIER?.role || 'cashier',
+          action: entry.type === 'void' ? 'ORDER_VOIDED' : 'ORDER_REFUNDED', target_name: `Order #${entry.orderId}`,
+          details: JSON.stringify({ amount: entry.orderSnapshot.total, reason: entry.reason, offline: true })
+        }).then(() => {});
+      } catch (e) { failed.push(entry); }
+    }
+    setVoidQueue(failed);
+  } finally { _voidSyncInFlight = false; }
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────
