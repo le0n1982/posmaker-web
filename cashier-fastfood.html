@@ -4149,14 +4149,24 @@ function _receiptOpt(key, def) {
   if (!rs || typeof rs[key] === 'undefined') return def;
   return !!rs[key];
 }
+// Address/phone are free text the owner edits directly on the receipt (not a
+// show/hide toggle) — undefined means "never customized", so fall back to
+// the real store field; an explicitly saved empty string means hidden.
+function _receiptText(key, storeFallback) {
+  const rs = STORE?.receipt_settings;
+  if (rs && typeof rs[key] === 'string') return rs[key];
+  return storeFallback || '';
+}
 function buildReceiptText(d) {
   const W = Math.max(24, Math.round(_getPaperWidth() * 32 / 58)); // ~32 cols at 58mm, scaled for any custom width
   const ln = '─'.repeat(W);
   const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
   const store = STORE?.name || 'POSMaker';
   let s = ctr(store) + '\n';
-  if (_receiptOpt('show_address', true) && STORE?.address) s += ctr(STORE.address) + '\n';
-  if (_receiptOpt('show_phone', true) && STORE?.phone) s += ctr(STORE.phone) + '\n';
+  const addrText = _receiptText('address', STORE?.address);
+  if (addrText) s += ctr(addrText) + '\n';
+  const phoneText = _receiptText('phone', STORE?.phone);
+  if (phoneText) s += ctr(phoneText) + '\n';
   if (d.isKOT) s += ctr('*** KITCHEN ORDER TICKET ***') + '\n';
   s += `${ln}\nOrder #${d.order_id}  ${new Date().toLocaleTimeString()}\n`;
   if (_receiptOpt('show_order_type', true)) s += `Type: ${d.orderType}${d.tableNo ? ' | ' + d.tableNo : ''}\n`;
@@ -4169,7 +4179,7 @@ function buildReceiptText(d) {
   if (d.method === 'Cash') s += `Cash:     ${CUR}${d.tender.toFixed(2)}\nChange:   ${CUR}${d.change.toFixed(2)}\n`;
   else s += `Paid via: ${d.method}\n`;
   s += `${ln}`;
-  if (_receiptOpt('show_footer', true)) s += `\n${STORE?.receipt_footer || 'Thank you!'}`;
+  if (STORE?.receipt_footer) s += `\n${STORE.receipt_footer}`;
   return s;
 }
 
@@ -4244,9 +4254,9 @@ async function _printOnce(txt, d) {
       const logoRaster = await _buildLogoRaster();
       const _rawPayload = {
           store:     STORE?.name,
-          address:   _receiptOpt('show_address', true) ? STORE?.address : '',
-          phone:     _receiptOpt('show_phone', true) ? STORE?.phone : '',
-          footer:    _receiptOpt('show_footer', true) ? STORE?.receipt_footer : '',
+          address:   _receiptText('address', STORE?.address),
+          phone:     _receiptText('phone', STORE?.phone),
+          footer:    STORE?.receipt_footer || '',
           order_id:  d.order_id,
           cashier:   _receiptOpt('show_cashier', true) ? d.cashier : '',
           orderType: _receiptOpt('show_order_type', true) ? d.orderType : '',
