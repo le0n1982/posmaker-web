@@ -639,8 +639,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <hr style="border:none;border-top:1px solid var(--border,#333);margin:14px 0">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
-        <select id="wpPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size (mm)</label>
+        <input id="wpPaperWidth" class="inp" type="number" min="30" max="120" step="1" value="58">
       </div>
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
@@ -666,8 +666,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <select id="printerSelect" class="inp" style="margin-bottom:14px"></select>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
-        <select id="ppPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size (mm)</label>
+        <input id="ppPaperWidth" class="inp" type="number" min="30" max="120" step="1" value="58">
       </div>
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
@@ -708,8 +708,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
-        <select id="apPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size (mm)</label>
+        <input id="apPaperWidth" class="inp" type="number" min="30" max="120" step="1" value="58">
       </div>
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
@@ -3619,7 +3619,7 @@ function _receiptOpt(key, def) {
   return !!rs[key];
 }
 function buildReceiptText(d) {
-  const W = _getPaperWidth() === '80' ? 42 : 32; // standard ESC/POS Font A columns at 58mm vs 80mm
+  const W = Math.max(24, Math.round(_getPaperWidth() * 32 / 58)); // ~32 cols at 58mm, scaled for any custom width
   const ln = '─'.repeat(W);
   const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
   const store = STORE?.name || 'POSMaker';
@@ -3655,7 +3655,7 @@ async function _receiptToPng(txt) {
   const FS = 15;
   const LH = 19;
   const PAD = 6;
-  const W   = _getPaperWidth() === '80' ? 560 : 400;
+  const W   = Math.round(400 * _getPaperWidth() / 58);
   // Load store logo if available
   let logoImg = null, logoH = 0;
   if (typeof STORE !== 'undefined' && STORE.logo_b64 && _receiptOpt('show_logo', true)) {
@@ -3819,7 +3819,8 @@ async function _printOnce(txt, d) {
 // given device only ever uses one of them, but reads the same localStorage
 // keys regardless of platform.
 function _getPaperWidth() {
-  return localStorage.getItem('pm_paper_width') === '80' ? '80' : '58';
+  const v = parseInt(localStorage.getItem('pm_paper_width'), 10);
+  return (v >= 30 && v <= 120) ? v : 58;
 }
 function _loadPrintOptionsInto(prefix) {
   const pw = document.getElementById(prefix + 'PaperWidth');
@@ -3833,7 +3834,7 @@ function _savePrintOptionsFrom(prefix) {
   const pw = document.getElementById(prefix + 'PaperWidth');
   const c  = document.getElementById(prefix + 'Copies');
   const ec = document.getElementById(prefix + 'EpayCopies');
-  if (pw) localStorage.setItem('pm_paper_width', pw.value === '80' ? '80' : '58');
+  if (pw) localStorage.setItem('pm_paper_width', String(Math.max(30, Math.min(120, parseInt(pw.value, 10) || 58))));
   if (c)  localStorage.setItem('pm_print_copies', String(Math.max(1, Math.min(5, parseInt(c.value, 10) || 1))));
   if (ec) localStorage.setItem('pm_epay_print_copies', String(Math.max(1, Math.min(5, parseInt(ec.value, 10) || 1))));
 }
