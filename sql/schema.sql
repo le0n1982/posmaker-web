@@ -1195,3 +1195,24 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS allow_fund_transfer BOOLEAN DEFAULT 
 --  doesn't store the photo. Confirming uses the existing
 --  confirmMgrDeposit() function already on the dashboard.
 -- ============================================================
+
+-- ============================================================
+--  Receipt content toggles (Dashboard Settings -> "Receipt Content").
+--  Single JSONB blob rather than one column per toggle, matching the
+--  store_users.mandatory_contributions pattern — easy to add more toggles
+--  later without another migration. Missing key or missing column both
+--  mean "show it" (client-side default), so existing stores keep printing
+--  exactly what they always printed until the owner opts in to hiding
+--  something.
+--  Run this block in Supabase -> SQL Editor (once)
+-- ============================================================
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS receipt_settings JSONB;
+
+-- ============================================================
+--  Printer paper size (58mm/80mm) and print copies (including a separate
+--  copies count for E-Pay/digital payments, e.g. printing a second copy as
+--  proof of payment) — stored client-side in localStorage per device/
+--  terminal, NOT in this table, since different terminals at the same
+--  store can have different printers. No schema change needed for this
+--  part of the feature.
+-- ============================================================

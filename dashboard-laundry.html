@@ -973,10 +973,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div class="info-card">
         <h3>Store Information</h3>
         <div class="row2" style="margin-top:14px">
-          <div class="field"><label>Store Name</label><input id="sName" type="text"></div>
-          <div class="field"><label>Phone</label><input id="sPhone" type="text"></div>
+          <div class="field"><label>Store Name</label><input id="sName" type="text" oninput="updateReceiptPreview()"></div>
+          <div class="field"><label>Phone</label><input id="sPhone" type="text" oninput="updateReceiptPreview()"></div>
         </div>
-        <div class="field"><label>Address</label><input id="sAddress" type="text"></div>
+        <div class="field"><label>Address</label><input id="sAddress" type="text" oninput="updateReceiptPreview()"></div>
         <div class="row2">
           <div class="field"><label>Currency Symbol</label>
             <select id="sCurrency">
@@ -1020,12 +1020,49 @@ input:checked + .slider:before{transform:translateX(18px)}
             <label><input type="checkbox" id="sClosedDay6"> Sat</label>
           </div>
         </div>
-        <div class="field"><label>Receipt Footer</label><textarea id="sFooter" rows="2"></textarea></div>
+        <div class="field"><label>Receipt Footer</label><textarea id="sFooter" rows="2" oninput="updateReceiptPreview()"></textarea></div>
         <div class="field" style="display:flex;align-items:center;gap:8px">
           <input type="checkbox" id="sShowCalc" style="width:auto">
           <label for="sShowCalc" style="margin:0">Show floating calculator widget</label>
         </div>
         <button class="btn btn-accent" onclick="saveSettings()">Save Settings</button>
+      </div>
+      <div class="info-card">
+        <h3>&#129534; Receipt Content</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Choose what prints on the customer's receipt. The preview on the right updates as you toggle.</p>
+        <div class="row2">
+          <div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptLogo" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptLogo" style="margin:0">Store Logo</label>
+            </div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptAddress" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptAddress" style="margin:0">Store Address</label>
+            </div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptPhone" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptPhone" style="margin:0">Store Phone Number</label>
+            </div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptOrderType" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptOrderType" style="margin:0">Order Type / Table No.</label>
+            </div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptCashier" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptCashier" style="margin:0">Cashier Name</label>
+            </div>
+            <div class="field" style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sRcptFooter" style="width:auto" onchange="updateReceiptPreview()">
+              <label for="sRcptFooter" style="margin:0">Footer Message</label>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">PREVIEW — WHAT PRINTS ON THE POS PRINTER</label>
+            <pre id="receiptPreviewBox" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;margin:0"></pre>
+          </div>
+        </div>
+        <button class="btn btn-accent" onclick="saveReceiptSettings()" style="margin-top:14px">Save Receipt Content</button>
       </div>
       <div class="info-card">
         <h3>&#128272; Change Password</h3>
@@ -2098,6 +2135,16 @@ function _sig(ms = 25000) {
   const _closedDays = (store.closed_days || '').split(',').filter(Boolean);
   for (let d = 0; d < 7; d++) document.getElementById('sClosedDay'+d).checked = _closedDays.includes(String(d));
   document.getElementById('sFooter').value   = store.receipt_footer || '';
+  {
+    const rs = store.receipt_settings || {};
+    document.getElementById('sRcptLogo').checked      = rs.show_logo       !== false;
+    document.getElementById('sRcptAddress').checked   = rs.show_address    !== false;
+    document.getElementById('sRcptPhone').checked     = rs.show_phone      !== false;
+    document.getElementById('sRcptOrderType').checked = rs.show_order_type !== false;
+    document.getElementById('sRcptCashier').checked   = rs.show_cashier    !== false;
+    document.getElementById('sRcptFooter').checked    = rs.show_footer     !== false;
+    updateReceiptPreview();
+  }
   document.getElementById('sShowCalc').checked = store.show_calculator !== false;
   document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
   document.getElementById('sEnableDrawerFloat').checked = !!store.enable_drawer_float;
@@ -7080,6 +7127,57 @@ async function saveSettings() {
   document.getElementById('sbStore').textContent = payload.name;
   applyCalcVisibility(payload.show_calculator);
   showToast('Settings saved.');
+}
+
+// Sample-data preview — mirrors buildReceiptText() in the cashier files so
+// what the owner sees here matches what actually prints. Kept independent
+// (not a shared function) since dashboard and cashier are separate files
+// with no shared script include.
+function updateReceiptPreview() {
+  const W = 32;
+  const ln = '─'.repeat(W);
+  const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
+  const cur = CUR || '₱';
+  let s = '';
+  if (document.getElementById('sRcptLogo').checked && STORE?.logo_b64) s += ctr('[LOGO]') + '\n';
+  s += ctr(document.getElementById('sName').value.trim() || 'My Store') + '\n';
+  if (document.getElementById('sRcptAddress').checked) {
+    const v = document.getElementById('sAddress').value.trim();
+    if (v) s += ctr(v) + '\n';
+  }
+  if (document.getElementById('sRcptPhone').checked) {
+    const v = document.getElementById('sPhone').value.trim();
+    if (v) s += ctr(v) + '\n';
+  }
+  s += `${ln}\nOrder #1024  10:32 AM\n`;
+  if (document.getElementById('sRcptOrderType').checked) s += `Type: Dine In | Table 3\n`;
+  if (document.getElementById('sRcptCashier').checked) s += `Cashier: Juan\n`;
+  s += `${ln}\n`;
+  s += `Sample Item\n  2 x ${cur}50.00 = ${cur}100.00\n`;
+  s += `${ln}\nSubtotal: ${cur}100.00\nVAT:      ${cur}12.00\nTOTAL:    ${cur}112.00\nCash:     ${cur}150.00\nChange:   ${cur}38.00\n`;
+  s += ln;
+  if (document.getElementById('sRcptFooter').checked) {
+    s += '\n' + (document.getElementById('sFooter').value.trim() || 'Thank you!');
+  }
+  document.getElementById('receiptPreviewBox').textContent = s;
+}
+async function saveReceiptSettings() {
+  const receipt_settings = {
+    show_logo:       document.getElementById('sRcptLogo').checked,
+    show_address:    document.getElementById('sRcptAddress').checked,
+    show_phone:      document.getElementById('sRcptPhone').checked,
+    show_order_type: document.getElementById('sRcptOrderType').checked,
+    show_cashier:    document.getElementById('sRcptCashier').checked,
+    show_footer:     document.getElementById('sRcptFooter').checked,
+  };
+  let { error } = await _sb.from('stores').update({ receipt_settings }).eq('id', STORE.id);
+  if (error && error.message && error.message.toLowerCase().includes('column')) {
+    showToast('Could not save — run this SQL in Supabase: ALTER TABLE stores ADD COLUMN IF NOT EXISTS receipt_settings JSONB;', true);
+    return;
+  }
+  if (error) { showToast(error.message, true); return; }
+  STORE.receipt_settings = receipt_settings;
+  showToast('Receipt content saved.');
 }
 
 async function saveTgSettings() {

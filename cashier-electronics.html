@@ -3692,19 +3692,39 @@ async function _buildLogoRaster() {
 
 async function doPrint() {
   const txt = document.getElementById('receiptTxt').textContent;
-  // Try local ESC/POS print server first (works in browser and Electron exe)
   const d = window._lastReceiptData;
+  // Android has no real printer bridge yet (see _printOnce below) — nothing
+  // to loop, so skip straight to the same single "couldn't print" behavior
+  // this always had rather than repeating that toast per copy.
+  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
+    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
+    newOrder();
+    return;
+  }
+  const isEpay = !!(d && d.method && d.method !== 'Cash');
+  const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
+  for (let i = 0; i < copies; i++) {
+    await _printOnce(txt, d);
+    if (i < copies - 1) await new Promise(r => setTimeout(r, 400)); // let the printer/queue keep up between copies
+  }
+  newOrder();
+}
+
+// One full print pass — everything doPrint() used to do in a single shot,
+// minus newOrder() (now called once, after all copies, by doPrint above).
+async function _printOnce(txt, d) {
+  // Try local ESC/POS print server first (works in browser and Electron exe)
   if (d) {
     try {
       const logoRaster = await _buildLogoRaster();
       const _rawPayload = {
           store:     STORE?.name,
-          address:   STORE?.address,
-          phone:     STORE?.phone,
-          footer:    STORE?.receipt_footer,
+          address:   _receiptOpt('show_address', true) ? STORE?.address : '',
+          phone:     _receiptOpt('show_phone', true) ? STORE?.phone : '',
+          footer:    _receiptOpt('show_footer', true) ? STORE?.receipt_footer : '',
           order_id:  d.order_id,
-          cashier:   d.cashier,
-          orderType: d.orderType,
+          cashier:   _receiptOpt('show_cashier', true) ? d.cashier : '',
+          orderType: _receiptOpt('show_order_type', true) ? d.orderType : '',
           tableNo:   d.tableNo,
           items:     d.items,
           sub:       d.sub,
@@ -3714,6 +3734,7 @@ async function doPrint() {
           method:    d.method,
           tender:    d.tender,
           change:    d.change,
+          paper_width: _getPaperWidth(),
           logo_raster_b64: logoRaster?.logo_raster_b64 || '',
           logo_w_bytes:    logoRaster?.logo_w_bytes || 0,
           logo_h_px:       logoRaster?.logo_h_px || 0
@@ -3721,7 +3742,7 @@ async function doPrint() {
       if (window.posApp && window.posApp.printRaw) {
         try {
           const _r = await window.posApp.printRaw(_rawPayload);
-          if (_r && _r.ok) { newOrder(); return; }
+          if (_r && _r.ok) return true;
           window._lastPrintErr = _r?.error || 'Unknown error';
         } catch (e) { window._lastPrintErr = String(e); }
       }
@@ -3730,13 +3751,13 @@ async function doPrint() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(_rawPayload)
       });
-      if (resp.ok) { newOrder(); return; }
+      if (resp.ok) return true;
     } catch (_) { /* server not running — try Electron or browser print */ }
   }
   // Electron desktop app fallback
   if (window.posApp && window.posApp.printReceipt) {
     const logoImg = document.getElementById('receiptPrintLogo');
-    if (STORE?.logo_b64) {
+    if (STORE?.logo_b64 && _receiptOpt('show_logo', true)) {
       logoImg.src = 'data:image/png;base64,' + STORE.logo_b64;
       logoImg.style.display = 'inline-block';
     } else {
@@ -3744,26 +3765,13 @@ async function doPrint() {
     }
     document.getElementById('receiptPrintText').textContent = txt;
     window.posApp.printReceipt();
-    newOrder(); return;
-  }
-  // Android app shell: window.open() has nowhere to put a "new tab" in this
-  // single-Activity app — left unhandled it can drag the whole WebView away
-  // from the logged-in cashier page onto a bare image with no app JS at all
-  // (no CASHIER, no doLogout()), which is what made the back button look
-  // like a random logout. Reaching this line means printRaw either doesn't
-  // exist or was already tried and failed (success returns early above) —
-  // either way, on Android (no printReceipt) stop here instead of risking
-  // window.open(); only a plain browser tab (no window.posApp at all) should
-  // fall through to the image/print-dialog fallback below.
-  if (window.posApp && !window.posApp.printReceipt) {
-    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
-    newOrder();
-    return;
+    return true;
   }
   // Fallback: render receipt to Canvas PNG — bypasses Chrome dark mode on print
   const _png = await _receiptToPng(txt);
+  const _w = _getPaperWidth();
   const _html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>@page{size:58mm auto;margin:0}body{margin:0;padding:0}img{width:100%;display:block}</style>'
+    + '<style>@page{size:' + _w + 'mm auto;margin:0}body{margin:0;padding:0}img{width:100%;display:block}</style>'
     + '</head><body><img src="' + _png + '">'
     + '<script>window.onload=function(){window.print();setTimeout(function(){window.close();},2000);};<\/script>'
     + '</body></html>';
@@ -3771,7 +3779,7 @@ async function doPrint() {
   const _url = URL.createObjectURL(_blob);
   window.open(_url, '_blank', 'width=320,height=600');
   setTimeout(() => { URL.revokeObjectURL(_url); }, 8000);
-  newOrder();
+  return true;
 }
 
 // ── Printer Settings ─────────────────────────────────────────────────────

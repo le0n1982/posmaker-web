@@ -634,8 +634,24 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         2. Download and run the <strong>Print Server</strong> — it will auto-start with Windows afterward
       </div>
     </div>
+    <hr style="border:none;border-top:1px solid var(--border,#333);margin:14px 0">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
+        <select id="wpPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
+        <input id="wpCopies" class="inp" type="number" min="1" max="5" value="1">
+      </div>
+    </div>
+    <div style="margin-bottom:6px">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies for E-Pay / Digital Payments</label>
+      <input id="wpEpayCopies" class="inp" type="number" min="1" max="5" value="1">
+    </div>
     <div class="m-actions" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeM('mWebPrinter')">Close</button>
+      <button class="btn-confirm" onclick="saveWebPrintOptions()">Save</button>
     </div>
   </div>
 </div>
@@ -646,6 +662,20 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     <div class="mtitle">&#128424; Printer Settings</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Pick which printer to use when printing receipts.</div>
     <select id="printerSelect" class="inp" style="margin-bottom:14px"></select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
+        <select id="ppPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
+        <input id="ppCopies" class="inp" type="number" min="1" max="5" value="1">
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies for E-Pay / Digital Payments</label>
+      <input id="ppEpayCopies" class="inp" type="number" min="1" max="5" value="1">
+    </div>
     <div class="m-actions">
       <button class="btn-cancel"  onclick="closeM('mPrinterSettings')">Cancel</button>
       <button class="btn-confirm" onclick="savePrinterSetting()">Save</button>
@@ -673,6 +703,20 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
     </div>
     <div id="apUsbSection" style="display:none">
       <div style="font-size:12px;color:var(--muted);margin-bottom:14px">The connected USB printer will be detected automatically when printing.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Paper Size</label>
+        <select id="apPaperWidth" class="inp"><option value="58">58mm</option><option value="80">80mm</option></select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies</label>
+        <input id="apCopies" class="inp" type="number" min="1" max="5" value="1">
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Copies for E-Pay / Digital Payments</label>
+      <input id="apEpayCopies" class="inp" type="number" min="1" max="5" value="1">
     </div>
     <div class="m-actions">
       <button class="btn-cancel"  onclick="closeM('mAndroidPrinter')">Cancel</button>
@@ -3537,25 +3581,35 @@ async function __doConfirmOrderImpl() {
   showReceipt(receiptData);
 }
 
+// Store-wide receipt content toggles (set in Dashboard Settings) — a missing
+// key or missing column both mean "show it", so existing stores that never
+// touched this setting keep printing exactly what they always printed.
+function _receiptOpt(key, def) {
+  const rs = STORE?.receipt_settings;
+  if (!rs || typeof rs[key] === 'undefined') return def;
+  return !!rs[key];
+}
 function buildReceiptText(d) {
-  const W = 32;
+  const W = _getPaperWidth() === '80' ? 42 : 32; // standard ESC/POS Font A columns at 58mm vs 80mm
   const ln = '─'.repeat(W);
   const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
   const store = STORE?.name || 'POSMaker';
   let s = ctr(store) + '\n';
-  if (STORE?.address) s += ctr(STORE.address) + '\n';
-  if (STORE?.phone) s += ctr(STORE.phone) + '\n';
+  if (_receiptOpt('show_address', true) && STORE?.address) s += ctr(STORE.address) + '\n';
+  if (_receiptOpt('show_phone', true) && STORE?.phone) s += ctr(STORE.phone) + '\n';
   if (d.isKOT) s += ctr('*** KITCHEN ORDER TICKET ***') + '\n';
   s += `${ln}\nOrder #${d.order_id}  ${new Date().toLocaleTimeString()}\n`;
-  if (!IS_RETAIL) s += `Type: ${d.orderType}${d.tableNo ? ' | ' + d.tableNo : ''}\n`;
-  s += `Cashier: ${d.cashier}\n${ln}\n`;
+  if (!IS_RETAIL && _receiptOpt('show_order_type', true)) s += `Type: ${d.orderType}${d.tableNo ? ' | ' + d.tableNo : ''}\n`;
+  if (_receiptOpt('show_cashier', true)) s += `Cashier: ${d.cashier}\n`;
+  s += `${ln}\n`;
   d.items.forEach(i => s += `${i.name}\n  ${i.qty} x ${CUR}${i.price.toFixed(2)} = ${CUR}${(i.price*i.qty).toFixed(2)}\n`);
   s += `${ln}\nSubtotal: ${CUR}${d.sub.toFixed(2)}\n`;
   if (d.disc > 0) s += `Discount: -${CUR}${d.disc.toFixed(2)}\n`;
   s += `VAT:      ${CUR}${d.tax.toFixed(2)}\nTOTAL:    ${CUR}${d.total.toFixed(2)}\n`;
   if (d.method === 'Cash') s += `Cash:     ${CUR}${d.tender.toFixed(2)}\nChange:   ${CUR}${d.change.toFixed(2)}\n`;
   else s += `Paid via: ${d.method}\n`;
-  s += `${ln}\n${STORE?.receipt_footer || 'Thank you!'}`;
+  s += `${ln}`;
+  if (_receiptOpt('show_footer', true)) s += `\n${STORE?.receipt_footer || 'Thank you!'}`;
   return s;
 }
 
@@ -3572,10 +3626,10 @@ async function _receiptToPng(txt) {
   const FS = 15;
   const LH = 19;
   const PAD = 6;
-  const W   = 400;
+  const W   = _getPaperWidth() === '80' ? 560 : 400;
   // Load store logo if available
   let logoImg = null, logoH = 0;
-  if (typeof STORE !== 'undefined' && STORE.logo_b64) {
+  if (typeof STORE !== 'undefined' && STORE.logo_b64 && _receiptOpt('show_logo', true)) {
     logoImg = new Image();
     logoImg.src = 'data:image/png;base64,' + STORE.logo_b64;
     await new Promise(r => { logoImg.onload = r; logoImg.onerror = r; });
@@ -3606,7 +3660,7 @@ async function _receiptToPng(txt) {
 // raster command — the print server has zero npm dependencies, so decoding
 // PNG/dithering is done here with Canvas instead of in that script.
 async function _buildLogoRaster() {
-  if (!STORE?.logo_b64) return null;
+  if (!STORE?.logo_b64 || !_receiptOpt('show_logo', true)) return null;
   try {
     const img = new Image();
     img.src = 'data:image/png;base64,' + STORE.logo_b64;
@@ -3641,19 +3695,39 @@ async function _buildLogoRaster() {
 
 async function doPrint() {
   const txt = document.getElementById('receiptTxt').textContent;
-  // Try local ESC/POS print server first (works in browser and Electron exe)
   const d = window._lastReceiptData;
+  // Android has no real printer bridge yet (see _printOnce below) — nothing
+  // to loop, so skip straight to the same single "couldn't print" behavior
+  // this always had rather than repeating that toast per copy.
+  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
+    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
+    newOrder();
+    return;
+  }
+  const isEpay = !!(d && d.method && d.method !== 'Cash');
+  const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
+  for (let i = 0; i < copies; i++) {
+    await _printOnce(txt, d);
+    if (i < copies - 1) await new Promise(r => setTimeout(r, 400)); // let the printer/queue keep up between copies
+  }
+  newOrder();
+}
+
+// One full print pass — everything doPrint() used to do in a single shot,
+// minus newOrder() (now called once, after all copies, by doPrint above).
+async function _printOnce(txt, d) {
+  // Try local ESC/POS print server first (works in browser and Electron exe)
   if (d) {
     try {
       const logoRaster = await _buildLogoRaster();
       const _rawPayload = {
           store:     STORE?.name,
-          address:   STORE?.address,
-          phone:     STORE?.phone,
-          footer:    STORE?.receipt_footer,
+          address:   _receiptOpt('show_address', true) ? STORE?.address : '',
+          phone:     _receiptOpt('show_phone', true) ? STORE?.phone : '',
+          footer:    _receiptOpt('show_footer', true) ? STORE?.receipt_footer : '',
           order_id:  d.order_id,
-          cashier:   d.cashier,
-          orderType: d.orderType,
+          cashier:   _receiptOpt('show_cashier', true) ? d.cashier : '',
+          orderType: _receiptOpt('show_order_type', true) ? d.orderType : '',
           tableNo:   d.tableNo,
           items:     d.items,
           sub:       d.sub,
@@ -3663,6 +3737,7 @@ async function doPrint() {
           method:    d.method,
           tender:    d.tender,
           change:    d.change,
+          paper_width: _getPaperWidth(),
           logo_raster_b64: logoRaster?.logo_raster_b64 || '',
           logo_w_bytes:    logoRaster?.logo_w_bytes || 0,
           logo_h_px:       logoRaster?.logo_h_px || 0
@@ -3670,7 +3745,7 @@ async function doPrint() {
       if (window.posApp && window.posApp.printRaw) {
         try {
           const _r = await window.posApp.printRaw(_rawPayload);
-          if (_r && _r.ok) { newOrder(); return; }
+          if (_r && _r.ok) return true;
           window._lastPrintErr = _r?.error || 'Unknown error';
         } catch (e) { window._lastPrintErr = String(e); }
       }
@@ -3679,13 +3754,13 @@ async function doPrint() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(_rawPayload)
       });
-      if (resp.ok) { newOrder(); return; }
+      if (resp.ok) return true;
     } catch (_) { /* server not running — try Electron or browser print */ }
   }
   // Electron desktop app fallback
   if (window.posApp && window.posApp.printReceipt) {
     const logoImg = document.getElementById('receiptPrintLogo');
-    if (STORE?.logo_b64) {
+    if (STORE?.logo_b64 && _receiptOpt('show_logo', true)) {
       logoImg.src = 'data:image/png;base64,' + STORE.logo_b64;
       logoImg.style.display = 'inline-block';
     } else {
@@ -3693,23 +3768,13 @@ async function doPrint() {
     }
     document.getElementById('receiptPrintText').textContent = txt;
     window.posApp.printReceipt();
-    newOrder(); return;
+    return true;
   }
   // Fallback: render receipt to Canvas PNG — bypasses Chrome dark mode on print
-  // Android app shell: window.open() has nowhere to put a "new tab" in this
-  // single-Activity app — left unhandled it can drag the whole WebView away
-  // from the logged-in cashier page onto a bare image with no app JS at all
-  // (no CASHIER, no doLogout()), which is what made the back button look
-  // like a random logout. Skip straight to completing the order instead;
-  // real Android printing lands in a future update.
-  if (window.posApp && !window.posApp.printReceipt) {
-    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
-    newOrder();
-    return;
-  }
   const _png = await _receiptToPng(txt);
+  const _w = _getPaperWidth();
   const _html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>@page{size:58mm auto;margin:0}body{margin:0;padding:0}img{width:100%;display:block}</style>'
+    + '<style>@page{size:' + _w + 'mm auto;margin:0}body{margin:0;padding:0}img{width:100%;display:block}</style>'
     + '</head><body><img src="' + _png + '">'
     + '<script>window.onload=function(){window.print();setTimeout(function(){window.close();},2000);};<\/script>'
     + '</body></html>';
@@ -3717,7 +3782,35 @@ async function doPrint() {
   const _url = URL.createObjectURL(_blob);
   window.open(_url, '_blank', 'width=320,height=600');
   setTimeout(() => { URL.revokeObjectURL(_url); }, 8000);
-  newOrder();
+  return true;
+}
+
+// ── Printer Settings (Electron desktop app only) ────────────────────────────
+// Paper size / copies — shared across all 3 printer setup modals since a
+// given device only ever uses one of them, but reads the same localStorage
+// keys regardless of platform.
+function _getPaperWidth() {
+  return localStorage.getItem('pm_paper_width') === '80' ? '80' : '58';
+}
+function _loadPrintOptionsInto(prefix) {
+  const pw = document.getElementById(prefix + 'PaperWidth');
+  const c  = document.getElementById(prefix + 'Copies');
+  const ec = document.getElementById(prefix + 'EpayCopies');
+  if (pw) pw.value = _getPaperWidth();
+  if (c)  c.value  = localStorage.getItem('pm_print_copies') || '1';
+  if (ec) ec.value = localStorage.getItem('pm_epay_print_copies') || '1';
+}
+function _savePrintOptionsFrom(prefix) {
+  const pw = document.getElementById(prefix + 'PaperWidth');
+  const c  = document.getElementById(prefix + 'Copies');
+  const ec = document.getElementById(prefix + 'EpayCopies');
+  if (pw) localStorage.setItem('pm_paper_width', pw.value === '80' ? '80' : '58');
+  if (c)  localStorage.setItem('pm_print_copies', String(Math.max(1, Math.min(5, parseInt(c.value, 10) || 1))));
+  if (ec) localStorage.setItem('pm_epay_print_copies', String(Math.max(1, Math.min(5, parseInt(ec.value, 10) || 1))));
+}
+function saveWebPrintOptions() {
+  _savePrintOptionsFrom('wp');
+  showToast('Printer setting saved.');
 }
 
 // ── Printer Settings (Electron desktop app only) ────────────────────────────
@@ -3727,6 +3820,7 @@ async function openPrinterSettings() {
   const sel = document.getElementById('printerSelect');
   sel.innerHTML = '<option value="">Loading printers…</option>';
   document.getElementById('mPrinterSettings').classList.add('show');
+  _loadPrintOptionsInto('pp');
   const [printers, current] = await Promise.all([window.posApp.getPrinters(), window.posApp.getDefaultPrinter()]);
   sel.innerHTML = '';
   sel.appendChild(new Option('System default', ''));
@@ -3753,6 +3847,7 @@ async function requestAndroidBtPermission() {
 }
 async function openAndroidPrinterSettings() {
   document.getElementById('mAndroidPrinter').classList.add('show');
+  _loadPrintOptionsInto('ap');
   let saved = {};
   try { saved = JSON.parse(window.AndroidBridge.getPrinterConfig() || '{}'); } catch (_) {}
   setApType(saved.type || 'bluetooth');
@@ -3780,6 +3875,7 @@ function saveAndroidPrinterSetting() {
     value = ip ? (ip + ':' + port) : '';
   }
   if (window.AndroidBridge && window.AndroidBridge.savePrinterConfig) window.AndroidBridge.savePrinterConfig(_apType, value);
+  _savePrintOptionsFrom('ap');
   closeM('mAndroidPrinter');
   showToast('Printer setting saved.');
 }
@@ -3790,6 +3886,7 @@ async function openWebPrinterSetup() {
   statusEl.textContent = 'Checking print server…';
   dlEl.style.display = 'none';
   document.getElementById('mWebPrinter').classList.add('show');
+  _loadPrintOptionsInto('wp');
   try {
     const r = await fetch('http://localhost:7788/ping', { signal: AbortSignal.timeout(3000) });
     const d = await r.json();
@@ -3803,6 +3900,7 @@ async function openWebPrinterSetup() {
 async function savePrinterSetting() {
   const name = document.getElementById('printerSelect').value;
   await window.posApp.setDefaultPrinter(name);
+  _savePrintOptionsFrom('pp');
   closeM('mPrinterSettings');
   showToast('Printer setting saved.');
 }
