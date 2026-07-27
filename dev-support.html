@@ -1483,10 +1483,18 @@ async function loadStaff() {
   const { data, error } = await _sb.rpc('dev_get_partners', { p_token: _devToken });
   if (error) { handleAuthError(error); return; }
   _allPartners = data || [];
-  _allStaff = data || []; // keep for store detail view
   document.getElementById('stStaff').textContent = _allPartners.length;
   renderPartners();
   renderAccounts();
+  // dev_get_staff returns real store_users rows (id, store_id, full_name,
+  // username, role) — the previous code here reused dev_get_partners'
+  // store-level rows (store_name/owner_email/staff_count) for _allStaff,
+  // which viewStore()'s per-cashier/manager list then silently misread as
+  // if each store had at most one nameless "staff" row with no real id, so
+  // a Reset Password button could never work against it.
+  const { data: staffData, error: staffErr } = await _sb.rpc('dev_get_staff', { p_token: _devToken });
+  if (staffErr) { handleAuthError(staffErr); return; }
+  _allStaff = staffData || [];
 }
 
 async function loadOnlineStores() {
@@ -2095,11 +2103,12 @@ function viewStore(sid) {
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Registered: <strong style="color:var(--text)">${new Date(s.created_at).toLocaleString('en-PH')}</strong></div>
     ${staff.length ? `
     <div style="font-weight:600;margin-bottom:8px;font-size:13px">Staff (${staff.length})</div>
-    <table><thead><tr><th>Name</th><th>Username</th><th>Role</th></tr></thead>
+    <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th></th></tr></thead>
     <tbody>${staff.map(u => `<tr>
       <td>${esc(u.full_name || '—')}</td>
       <td style="color:var(--muted)">${esc(u.username)}</td>
       <td><span class="badge ${u.role === 'manager' ? 'badge-purple' : 'badge-muted'}">${u.role}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openResetModal('${u.id}',${JSON.stringify(u.full_name || u.username)},${JSON.stringify(u.username)},${JSON.stringify(s.name)})">&#128274; Reset PW</button></td>
     </tr>`).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px">No staff accounts.</div>'}
   `;
   document.getElementById('storeDetailModal').classList.add('show');
