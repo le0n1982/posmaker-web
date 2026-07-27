@@ -1822,9 +1822,14 @@ async function _confirmPendingTransfer() {
   errEl.style.display = 'none';
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Transferring…';
   try {
-    const prevDay = new Date(curStart.getTime() - 1000);
-    const prevDateStr = prevDay.getFullYear() + '-' + String(prevDay.getMonth() + 1).padStart(2, '0') + '-' + String(prevDay.getDate()).padStart(2, '0');
-    const backdatedIso = prevDay.toISOString();
+    const backdatedIso = new Date(curStart.getTime() - 1000).toISOString();
+    // The calendar-date LABEL for expense_date/shift_date must be "yesterday
+    // relative to curStart's own date", not derived from the backdated
+    // timestamp above — with a non-midnight cutoff (e.g. 4am), 1 second
+    // before curStart can still fall on TODAY's calendar date (e.g. 3:59am),
+    // which would wrongly file this under today instead of yesterday.
+    const prevCalDate = new Date(curStart.getFullYear(), curStart.getMonth(), curStart.getDate() - 1);
+    const prevDateStr = prevCalDate.getFullYear() + '-' + String(prevCalDate.getMonth() + 1).padStart(2, '0') + '-' + String(prevCalDate.getDate()).padStart(2, '0');
     const name = 'Fund Transfer to Manager';
     const reason = 'Auto-transfer: unremitted balance from previous shift';
     const { error: e1 } = await _sb.from('expenses').insert({

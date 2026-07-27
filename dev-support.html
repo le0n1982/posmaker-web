@@ -205,6 +205,7 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
       <button class="snav" id="tabPlans"    onclick="showTab('plans')">&#128202; Plan Limits</button>
       <button class="snav" id="tabVisitors" onclick="showTab('visitors')">&#127757; Visitors</button>
       <button class="snav" id="tabBugs"     onclick="showTab('bugs')">&#129704; Bug Checker</button>
+      <button class="snav" id="tabFnWatch"  onclick="showTab('fnwatch')">&#128269; Function Watch</button>
     </div>
     <!-- Main Panel -->
     <div class="main-panel">
@@ -487,6 +488,22 @@ select.filter-sel{padding:7px 10px;background:var(--bg);border:1.5px solid var(-
           <button class="btn btn-accent btn-sm" id="codeAuditBtn" onclick="runCodeAudit()">&#128269; Scan Live Code</button>
         </div>
         <div id="codeAuditResults" style="margin-top:18px"></div>
+      </div>
+    </div>
+
+    <!-- FUNCTION WATCH -->
+    <div id="secFnWatch" style="display:none">
+      <div class="card">
+        <div class="card-title">&#128269; Function Watch</div>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 6px">Fetches the live deployed source of every cashier-*.html / dashboard-*.html / manager.html file, extracts every named JS function, and compares each one against the last saved baseline to flag what changed since your last review.</p>
+        <p style="font-size:11px;color:var(--warn);margin:0 0 14px">&#9888; This flags CHANGES for you to review — it does not and cannot verify the new code is correct (no test suite to run against). Covers named <code>function</code> / <code>async function</code> declarations only, not arrow-function consts.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <button class="btn btn-accent btn-sm" id="fnWatchScanBtn" onclick="runFunctionScan()">&#128269; Scan Now</button>
+          <button class="btn btn-ghost btn-sm" id="fnWatchAcceptAllBtn" onclick="acceptAllShownBaselines()" style="display:none">&#10003; Accept All Shown as New Baseline</button>
+          <button class="btn btn-ghost btn-sm" onclick="showSqlSetup()">&#128203; View/Copy Setup SQL</button>
+        </div>
+        <div id="fnWatchSummary" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+        <div id="fnWatchResults"></div>
       </div>
     </div>
 
@@ -1362,6 +1379,61 @@ BEGIN
       SELECT 1 FROM information_schema.tables t
       WHERE t.table_schema = 'public' AND t.table_name = want.tbl
     );
+END; $$;
+
+-- Function Watch (Dev Support → Function Watch) — stores a hash + full source
+-- snapshot of every named JS function found across the live cashier-*.html /
+-- dashboard-*.html / manager.html files, so a re-scan can flag which
+-- functions changed since the dev last reviewed them. Keyed per (file,
+-- function name) since the same function name is reused across every
+-- business-type variant (e.g. doLogin exists once per cashier-*.html).
+CREATE TABLE IF NOT EXISTS public.dev_function_baselines (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  file_name text NOT NULL,
+  function_name text NOT NULL,
+  function_hash text NOT NULL,
+  function_source text NOT NULL,
+  line_start integer,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(file_name, function_name)
+);
+ALTER TABLE dev_function_baselines ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS dev_fnwatch_all ON dev_function_baselines;
+CREATE POLICY dev_fnwatch_all ON dev_function_baselines FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE OR REPLACE FUNCTION dev_save_function_baselines(p_token text, p_entries jsonb)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE entry jsonb;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  FOR entry IN SELECT * FROM jsonb_array_elements(p_entries) LOOP
+    INSERT INTO dev_function_baselines(file_name, function_name, function_hash, function_source, line_start, updated_at)
+      VALUES (entry->>'file_name', entry->>'function_name', entry->>'function_hash', entry->>'function_source', (entry->>'line_start')::int, now())
+      ON CONFLICT (file_name, function_name) DO UPDATE SET
+        function_hash = EXCLUDED.function_hash, function_source = EXCLUDED.function_source,
+        line_start = EXCLUDED.line_start, updated_at = now();
+  END LOOP;
+END; $$;
+
+CREATE OR REPLACE FUNCTION dev_get_function_baselines(p_token text)
+RETURNS TABLE(file_name text, function_name text, function_hash text, function_source text, line_start integer, updated_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  RETURN QUERY SELECT b.file_name, b.function_name, b.function_hash, b.function_source, b.line_start, b.updated_at
+    FROM dev_function_baselines b ORDER BY b.file_name, b.function_name;
+END; $$;
+
+-- Lets the dev explicitly acknowledge a function that no longer exists
+-- (renamed/removed) instead of it lingering forever as "Removed" every scan.
+CREATE OR REPLACE FUNCTION dev_delete_function_baseline(p_token text, p_file_name text, p_function_name text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  DELETE FROM dev_function_baselines WHERE file_name = p_file_name AND function_name = p_function_name;
 END; $$;`;
 
 function showSqlSetup() {
@@ -1610,6 +1682,328 @@ async function runCodeAudit() {
     html += '<p style="font-size:11px;color:var(--muted);margin-top:10px">Could not fetch: ' + withErrors.map(f => esc(f.file) + ' (' + esc(f.error) + ')').join(', ') + '</p>';
   }
   resultsEl.innerHTML = html;
+}
+
+// ── Function Watch ───────────────────────────────────────────────────────────
+// Fetches the LIVE deployed source of every cashier-*.html / dashboard-*.html /
+// manager.html file, extracts every named function, hashes it, and diffs
+// against a saved baseline (dev_function_baselines) to flag what changed since
+// the last review. This is a CHANGE DETECTOR for human review, not a
+// correctness checker — there's no test suite here to verify new code against.
+//
+// The extractor below is a more careful version of _extractFunctionsForAudit
+// above (which only needs "good enough" brace-counting for its narrower
+// unguarded-save-button scan): it tracks strings/comments/regex literals and
+// template-literal `${...}` interpolation so a `{`/`}` inside a string or a
+// nested object literal inside a template doesn't miscount the function's
+// real boundaries. Kept separate from the Code Audit helpers above rather
+// than shared, so this addition can't change that already-working scanner's
+// behavior.
+const FN_WATCH_FILES = CODE_AUDIT_SLUGS.map(s => 'cashier-' + s + '.html')
+  .concat(CODE_AUDIT_SLUGS.map(s => 'dashboard-' + s + '.html'))
+  .concat(['manager.html']);
+
+function _fnWatchIsRegexStart(text, idx) {
+  let j = idx - 1;
+  while (j >= 0 && /\s/.test(text[j])) j--;
+  if (j < 0) return true;
+  const c = text[j];
+  if ('(,=:!&|?+-*/%^~<>{[;'.includes(c)) return true;
+  let k = j;
+  while (k >= 0 && /[A-Za-z_$]/.test(text[k])) k--;
+  const word = text.slice(k + 1, j + 1);
+  return ['return','typeof','instanceof','in','of','new','delete','void','throw','case','yield','do','else'].includes(word);
+}
+// Single-pass tokenizer shared by the brace/paren matchers below — tracks
+// string/comment/regex modes plus a frame stack so template-literal `${...}`
+// interpolation (which can itself contain object-literal braces) balances
+// correctly against the outer function body's braces.
+function _fnWatchSkipToMatching(text, openIdx, openCh, closeCh) {
+  let i = openIdx + 1;
+  const frames = ['outer'];
+  let mode = 'code';
+  while (i < text.length && frames.length > 0) {
+    const c = text[i];
+    if (mode === 'code') {
+      if (c === '/' && text[i + 1] === '/') { mode = 'line-comment'; i += 2; continue; }
+      if (c === '/' && text[i + 1] === '*') { mode = 'block-comment'; i += 2; continue; }
+      if (c === '/' && _fnWatchIsRegexStart(text, i)) { mode = 'regex'; i++; continue; }
+      if (c === "'") { mode = 'sq'; i++; continue; }
+      if (c === '"') { mode = 'dq'; i++; continue; }
+      if (c === '`') { mode = 'tpl'; i++; continue; }
+      if (c === openCh) { frames.push('outer'); i++; continue; }
+      if (c === closeCh) {
+        const f = frames.pop(); i++;
+        if (frames.length === 0) return i - 1;
+        mode = f === 'interp' ? 'tpl' : 'code';
+        continue;
+      }
+      // A brace/paren of the OTHER kind inside code (e.g. a '(' while
+      // matching braces) needs no special handling — it's just a character.
+      i++; continue;
+    }
+    if (mode === 'sq' || mode === 'dq') {
+      if (c === '\\') { i += 2; continue; }
+      if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"')) { mode = 'code'; i++; continue; }
+      i++; continue;
+    }
+    if (mode === 'regex') {
+      if (c === '\\') { i += 2; continue; }
+      if (c === '[') { i++; while (i < text.length && text[i] !== ']') { if (text[i] === '\\') i++; i++; } i++; continue; }
+      if (c === '/') { mode = 'code'; i++; while (i < text.length && /[a-z]/i.test(text[i])) i++; continue; }
+      if (c === '\n') { mode = 'code'; i++; continue; } // unterminated — bail safely
+      i++; continue;
+    }
+    if (mode === 'tpl') {
+      if (c === '\\') { i += 2; continue; }
+      if (c === '`') { mode = 'code'; i++; continue; }
+      if (c === '$' && text[i + 1] === '{') { frames.push('interp'); mode = 'code'; i += 2; continue; }
+      i++; continue;
+    }
+    if (mode === 'line-comment') { if (c === '\n') mode = 'code'; i++; continue; }
+    if (mode === 'block-comment') { if (c === '*' && text[i + 1] === '/') { mode = 'code'; i += 2; } else i++; continue; }
+  }
+  return i - 1;
+}
+const _fnWatchSkipToMatchingBrace = (text, openIdx) => _fnWatchSkipToMatching(text, openIdx, '{', '}');
+const _fnWatchSkipToMatchingParen = (text, openIdx) => _fnWatchSkipToMatching(text, openIdx, '(', ')');
+
+function _fnWatchExtractFunctions(sourceText) {
+  const re = /(?:^|\s)(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  const results = [];
+  let m;
+  while ((m = re.exec(sourceText))) {
+    const name = m[1];
+    const openParenIdx = m.index + m[0].length - 1;
+    if (sourceText[openParenIdx] !== '(') continue;
+    const closeParenIdx = _fnWatchSkipToMatchingParen(sourceText, openParenIdx);
+    let braceIdx = closeParenIdx + 1;
+    while (braceIdx < sourceText.length && sourceText[braceIdx] !== '{') braceIdx++;
+    if (braceIdx >= sourceText.length) continue;
+    const closeBraceIdx = _fnWatchSkipToMatchingBrace(sourceText, braceIdx);
+    const fnKwStart = sourceText.lastIndexOf('function', openParenIdx);
+    const beforeFn = sourceText.slice(Math.max(0, fnKwStart - 10), fnKwStart);
+    const asyncMatch = /async\s+$/.exec(beforeFn);
+    const trueStart = asyncMatch ? fnKwStart - asyncMatch[0].length : fnKwStart;
+    const source = sourceText.slice(trueStart, closeBraceIdx + 1);
+    const lineStart = sourceText.slice(0, trueStart).split('\n').length;
+    results.push({ name, source, lineStart });
+  }
+  return results;
+}
+
+async function _fnWatchSha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Small LCS-based line diff — function bodies are small (tens to low
+// hundreds of lines) so an O(n*m) table is plenty fast per function.
+function _fnWatchLineDiff(oldText, newText) {
+  const a = oldText.split('\n'), b = newText.split('\n');
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ type: 'same', line: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ type: 'remove', line: a[i] }); i++; }
+    else { out.push({ type: 'add', line: b[j] }); j++; }
+  }
+  while (i < n) { out.push({ type: 'remove', line: a[i] }); i++; }
+  while (j < m) { out.push({ type: 'add', line: b[j] }); j++; }
+  return out;
+}
+
+let _fnWatchScanResults = [];
+
+async function runFunctionScan() {
+  const btn = document.getElementById('fnWatchScanBtn');
+  const summaryEl = document.getElementById('fnWatchSummary');
+  const resultsEl = document.getElementById('fnWatchResults');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scanning…';
+  summaryEl.textContent = '';
+  resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Fetching live files…</p>';
+
+  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const currentByFile = {};
+  const BATCH = 10;
+  for (let i = 0; i < FN_WATCH_FILES.length; i += BATCH) {
+    const batch = FN_WATCH_FILES.slice(i, i + BATCH);
+    await Promise.all(batch.map(async file => {
+      try {
+        const res = await fetch(base + file, { cache: 'no-store' });
+        if (!res.ok) { currentByFile[file] = { error: 'HTTP ' + res.status }; return; }
+        const html = await res.text();
+        const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)]
+          .filter(sm => !/\bsrc\s*=/.test(sm[1])).map(sm => sm[2]).filter(s => s.trim().length > 0);
+        currentByFile[file] = { fns: _fnWatchExtractFunctions(scripts.join('\n;\n')) };
+      } catch (e) {
+        currentByFile[file] = { error: e.message };
+      }
+    }));
+  }
+
+  resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Hashing…</p>';
+  const currentEntries = [];
+  for (const file of FN_WATCH_FILES) {
+    const entry = currentByFile[file];
+    if (!entry || entry.error || !entry.fns) continue;
+    for (const fn of entry.fns) {
+      const hash = await _fnWatchSha256Hex(fn.source);
+      currentEntries.push({ file_name: file, function_name: fn.name, function_hash: hash, function_source: fn.source, line_start: fn.lineStart });
+    }
+  }
+
+  resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Comparing against saved baseline…</p>';
+  const { data: baselineRows, error: baseErr } = await _sb.rpc('dev_get_function_baselines', { p_token: _devToken });
+  btn.disabled = false; btn.innerHTML = '&#128269; Scan Now';
+  if (baseErr) {
+    if (baseErr.message && baseErr.message.includes('does not exist')) {
+      resultsEl.innerHTML = '<p style="color:var(--danger);font-size:13px">Function Watch tables aren\'t set up in Supabase yet. Click "View/Copy Setup SQL" above, run it, then try again.</p>';
+    } else {
+      handleAuthError(baseErr);
+      resultsEl.innerHTML = `<p style="color:var(--danger);font-size:13px">Error: ${esc(baseErr.message)}</p>`;
+    }
+    return;
+  }
+
+  const baselineMap = {};
+  (baselineRows || []).forEach(r => { baselineMap[r.file_name + ' ' + r.function_name] = r; });
+  const currentMap = {};
+  currentEntries.forEach(e => { currentMap[e.file_name + ' ' + e.function_name] = e; });
+
+  const results = [];
+  currentEntries.forEach(e => {
+    const key = e.file_name + ' ' + e.function_name;
+    const b = baselineMap[key];
+    if (!b) results.push({ ...e, status: 'new' });
+    else if (b.function_hash !== e.function_hash) results.push({ ...e, status: 'changed', baselineSource: b.function_source });
+    else results.push({ ...e, status: 'unchanged' });
+  });
+  (baselineRows || []).forEach(b => {
+    const key = b.file_name + ' ' + b.function_name;
+    if (!currentMap[key]) results.push({ file_name: b.file_name, function_name: b.function_name, status: 'removed', baselineSource: b.function_source });
+  });
+
+  _fnWatchScanResults = results;
+  renderFnWatchResults();
+}
+
+const FN_WATCH_STATUS_STYLE = {
+  changed: 'border-left:3px solid var(--danger);background:rgba(239,68,68,.06)',
+  new:     'border-left:3px solid var(--accent);background:rgba(0,180,216,.06)',
+  removed: 'border-left:3px solid var(--warn);background:rgba(245,158,11,.06)',
+};
+const FN_WATCH_STATUS_LABEL = { changed: 'CHANGED', new: 'NEW', removed: 'REMOVED' };
+
+function renderFnWatchResults() {
+  const summaryEl = document.getElementById('fnWatchSummary');
+  const resultsEl = document.getElementById('fnWatchResults');
+  const acceptAllBtn = document.getElementById('fnWatchAcceptAllBtn');
+  const results = _fnWatchScanResults;
+  const changed = results.filter(r => r.status === 'changed');
+  const isNew = results.filter(r => r.status === 'new');
+  const removed = results.filter(r => r.status === 'removed');
+  const unchanged = results.filter(r => r.status === 'unchanged');
+  const noBaselineYet = changed.length === 0 && unchanged.length === 0 && removed.length === 0 && isNew.length > 0;
+
+  summaryEl.innerHTML = !results.length ? 'No scan run yet.' :
+    `<strong style="${changed.length ? 'color:var(--danger)' : ''}">${changed.length} changed</strong> &middot; ${isNew.length} new &middot; ${removed.length} removed &middot; ${unchanged.length} unchanged`;
+
+  acceptAllBtn.style.display = (changed.length || isNew.length) ? '' : 'none';
+  acceptAllBtn.textContent = noBaselineYet ? '✓ Save Current State as Baseline' : '✓ Accept All Shown as New Baseline';
+
+  const byFile = {};
+  results.filter(r => r.status !== 'unchanged').forEach(r => { (byFile[r.file_name] ||= []).push(r); });
+  const unchangedByFile = {};
+  unchanged.forEach(r => { unchangedByFile[r.file_name] = (unchangedByFile[r.file_name] || 0) + 1; });
+
+  if (!Object.keys(byFile).length) {
+    resultsEl.innerHTML = results.length ? '<p style="color:var(--success);font-size:14px;font-weight:600">&#10003; No changes since last baseline.</p>' : '';
+    return;
+  }
+
+  resultsEl.innerHTML = Object.entries(byFile).sort(([a], [b]) => a.localeCompare(b)).map(([file, rows]) => `
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(file)}${unchangedByFile[file] ? ` <span style="font-weight:400">(${unchangedByFile[file]} unchanged not shown)</span>` : ''}</div>
+      ${rows.map((r, idx) => `
+        <div style="${FN_WATCH_STATUS_STYLE[r.status]};border-radius:8px;padding:10px 14px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="badge" style="font-size:10px">${FN_WATCH_STATUS_LABEL[r.status]}</span>
+              <span style="font-size:13px;font-weight:600;font-family:monospace">${esc(r.function_name)}</span>
+            </div>
+            ${r.status !== 'removed'
+              ? `<button class="btn btn-ghost btn-sm" onclick="acceptOneBaseline(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Accept</button>`
+              : `<button class="btn btn-ghost btn-sm" onclick="acknowledgeRemoved(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Acknowledge Removed</button>`}
+          </div>
+          ${r.status === 'changed' ? `<div style="margin-top:6px">
+            <button class="btn btn-ghost btn-sm" onclick="toggleFnDiff(this)">Show Diff</button>
+            <div class="fn-diff" style="display:none;margin-top:6px;font-family:monospace;font-size:11px;max-height:300px;overflow-y:auto;background:var(--s2);border-radius:6px;padding:8px">${_fnWatchDiffHtml(r.baselineSource, r.function_source)}</div>
+          </div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function _fnWatchDiffHtml(oldSrc, newSrc) {
+  return _fnWatchLineDiff(oldSrc, newSrc).map(d => {
+    const color = d.type === 'add' ? 'var(--success)' : d.type === 'remove' ? 'var(--danger)' : 'var(--muted)';
+    const prefix = d.type === 'add' ? '+ ' : d.type === 'remove' ? '- ' : '  ';
+    return `<div style="color:${color};white-space:pre-wrap">${esc(prefix + d.line)}</div>`;
+  }).join('');
+}
+
+function toggleFnDiff(btn) {
+  const el = btn.nextElementSibling;
+  const showing = el.style.display !== 'none';
+  el.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? 'Show Diff' : 'Hide Diff';
+}
+
+async function acceptOneBaseline(fileName, functionName) {
+  const entry = _fnWatchScanResults.find(r => r.file_name === fileName && r.function_name === functionName);
+  if (!entry) return;
+  const { error } = await _sb.rpc('dev_save_function_baselines', { p_token: _devToken, p_entries: [{
+    file_name: entry.file_name, function_name: entry.function_name, function_hash: entry.function_hash,
+    function_source: entry.function_source, line_start: entry.line_start
+  }] });
+  if (error) { handleAuthError(error); showToast('Error: ' + error.message, true); return; }
+  entry.status = 'unchanged';
+  showToast('Baseline updated for ' + functionName);
+  renderFnWatchResults();
+}
+
+async function acceptAllShownBaselines() {
+  const toSave = _fnWatchScanResults.filter(r => r.status === 'changed' || r.status === 'new');
+  if (!toSave.length) return;
+  const btn = document.getElementById('fnWatchAcceptAllBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+  const payload = toSave.map(e => ({ file_name: e.file_name, function_name: e.function_name, function_hash: e.function_hash, function_source: e.function_source, line_start: e.line_start }));
+  const CHUNK = 300; // keep each RPC round-trip's payload reasonable at thousands-of-functions scale
+  for (let i = 0; i < payload.length; i += CHUNK) {
+    const { error } = await _sb.rpc('dev_save_function_baselines', { p_token: _devToken, p_entries: payload.slice(i, i + CHUNK) });
+    if (error) { handleAuthError(error); showToast('Error: ' + error.message, true); btn.disabled = false; btn.innerHTML = '✓ Accept All Shown as New Baseline'; return; }
+  }
+  toSave.forEach(e => { e.status = 'unchanged'; });
+  btn.disabled = false;
+  showToast('Baseline updated for ' + toSave.length + ' function(s).');
+  renderFnWatchResults();
+}
+
+async function acknowledgeRemoved(fileName, functionName) {
+  const { error } = await _sb.rpc('dev_delete_function_baseline', { p_token: _devToken, p_file_name: fileName, p_function_name: functionName });
+  if (error) { handleAuthError(error); showToast('Error: ' + error.message, true); return; }
+  _fnWatchScanResults = _fnWatchScanResults.filter(r => !(r.file_name === fileName && r.function_name === functionName && r.status === 'removed'));
+  showToast('Acknowledged removed: ' + functionName);
+  renderFnWatchResults();
 }
 
 // ── Render Stores ────────────────────────────────────────────────────────────
@@ -2466,7 +2860,7 @@ async function doGrantReferral() {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function showTab(tab) {
-  const map = {stores:'Stores',staff:'Staff',accounts:'Accounts',orders:'Orders',subs:'Subs',agents:'Agents',referrals:'Referrals',support:'Support',plans:'Plans',visitors:'Visitors',bugs:'Bugs'};
+  const map = {stores:'Stores',staff:'Staff',accounts:'Accounts',orders:'Orders',subs:'Subs',agents:'Agents',referrals:'Referrals',support:'Support',plans:'Plans',visitors:'Visitors',bugs:'Bugs',fnwatch:'FnWatch'};
   Object.keys(map).forEach(t => {
     document.getElementById('sec' + map[t]).style.display = t === tab ? '' : 'none';
     document.getElementById('tab' + map[t]).classList.toggle('active', t === tab);
