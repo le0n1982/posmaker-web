@@ -845,6 +845,18 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
+<!-- ── PENDING BUSINESS-DAY REMITTANCE (blocking — no cancel/close) ── -->
+<div class="modal" id="mPendingRemit">
+  <div class="mbox" style="max-width:380px">
+    <div class="mtitle">&#9888; Pending Remittance</div>
+    <p style="font-size:13px;color:var(--text);margin:-4px 0 12px">You have <strong id="prAmount">&#8212;</strong> unremitted from your previous shift (<span id="prDate">&#8212;</span>). Transfer it to the manager to continue.</p>
+    <div id="prErr" style="display:none;font-size:12px;color:#ef4444;margin-bottom:10px"></div>
+    <div class="m-actions">
+      <button class="btn-confirm" id="prConfirmBtn" style="width:100%" onclick="_confirmPendingTransfer()">&#10003; Transfer to Manager</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── RECEIVED FUNDS MODAL ── -->
 <div class="modal" id="mReceivedFunds">
   <div class="mbox" style="max-width:380px">
@@ -1500,6 +1512,7 @@ async function doLogin() {
     }
 
     CASHIER = found;
+    CASHIER_NAME = found.full_name || found.username; // needed early — _checkPendingBizDayRemit()/_calcCashDrawerBalance() key off this global, before showPOS() would normally set it
     try { const _cu=JSON.parse(localStorage.getItem('pm_cached_users_'+STORE_ID)||'[]'); const _xi=_cu.findIndex(u=>u.id===found.id); if(_xi>=0)_cu[_xi]=found;else _cu.push(found); localStorage.setItem('pm_cached_users_'+STORE_ID,JSON.stringify(_cu)); } catch(_) {}
     _sb.rpc('log_staff_login', { p_store_id: STORE_ID, p_staff_id: found.id, p_username: found.username }).then(() => {});
     _sb.from('activity_logs').insert({ store_id: STORE_ID, actor_name: found.full_name || found.username, actor_role: found.role || 'cashier', action: 'LOGIN', target_name: found.full_name || found.username, details: JSON.stringify({ device: getDeviceLabel() }) }).then(() => {});
@@ -1508,6 +1521,7 @@ async function doLogin() {
     } else {
       loadProds().catch(() => {}); // re-login — show POS instantly, refresh products in background
     }
+    await _checkPendingBizDayRemit();
     showPOS(found.full_name || found.username);
   } catch(e) {
     errEl.textContent = 'Login error: ' + (e.message || 'Check your internet connection.');
@@ -1648,19 +1662,105 @@ function _localToday() {
 // EXPENSE_PAID activity-log action — so it automatically flows through the
 // existing "Cash Drawer" deduction math (My Activity Today + Cash
 // Remittance modal) without needing separate reconciliation logic.
+// ── Pending business-day remittance check (blocking, runs at login) ─────────
+// Runs once at login, before the POS screen is revealed. If this cashier
+// still has cash sitting unremitted from BEFORE the current business day
+// started (e.g. the previous shift crossed the cutoff without a logout/
+// remit), block here with a modal until it's handed over to the manager —
+// otherwise it silently sits in "carried float" forever and never shows up
+// as a problem to anyone. Fails OPEN (never blocks a real shift) on any
+// network/query error or while offline, since Fund Transfer itself already
+// requires being online.
+let _pendingRemitInfo = null;
+async function _checkPendingBizDayRemit() {
+  if (!STORE_ID || !CASHIER_NAME || !navigator.onLine) return;
+  try {
+    const curStart = _curBizDayStart();
+    const asOf = new Date(curStart.getTime() - 1000).toISOString();
+    const pending = await _calcCashDrawerBalance(asOf);
+    if (pending <= 0.5) return;
+    await new Promise(resolve => {
+      _pendingRemitInfo = { amount: pending, curStart, resolve };
+      document.getElementById('prAmount').textContent = (CUR || '₱') + pending.toFixed(2);
+      document.getElementById('prDate').textContent = new Date(asOf).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+      document.getElementById('prErr').style.display = 'none';
+      const btn = document.getElementById('prConfirmBtn');
+      btn.disabled = false; btn.innerHTML = '&#10003; Transfer to Manager';
+      document.getElementById('mPendingRemit').classList.add('show');
+    });
+  } catch (e) {
+    console.warn('Pending remit check failed — allowing login', e);
+  }
+}
+async function _confirmPendingTransfer() {
+  if (!_pendingRemitInfo) return;
+  const { amount, curStart, resolve } = _pendingRemitInfo;
+  const btn = document.getElementById('prConfirmBtn');
+  const errEl = document.getElementById('prErr');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Transferring…';
+  try {
+    const prevDay = new Date(curStart.getTime() - 1000);
+    const prevDateStr = prevDay.getFullYear() + '-' + String(prevDay.getMonth() + 1).padStart(2, '0') + '-' + String(prevDay.getDate()).padStart(2, '0');
+    const backdatedIso = prevDay.toISOString();
+    const name = 'Fund Transfer to Manager';
+    const reason = 'Auto-transfer: unremitted balance from previous shift';
+    const { error: e1 } = await _sb.from('expenses').insert({
+      store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer',
+      expense_date: prevDateStr, notes: reason, added_by: CASHIER_NAME, created_at: backdatedIso
+    });
+    if (e1) throw e1;
+    // Fire-and-forget, same as saveFundTransfer() — this is just the audit
+    // trail entry, not the money-moving record.
+    _sb.from('activity_logs').insert({
+      store_id: STORE_ID, actor_name: CASHIER_NAME, actor_role: CASHIER?.role || 'cashier',
+      action: 'EXPENSE_PAID', target_name: name,
+      details: JSON.stringify({ name, amount, category: 'Fund Transfer', note: reason }),
+      created_at: backdatedIso
+    }).then(() => {});
+    const { error: e2 } = await _sb.from('cash_remittances').insert({
+      store_id: STORE_ID, cashier_name: CASHIER_NAME, shift_date: prevDateStr,
+      pos_sales: 0, cash_on_hand: amount, difference: amount,
+      status: 'fund_transfer', description: reason, created_at: backdatedIso
+    });
+    if (e2) throw e2;
+    document.getElementById('mPendingRemit').classList.remove('show');
+    _pendingRemitInfo = null;
+    resolve();
+  } catch (e) {
+    errEl.textContent = 'Error: ' + (e.message || 'Could not save. Check your connection and try again.');
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.innerHTML = '&#10003; Transfer to Manager';
+  }
+}
+// Business-day boundary — same "which calendar day does this belong to"
+// question dashboard-*.html's _bizDayBounds() answers for owner reports, just
+// the start half (cashier-side code only ever needs "since when is Today").
+function _curBizDayStart() {
+  const [h, m] = STORE?.business_day_enabled ? (STORE?.business_day_start || '04:00').split(':').map(Number) : [0, 0];
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h || 0, m || 0, 0, 0);
+  if (now < start) start.setDate(start.getDate() - 1);
+  return start;
+}
 // Computes the cashier's current expected Cash Drawer balance — same
 // formula as "My Activity Today" (starting float from the last remit +
 // cash collected since then, minus expenses paid from the drawer since
 // then) — so a Fund Transfer can never be typed for more cash than is
 // actually expected to be sitting in the drawer, even if the manager's
 // verbal request was for a bigger amount than the cashier actually has.
-async function _calcCashDrawerBalance() {
+// `asOf` caps the window at a specific past instant instead of "now" — used
+// by _checkPendingBizDayRemit() to ask "how much was still unremitted as of
+// the end of the PREVIOUS business day", without duplicating this whole
+// carried-float/void/expense formula a second time.
+async function _calcCashDrawerBalance(asOf) {
   // See openMySales() for why this is refreshed here too, not just left to
   // the 20s permissions poll — a stale carried float would let a Fund
   // Transfer under- or over-estimate what's really available.
   await refreshCarriedFloat();
   const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const dayStart = _curBizDayStart().toISOString();
+  const asOfIso = asOf || now.toISOString();
   const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
     .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
     .order('created_at', { ascending: false }).limit(5);
@@ -1671,13 +1771,21 @@ async function _calcCashDrawerBalance() {
   // override the correct DB timestamp and silently drop real received
   // funds/sales out of the window.
   let _sinceRemit = lastRemit?.created_at;
-  if (!_sinceRemit) _sinceRemit = dayStart;
+  if (!_sinceRemit) {
+    // Never remitted before — reach back to this cashier's very first login,
+    // not just "since midnight today" (that silently dropped sales from an
+    // unremitted, never-logged-out shift that started the previous day).
+    const { data: _firstLoginRows } = await _sb.from('activity_logs')
+      .select('created_at').eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).eq('action', 'LOGIN')
+      .order('created_at', { ascending: true }).limit(1);
+    _sinceRemit = _firstLoginRows?.[0]?.created_at || dayStart;
+  }
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const [{ data: orders }, { data: logs }, { data: confirmedPayments }, { data: voidRows }] = await Promise.all([
     _sb.from('orders').select('id,timestamp,total,payment_method,amount_tendered')
-      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).gte('timestamp', queryStart),
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).gte('timestamp', queryStart).lte('timestamp', asOfIso),
     _sb.from('activity_logs').select('action,details,created_at')
-      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart),
+      .eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).gte('created_at', queryStart).lte('created_at', asOfIso),
     // Confirmed "Received Fund" payments — these rows are keyed by the
     // cashier's USERNAME (how the sender addressed them), not their full
     // name like every other query on this page, since that's how the
@@ -1685,7 +1793,7 @@ async function _calcCashDrawerBalance() {
     CASHIER?.username
       ? _sb.from('cash_remittances').select('cash_on_hand,created_at')
           .eq('store_id', STORE_ID).eq('cashier_name', CASHIER.username).eq('status', 'payment_confirmed')
-          .gte('created_at', queryStart)
+          .gte('created_at', queryStart).lte('created_at', asOfIso)
       : Promise.resolve({ data: [] }),
     // A Void/Refund charged to "the cashier's pending balance" (see the
     // owner's Approve modal) reduces what she still owes — the original
@@ -1694,7 +1802,7 @@ async function _calcCashDrawerBalance() {
     // though that cash was actually given back/never really collected.
     _sb.from('cash_remittances').select('cash_on_hand,created_at,description')
       .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).eq('status', 'pending')
-      .gte('created_at', queryStart)
+      .gte('created_at', queryStart).lte('created_at', asOfIso)
   ]);
   // A void/refund charged to "the owner's own cash" (target=manager) never
   // touches this cashier's cash_remittances at all — the compensating
@@ -4248,7 +4356,7 @@ async function openMySales() {
   // what's shown the moment someone actually opens this screen.
   await refreshCarriedFloat();
   const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const dayStart = _curBizDayStart().toISOString();
   // Look up the last real remit FIRST — a cashier who hasn't remitted since
   // before midnight still has that cash sitting in the drawer, so the query
   // window below must reach back that far too, not just "today". Otherwise
@@ -4262,7 +4370,15 @@ async function openMySales() {
   // _calcCashDrawerBalance for why a per-device localStorage cache isn't
   // merged in here anymore.
   let _sinceRemit = lastRemit?.created_at;
-  if (!_sinceRemit) _sinceRemit = dayStart;
+  if (!_sinceRemit) {
+    // Never remitted before — reach back to this cashier's very first login,
+    // not just "since midnight today" (that silently dropped sales from an
+    // unremitted, never-logged-out shift that started the previous day).
+    const { data: _firstLoginRows } = await _sb.from('activity_logs')
+      .select('created_at').eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).eq('action', 'LOGIN')
+      .order('created_at', { ascending: true }).limit(1);
+    _sinceRemit = _firstLoginRows?.[0]?.created_at || dayStart;
+  }
   const queryStart = _sinceRemit < dayStart ? _sinceRemit : dayStart;
   const carriedFromPrevDay = queryStart < dayStart;
   const [{ data: orders, error }, { data: logs }, { data: remits }, { data: confirmedPayments }, { data: mgrVoidRefunds }] = await Promise.all([
