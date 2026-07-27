@@ -2020,8 +2020,8 @@ function renderFnWatchResults() {
                 <span style="font-size:13px;font-weight:600;font-family:monospace">${esc(r.function_name)}</span>
               </div>
               ${r.status !== 'removed'
-                ? `<button class="btn btn-ghost btn-sm" onclick="acceptOneBaseline(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Accept</button>`
-                : `<button class="btn btn-ghost btn-sm" onclick="acknowledgeRemoved(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Acknowledge Removed</button>`}
+                ? `<button class="btn btn-ghost btn-sm" data-file="${esc(r.file_name)}" data-fn="${esc(r.function_name)}" onclick="acceptOneBaseline(this.dataset.file,this.dataset.fn)">Accept</button>`
+                : `<button class="btn btn-ghost btn-sm" data-file="${esc(r.file_name)}" data-fn="${esc(r.function_name)}" onclick="acknowledgeRemoved(this.dataset.file,this.dataset.fn)">Acknowledge Removed</button>`}
             </div>
             ${r.status === 'changed' ? `<div style="margin-top:6px">
               <button class="btn btn-ghost btn-sm" onclick="toggleFnDiff(this)">Show Diff</button>
@@ -2155,12 +2155,12 @@ function viewStore(sid) {
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Cashier Login Link</div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
       <div style="flex:1;font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted)">${esc(cashierLink)}</div>
-      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(cashierLink)}).then(()=>showToast('Cashier link copied!'))">Copy</button>
+      <button class="btn btn-ghost btn-sm" data-copy="${esc(cashierLink)}" onclick="navigator.clipboard.writeText(this.dataset.copy).then(()=>showToast('Cashier link copied!'))">Copy</button>
     </div>
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Manager/Staff Login Link</div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
       <div style="flex:1;font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted)">${esc(staffLoginLink)}</div>
-      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(staffLoginLink)}).then(()=>showToast('Login link copied!'))">Copy</button>
+      <button class="btn btn-ghost btn-sm" data-copy="${esc(staffLoginLink)}" onclick="navigator.clipboard.writeText(this.dataset.copy).then(()=>showToast('Login link copied!'))">Copy</button>
     </div>
     ${staff.length ? `
     <div style="font-weight:600;margin-bottom:8px;font-size:13px">Staff (${staff.length})</div>
@@ -2169,7 +2169,7 @@ function viewStore(sid) {
       <td>${esc(u.full_name || '—')}</td>
       <td style="color:var(--muted)">${esc(u.username)}</td>
       <td><span class="badge ${u.role === 'manager' ? 'badge-purple' : 'badge-muted'}">${u.role}</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openResetModal('${u.id}',${JSON.stringify(u.full_name || u.username)},${JSON.stringify(u.username)},${JSON.stringify(s.name)})">&#128274; Reset PW</button></td>
+      <td><button class="btn btn-ghost btn-sm" data-id="${esc(u.id)}" data-name="${esc(u.full_name || u.username)}" data-user="${esc(u.username)}" data-store="${esc(s.name)}" onclick="openResetModal(this.dataset.id,this.dataset.name,this.dataset.user,this.dataset.store)">&#128274; Reset PW</button></td>
     </tr>`).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px">No staff accounts.</div>'}
     <div style="font-weight:600;margin:16px 0 8px;font-size:13px">Extra POS Terminals</div>
     <div id="sdTerminals" style="font-size:12px;color:var(--muted)">Loading…</div>
@@ -2199,7 +2199,7 @@ async function loadTerminalsForStore(sid) {
       <td>${esc(t.name)}</td>
       <td style="font-family:monospace">${esc(t.terminal_code)}</td>
       <td style="color:var(--muted);font-size:11px">${t.device_id ? esc(t.device_name || 'Unknown device') + ' (' + esc(t.platform || '?') + ')' : '<span style="color:var(--dim)">None yet</span>'}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="devDeleteTerminal('${t.id}','${sid}',${JSON.stringify(t.name)})">&#128465; Delete</button></td>
+      <td><button class="btn btn-danger btn-sm" data-tid="${esc(t.id)}" data-sid="${esc(sid)}" data-name="${esc(t.name)}" onclick="devDeleteTerminal(this.dataset.tid,this.dataset.sid,this.dataset.name)">&#128465; Delete</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 
