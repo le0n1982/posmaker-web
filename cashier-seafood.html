@@ -1455,6 +1455,17 @@ function getDeviceLabel() {
   const type = isTablet ? 'Tablet' : isMobile ? 'Mobile' : 'Desktop';
   return type + ' \u00b7 ' + os + ' \u00b7 ' + browser;
 }
+// A flaky/stuck connection otherwise leaves the login button reading
+// "Logging in…" forever with no error and no way to retry — races the given
+// promise against a timeout so a hung request surfaces as a normal, catchable
+// error instead. Same Promise.race-against-setTimeout shape already used by
+// confirmRemitLogout()'s remittance save.
+function _withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error((label || 'Request') + ' timed out — check your internet connection and try again.')), ms))
+  ]);
+}
 async function doLogin() {
   if (IS_PREVIEW) return; // never attempt a real login inside the Customize POS preview iframe
   const username = document.getElementById('lu').value.trim().toLowerCase();
@@ -1473,11 +1484,11 @@ async function doLogin() {
       try { const _cu=JSON.parse(localStorage.getItem('pm_cached_users_'+STORE_ID)||'[]'); const _cf=_cu.find(u=>u.username===username); if(_cf&&_cf.active){const _h=await sha256(pw);if(_cf.password_hash===_h){CASHIER=_cf;if(prods.length===0){const _cpd=localStorage.getItem('pm_cached_prods_'+STORE_ID);try{if(_cpd){prods=JSON.parse(_cpd);buildCats();renderProds('All');}}catch(_){}}showPOS(_cf.full_name||_cf.username);return;}else{errEl.textContent='Wrong password.';return;}} } catch(_){}
       errEl.textContent='Offline — log in once while online to enable offline access.'; return;
     }
-    const { data: found, error: qErr } = await _sb.from('store_users')
+    const { data: found, error: qErr } = await _withTimeout(_sb.from('store_users')
       .select('id,username,full_name,role,password_hash,active,last_seen')
       .eq('store_id', STORE_ID)
       .eq('username', username)
-      .single();
+      .single(), 15000, 'Login');
 
     if (qErr && !navigator.onLine) { try { const _cu=JSON.parse(localStorage.getItem('pm_cached_users_'+STORE_ID)||'[]'); const _cf=_cu.find(u=>u.username===username); if(_cf&&_cf.active){const _h=await sha256(pw);if(_cf.password_hash===_h){CASHIER=_cf;if(prods.length===0){const _cpd=localStorage.getItem('pm_cached_prods_'+STORE_ID);try{if(_cpd){prods=JSON.parse(_cpd);buildCats();renderProds('All');}}catch(_){}}showPOS(_cf.full_name||_cf.username);return;}else{errEl.textContent='Wrong password.';return;}} } catch(_){} errEl.textContent='Offline — log in once while online to enable offline access.'; return; }
     if (qErr && qErr.code !== 'PGRST116') throw new Error(qErr.message);
@@ -1517,7 +1528,7 @@ async function doLogin() {
     }
 
     if (!IS_PRO) {
-      const { data: allStaff } = await _sb.from('store_users').select('id,created_at').eq('store_id', STORE_ID);
+      const { data: allStaff } = await _withTimeout(_sb.from('store_users').select('id,created_at').eq('store_id', STORE_ID), 15000, 'Login');
       const frozenStaffIds = computeFrozenIds(allStaff || [], FREE_STAFF_LIMIT, IS_PRO);
       if (frozenStaffIds.has(found.id)) {
         errEl.textContent = "This staff account is over the store's free plan limit. Ask your manager to upgrade to Pro.";
@@ -1714,7 +1725,12 @@ async function _checkPendingBizDayRemit() {
   try {
     const curStart = _curBizDayStart();
     const asOf = new Date(curStart.getTime() - 1000).toISOString();
-    const pending = await _calcCashDrawerBalance(asOf);
+    // Timeout guards ONLY this balance calculation, not the blocking modal
+    // below it — a real cashier reading and acting on "Pending Remittance"
+    // legitimately needs more than a few seconds, that wait must stay
+    // unbounded. This just stops a hung network call from ever reaching
+    // that point in the first place.
+    const pending = await _withTimeout(_calcCashDrawerBalance(asOf, true), 15000, 'Pending balance check');
     if (pending <= 0.5) return;
     await new Promise(resolve => {
       _pendingRemitInfo = { amount: pending, curStart, resolve };
@@ -1795,7 +1811,7 @@ function _curBizDayStart() {
 // by _checkPendingBizDayRemit() to ask "how much was still unremitted as of
 // the end of the PREVIOUS business day", without duplicating this whole
 // carried-float/void/expense formula a second time.
-async function _calcCashDrawerBalance(asOf) {
+async function _calcCashDrawerBalance(asOf, revenueOnly) {
   // See openMySales() for why this is refreshed here too, not just left to
   // the 20s permissions poll — a stale carried float would let a Fund
   // Transfer under- or over-estimate what's really available.
@@ -1888,7 +1904,17 @@ async function _calcCashDrawerBalance(asOf) {
   const voidRefundSinceRemit = (voidRows || [])
     .filter(r => r.created_at >= _sinceRemit && _isVoidRefundAdjRow(r))
     .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
-  return _remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit + voidRefundSinceRemit - expensesSinceRemit;
+  // `revenueOnly` (used by _checkPendingBizDayRemit()) deliberately excludes
+  // the carried float and received funds — those are cash the manager/owner
+  // GAVE this cashier to hold (change fund for an upcoming shift), not sales
+  // revenue she owes back. Counting them as "unremitted" wrongly blocked a
+  // cashier's next login the moment she'd been handed petty cash, even
+  // though she hadn't sold anything yet. Fund Transfer / My Sales still want
+  // the FULL drawer balance (default, revenueOnly falsy) since that's about
+  // "how much cash can I physically hand over right now" — float included.
+  return revenueOnly
+    ? (cashSinceRemit + voidRefundSinceRemit - expensesSinceRemit)
+    : (_remitCarriedFloat + cashSinceRemit + receivedFundsSinceRemit + voidRefundSinceRemit - expensesSinceRemit);
 }
 let _ftDrawerBalance = 0;
 async function openFundTransfer() {
