@@ -1522,7 +1522,12 @@ async function loadTicketCount() {
 
 async function loadStores() {
   const { data, error } = await _sb.rpc('dev_get_stores', { p_token: _devToken });
-  if (error) { handleAuthError(error); return; }
+  // handleAuthError() only reacts to "Unauthorized" — any OTHER failure here
+  // (a real query error, a timeout, anything) used to fail completely
+  // silently, leaving the "Stores" stat stuck at its placeholder forever
+  // with zero visible sign anything went wrong. Surface it so it's at least
+  // debuggable instead of looking like the page just isn't doing anything.
+  if (error) { handleAuthError(error); showToast('Could not load stores: ' + error.message, true); return; }
   _allStores = data || [];
   document.getElementById('stStores').textContent = _allStores.length;
   populateStoreFilter('ordersStoreFilter');
