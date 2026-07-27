@@ -5196,8 +5196,13 @@ async function doActivateStore() {
   let termId = null;
   let { data: store } = await _sb.from('stores').select('id,name').eq('store_code', raw).maybeSingle();
   if (!store) {
-    const { data: term } = await _sb.from('pos_terminals').select('id,store_id,name').eq('terminal_code', raw).maybeSingle();
+    const { data: term, error: termErr } = await _sb.from('pos_terminals').select('id,store_id,name').eq('terminal_code', raw).maybeSingle();
     if (term) { store = { id: term.store_id, name: term.name }; termId = term.id; }
+    else if (termErr) {
+      err.textContent = 'Connection error: ' + termErr.message;
+      btn.disabled = false; btn.innerHTML = '&#10003; Connect';
+      return;
+    }
   }
   if (!store) {
     err.textContent = 'Store code not found. Ask your store owner for the correct code.';

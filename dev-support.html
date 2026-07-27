@@ -1091,7 +1091,7 @@ END; $$;
 
 CREATE OR REPLACE FUNCTION dev_get_stores(p_token text)
 RETURNS TABLE(id uuid, name text, business_type text, currency text,
-              track_stock boolean, created_at timestamptz)
+              track_stock boolean, created_at timestamptz, store_code text)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
@@ -1104,7 +1104,8 @@ BEGIN
   -- field dynamically so this keeps working whether or not the column
   -- exists on a given project, instead of hard-failing on a missing column.
   RETURN QUERY SELECT s.id, s.name, s.business_type, s.currency,
-    COALESCE((to_jsonb(s)->>'track_stock')::boolean, false), s.created_at
+    COALESCE((to_jsonb(s)->>'track_stock')::boolean, false), s.created_at,
+    s.store_code
     FROM stores s ORDER BY s.created_at DESC;
 END; $$;
 
@@ -2208,6 +2209,11 @@ function viewStore(sid) {
     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Business type: <strong style="color:var(--text)">${esc(s.business_type || '—')}</strong></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Currency: <strong style="color:var(--text)">${esc(s.currency || '₱')}</strong></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Registered: <strong style="color:var(--text)">${new Date(s.created_at).toLocaleString('en-PH')}</strong></div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Store Code (Terminal #1 / "Enter Store Code" screen)</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
+      <div style="flex:1;font-family:monospace;font-size:16px;font-weight:800;letter-spacing:2px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text)">${esc(s.store_code || '—')}</div>
+      <button class="btn btn-ghost btn-sm" data-copy="${esc(s.store_code || '')}" onclick="navigator.clipboard.writeText(this.dataset.copy).then(()=>showToast('Store code copied!'))">Copy</button>
+    </div>
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Cashier Login Link</div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
       <div style="flex:1;font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted)">${esc(cashierLink)}</div>
