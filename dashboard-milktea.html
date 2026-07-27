@@ -988,7 +988,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <div class="info-card">
         <h3>Store Information</h3>
         <div class="row2" style="margin-top:14px">
-          <div class="field"><label>Store Name</label><input id="sName" type="text" oninput="updateReceiptPreview()"></div>
+          <div class="field"><label>Store Name</label><input id="sName" type="text"></div>
           <div class="field"><label>Phone</label><input id="sPhone" type="text"></div>
         </div>
         <div class="field"><label>Address</label><input id="sAddress" type="text"></div>
@@ -1043,31 +1043,8 @@ input:checked + .slider:before{transform:translateX(18px)}
       </div>
       <div class="info-card">
         <h3>&#129534; Receipt Content</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Edit exactly what prints on the customer's receipt. Leave a text field blank to leave that line out. The preview on the right updates as you type.</p>
-        <div class="row2">
-          <div>
-            <div class="field" style="display:flex;align-items:center;gap:8px">
-              <input type="checkbox" id="sRcptLogo" style="width:auto" onchange="updateReceiptPreview()">
-              <label for="sRcptLogo" style="margin:0">Store Logo</label>
-            </div>
-            <div class="field"><label>Address line <span style="color:var(--dim);font-weight:400">(blank = hide)</span></label><input id="sRcptAddress" type="text" oninput="updateReceiptPreview()"></div>
-            <div class="field"><label>Phone line <span style="color:var(--dim);font-weight:400">(blank = hide)</span></label><input id="sRcptPhone" type="text" oninput="updateReceiptPreview()"></div>
-            <div class="field" style="display:flex;align-items:center;gap:8px">
-              <input type="checkbox" id="sRcptOrderType" style="width:auto" onchange="updateReceiptPreview()">
-              <label for="sRcptOrderType" style="margin:0">Order Type / Table No.</label>
-            </div>
-            <div class="field" style="display:flex;align-items:center;gap:8px">
-              <input type="checkbox" id="sRcptCashier" style="width:auto" onchange="updateReceiptPreview()">
-              <label for="sRcptCashier" style="margin:0">Cashier Name</label>
-            </div>
-            <div class="field"><label>Footer message <span style="color:var(--dim);font-weight:400">(blank = hide)</span></label><textarea id="sFooter" rows="2" oninput="updateReceiptPreview()"></textarea></div>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">PREVIEW — WHAT PRINTS ON THE POS PRINTER</label>
-            <pre id="receiptPreviewBox" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;margin:0"></pre>
-          </div>
-        </div>
-        <button class="btn btn-accent" onclick="saveReceiptSettings()" style="margin-top:14px">Save Receipt Content</button>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Logo, address, phone, order type/cashier lines, and footer text are now edited in Customize POS, alongside the rest of your POS's look — with a live receipt preview as you type.</p>
+        <a class="btn btn-ghost" href="javascript:void(0)" onclick="location.href=bizCustomizeFile(STORE.business_type)" style="max-width:220px">&#127912; Open Customize POS</a>
       </div>
       <div class="info-card">
         <h3>&#128272; Change Password</h3>
@@ -2128,20 +2105,6 @@ function _sig(ms = 25000) {
   document.getElementById('sBizDayStartField').style.display = store.business_day_enabled ? '' : 'none';
   const _closedDays = (store.closed_days || '').split(',').filter(Boolean);
   for (let d = 0; d < 7; d++) document.getElementById('sClosedDay'+d).checked = _closedDays.includes(String(d));
-  document.getElementById('sFooter').value   = store.receipt_footer || '';
-  {
-    const rs = store.receipt_settings || {};
-    document.getElementById('sRcptLogo').checked      = rs.show_logo       !== false;
-    // Address/Phone on the receipt are their own editable text, independent
-    // of the Store Info fields above — undefined means "never customized
-    // yet", so prefill from the real store address/phone; an explicitly
-    // saved empty string means the owner chose to hide it.
-    document.getElementById('sRcptAddress').value     = typeof rs.address === 'string' ? rs.address : (store.address || '');
-    document.getElementById('sRcptPhone').value       = typeof rs.phone   === 'string' ? rs.phone   : (store.phone   || '');
-    document.getElementById('sRcptOrderType').checked = rs.show_order_type !== false;
-    document.getElementById('sRcptCashier').checked   = rs.show_cashier    !== false;
-    updateReceiptPreview();
-  }
   document.getElementById('sShowCalc').checked = store.show_calculator !== false;
   document.getElementById('sShowSalesToCashier').checked = !!store.show_sales_to_cashier;
   document.getElementById('sEnableDrawerFloat').checked = !!store.enable_drawer_float;
@@ -7121,7 +7084,6 @@ async function saveSettings() {
     business_day_start: document.getElementById('sBizDayStart').value || '04:00',
     business_day_enabled: document.getElementById('sBizDayEnable').checked,
     closed_days:    [0,1,2,3,4,5,6].filter(d => document.getElementById('sClosedDay'+d).checked).join(','),
-    receipt_footer: document.getElementById('sFooter').value.trim(),
     show_calculator: document.getElementById('sShowCalc').checked,
     show_sales_to_cashier: document.getElementById('sShowSalesToCashier').checked,
     enable_drawer_float: document.getElementById('sEnableDrawerFloat').checked,
@@ -7147,49 +7109,6 @@ async function saveSettings() {
 // what the owner sees here matches what actually prints. Kept independent
 // (not a shared function) since dashboard and cashier are separate files
 // with no shared script include.
-function updateReceiptPreview() {
-  const W = 32;
-  const ln = '─'.repeat(W);
-  const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
-  const cur = CUR || '₱';
-  let s = '';
-  if (document.getElementById('sRcptLogo').checked && STORE?.logo_b64) s += ctr('[LOGO]') + '\n';
-  s += ctr(document.getElementById('sName').value.trim() || 'My Store') + '\n';
-  const _addr = document.getElementById('sRcptAddress').value.trim();
-  if (_addr) s += ctr(_addr) + '\n';
-  const _phone = document.getElementById('sRcptPhone').value.trim();
-  if (_phone) s += ctr(_phone) + '\n';
-  s += `${ln}\nOrder #1024  10:32 AM\n`;
-  if (document.getElementById('sRcptOrderType').checked) s += `Type: Dine In | Table 3\n`;
-  if (document.getElementById('sRcptCashier').checked) s += `Cashier: Juan\n`;
-  s += `${ln}\n`;
-  s += `Sample Item\n  2 x ${cur}50.00 = ${cur}100.00\n`;
-  s += `${ln}\nSubtotal: ${cur}100.00\nVAT:      ${cur}12.00\nTOTAL:    ${cur}112.00\nCash:     ${cur}150.00\nChange:   ${cur}38.00\n`;
-  s += ln;
-  const _footer = document.getElementById('sFooter').value.trim();
-  if (_footer) s += '\n' + _footer;
-  document.getElementById('receiptPreviewBox').textContent = s;
-}
-async function saveReceiptSettings() {
-  const receipt_settings = {
-    show_logo:       document.getElementById('sRcptLogo').checked,
-    address:         document.getElementById('sRcptAddress').value.trim(),
-    phone:           document.getElementById('sRcptPhone').value.trim(),
-    show_order_type: document.getElementById('sRcptOrderType').checked,
-    show_cashier:    document.getElementById('sRcptCashier').checked,
-  };
-  const receipt_footer = document.getElementById('sFooter').value.trim();
-  let { error } = await _sb.from('stores').update({ receipt_settings, receipt_footer }).eq('id', STORE.id);
-  if (error && error.message && error.message.toLowerCase().includes('column')) {
-    showToast('Could not save — run this SQL in Supabase: ALTER TABLE stores ADD COLUMN IF NOT EXISTS receipt_settings JSONB;', true);
-    return;
-  }
-  if (error) { showToast(error.message, true); return; }
-  STORE.receipt_settings = receipt_settings;
-  STORE.receipt_footer = receipt_footer;
-  showToast('Receipt content saved.');
-}
-
 async function saveTgSettings() {
   const token  = document.getElementById('sTgToken').value.trim();
   const chatId = document.getElementById('sTgChatId').value.trim();
