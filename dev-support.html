@@ -1096,8 +1096,16 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
     AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  -- track_stock doesn't exist as a real column on this project's stores
+  -- table (confirmed live: "column s.track_stock does not exist") — this
+  -- silently broke the ENTIRE function every time it was called, which
+  -- looked like nothing was wrong client-side since loadStores() only ever
+  -- surfaced "Unauthorized" errors, not this one. to_jsonb(...)->> reads the
+  -- field dynamically so this keeps working whether or not the column
+  -- exists on a given project, instead of hard-failing on a missing column.
   RETURN QUERY SELECT s.id, s.name, s.business_type, s.currency,
-    s.track_stock, s.created_at FROM stores s ORDER BY s.created_at DESC;
+    COALESCE((to_jsonb(s)->>'track_stock')::boolean, false), s.created_at
+    FROM stores s ORDER BY s.created_at DESC;
 END; $$;
 
 CREATE OR REPLACE FUNCTION dev_get_staff(p_token text, p_store_id uuid DEFAULT NULL)
@@ -1704,13 +1712,22 @@ function _auditFileText(src) {
   return findings;
 }
 
+// dev-support.html is sometimes opened as a local file (file://) while being
+// edited — location.origin/pathname are useless for building a live URL to
+// fetch or hand to someone in that case (they'd resolve to a local
+// filesystem path, not the real site). Fall back to the known production
+// domain whenever the page isn't actually being served over http(s).
+function liveBaseUrl() {
+  return location.protocol === 'file:' ? 'https://posmaker.ggff.net/' : (location.origin + location.pathname.replace(/[^/]+\.html$/, ''));
+}
+
 async function runCodeAudit() {
   const btn = document.getElementById('codeAuditBtn');
   const resultsEl = document.getElementById('codeAuditResults');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scanning…';
   resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Fetching and scanning live files…</p>';
   const files = CODE_AUDIT_SLUGS.map(s => 'dashboard-' + s + '.html').concat(['manager.html']);
-  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const base = liveBaseUrl();
   const allFindings = [];
   for (const file of files) {
     try {
@@ -1893,7 +1910,7 @@ async function runFunctionScan() {
   summaryEl.textContent = '';
   resultsEl.innerHTML = '<p style="color:var(--muted);font-size:13px">Fetching live files…</p>';
 
-  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const base = liveBaseUrl();
   const currentByFile = {};
   const BATCH = 10;
   for (let i = 0; i < FN_WATCH_FILES.length; i += BATCH) {
@@ -2140,7 +2157,7 @@ function viewStore(sid) {
   const todayStr = _localToday();
   const todayOrders = _allOrders.filter(o => o.store_id === sid && (o.ts || '').slice(0, 10) === todayStr);
   const todayRev = todayOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
-  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const base = liveBaseUrl();
   const cashierLink = base + bizCashierFile(s.business_type) + '?store=' + s.id;
   const staffLoginLink = base + 'staff-login.html?sid=' + s.id;
   document.getElementById('sdTitle').textContent = s.name;
