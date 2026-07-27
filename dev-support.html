@@ -1511,8 +1511,13 @@ BEGIN
     v_prefix := left(upper(regexp_replace(coalesce(p_name, 'STORE'), '[^A-Za-z0-9]', '', 'g')), 6);
     IF length(v_prefix) < 3 THEN v_prefix := rpad(v_prefix, 3, 'X'); END IF;
     v_code := v_prefix || lpad(floor(1000 + random() * 9000)::int::text, 4, '0');
-    SELECT EXISTS(SELECT 1 FROM stores WHERE store_code = v_code)
-        OR EXISTS(SELECT 1 FROM pos_terminals WHERE terminal_code = v_code)
+    -- Table aliases + qualified columns here are load-bearing, not style —
+    -- RETURNS TABLE(id, terminal_code, name) makes those three names into
+    -- OUT parameters/variables in scope for the whole function body, so an
+    -- unqualified "terminal_code" (or "id"/"name") is ambiguous against the
+    -- same-named table column and errors at call time, not at CREATE time.
+    SELECT EXISTS(SELECT 1 FROM stores s WHERE s.store_code = v_code)
+        OR EXISTS(SELECT 1 FROM pos_terminals pt WHERE pt.terminal_code = v_code)
       INTO v_taken;
     EXIT WHEN NOT v_taken;
   END LOOP;
@@ -2248,13 +2253,26 @@ async function loadTerminalsForStore(sid) {
     return;
   }
   if (!data || !data.length) { el.innerHTML = 'No extra terminals — only the store\'s own default code exists.'; return; }
-  el.innerHTML = `<table><thead><tr><th>Terminal</th><th>Code</th><th>Registered Device</th><th></th></tr></thead>
+  el.innerHTML = `<table><thead><tr><th>Terminal</th><th>Code</th><th>Registered Device</th><th colspan="2"></th></tr></thead>
     <tbody>${data.map(t => `<tr>
       <td>${esc(t.name)}</td>
       <td style="font-family:monospace">${esc(t.terminal_code)}</td>
       <td style="color:var(--muted);font-size:11px">${t.device_id ? esc(t.device_name || 'Unknown device') + ' (' + esc(t.platform || '?') + ')' : '<span style="color:var(--dim)">None yet</span>'}</td>
+      <td>${t.device_id ? `<button class="btn btn-ghost btn-sm" data-sid="${esc(sid)}" data-did="${esc(t.device_id)}" data-name="${esc(t.name)}" onclick="devRemoveDevice(this.dataset.sid,this.dataset.did,this.dataset.name)">&#128421; Remove Device</button>` : ''}</td>
       <td><button class="btn btn-danger btn-sm" data-tid="${esc(t.id)}" data-sid="${esc(sid)}" data-name="${esc(t.name)}" onclick="devDeleteTerminal(this.dataset.tid,this.dataset.sid,this.dataset.name)">&#128465; Delete</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+// reset_pos_device() already exists (schema.sql) and is granted directly to
+// anon — clears just the device lock so the SAME terminal code can be used
+// by a different device next, without deleting the terminal/code itself
+// (unlike devDeleteTerminal, which removes both).
+async function devRemoveDevice(sid, deviceId, name) {
+  if (!confirm(`Remove the registered device from "${name}"? The code stays the same and can be used by a different device next.`)) return;
+  const { error } = await _sb.rpc('reset_pos_device', { p_store_id: sid, p_device_id: deviceId });
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  showToast('Device removed — the code is now free for a new device.');
+  loadTerminalsForStore(sid);
 }
 
 async function devDeleteTerminal(terminalId, sid, name) {
