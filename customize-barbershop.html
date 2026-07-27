@@ -538,14 +538,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
       </div>
     </div>
 
-    <!-- CASHIER LINK -->
-    <div class="cz-sec">
-      <div class="cz-sec-title">&#128279; Cashier Link</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Share this URL with your cashiers. Works on any browser.</div>
-      <div id="czLinkBox" style="font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--muted);margin-bottom:8px;user-select:all">—</div>
-      <button class="btn btn-accent" style="width:100%;font-size:12px" onclick="navigator.clipboard.writeText(document.getElementById('czLinkBox').textContent).then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.innerHTML='&#128203; Copy Link',1500)})">&#128203; Copy Link</button>
-    </div>
-
   </div><!-- /panel -->
 
   <!-- PREVIEW -->
@@ -734,7 +726,6 @@ function setScale(id) {
   document.getElementById('posPreviewFrame').src = `${location.origin}${location.pathname.replace(/[^/]+\.html$/, 'cashier-barbershop.html')}?store=${store.id}&preview=1`;
   const _czUrl = cashierUrlFor(store);
   document.getElementById('openPosBtn').href = _czUrl;
-  document.getElementById('czLinkBox').textContent = _czUrl;
   document.getElementById('czFooter').value  = store.receipt_footer || '';
   {
     const rs = store.receipt_settings || {};
