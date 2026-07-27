@@ -1492,6 +1492,33 @@ BEGIN
     AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
   DELETE FROM pos_devices WHERE terminal_id = p_terminal_id;
   DELETE FROM pos_terminals WHERE id = p_terminal_id;
+END; $$;
+
+-- Adds a new terminal without ever touching the owner's own dashboard (which
+-- shows sensitive info like their payment QR codes) — same code format as
+-- dashboard-*.html's own genStoreCode(): up to 6 letters/digits from the
+-- name (padded to at least 3 with 'X' if shorter, never truncated if
+-- longer), + 4 random digits, retried until it collides with neither an
+-- existing store_code nor an existing terminal_code.
+CREATE OR REPLACE FUNCTION dev_add_pos_terminal(p_token text, p_store_id uuid, p_name text)
+RETURNS TABLE(id uuid, terminal_code text, name text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_prefix text; v_code text; v_taken boolean; v_id uuid;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  LOOP
+    v_prefix := left(upper(regexp_replace(coalesce(p_name, 'STORE'), '[^A-Za-z0-9]', '', 'g')), 6);
+    IF length(v_prefix) < 3 THEN v_prefix := rpad(v_prefix, 3, 'X'); END IF;
+    v_code := v_prefix || lpad(floor(1000 + random() * 9000)::int::text, 4, '0');
+    SELECT EXISTS(SELECT 1 FROM stores WHERE store_code = v_code)
+        OR EXISTS(SELECT 1 FROM pos_terminals WHERE terminal_code = v_code)
+      INTO v_taken;
+    EXIT WHEN NOT v_taken;
+  END LOOP;
+  INSERT INTO pos_terminals(store_id, terminal_code, name) VALUES (p_store_id, v_code, p_name)
+    RETURNING pos_terminals.id INTO v_id;
+  RETURN QUERY SELECT v_id, v_code, p_name;
 END; $$;`;
 
 function showSqlSetup() {
@@ -2195,7 +2222,10 @@ function viewStore(sid) {
       <td><span class="badge ${u.role === 'manager' ? 'badge-purple' : 'badge-muted'}">${u.role}</span></td>
       <td><button class="btn btn-ghost btn-sm" data-id="${esc(u.id)}" data-name="${esc(u.full_name || u.username)}" data-user="${esc(u.username)}" data-store="${esc(s.name)}" onclick="openResetModal(this.dataset.id,this.dataset.name,this.dataset.user,this.dataset.store)">&#128274; Reset PW</button></td>
     </tr>`).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px">No staff accounts.</div>'}
-    <div style="font-weight:600;margin:16px 0 8px;font-size:13px">Extra POS Terminals</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px">
+      <div style="font-weight:600;font-size:13px">Extra POS Terminals</div>
+      <button class="btn btn-accent btn-sm" data-sid="${esc(sid)}" onclick="devAddTerminal(this.dataset.sid)">&#43; Add Terminal</button>
+    </div>
     <div id="sdTerminals" style="font-size:12px;color:var(--muted)">Loading…</div>
   `;
   document.getElementById('storeDetailModal').classList.add('show');
@@ -2232,6 +2262,26 @@ async function devDeleteTerminal(terminalId, sid, name) {
   const { error } = await _sb.rpc('dev_delete_pos_terminal', { p_token: _devToken, p_terminal_id: terminalId });
   if (error) { showToast('Delete failed: ' + error.message, true); return; }
   showToast('Terminal deleted.');
+  loadTerminalsForStore(sid);
+}
+
+// Lets the dev spin up a fresh, independently-locked terminal for a store —
+// e.g. to test a cashier's login herself without ever touching the owner's
+// own dashboard (which shows sensitive info like their payment QR codes),
+// and without disturbing whatever real device is already registered to
+// Terminal #1.
+async function devAddTerminal(sid) {
+  const name = prompt('Name for this terminal (e.g. "Test Terminal"):', 'Test Terminal');
+  if (!name || !name.trim()) return;
+  const { data, error } = await _sb.rpc('dev_add_pos_terminal', { p_token: _devToken, p_store_id: sid, p_name: name.trim() });
+  if (error) {
+    showToast(error.message?.includes('does not exist')
+      ? 'Not set up yet — click "View/Copy Setup SQL", run it, then try again.'
+      : 'Error: ' + error.message, true);
+    return;
+  }
+  const row = data?.[0];
+  showToast(row ? `Terminal added — code: ${row.terminal_code}` : 'Terminal added.');
   loadTerminalsForStore(sid);
 }
 
