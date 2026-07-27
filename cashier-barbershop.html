@@ -1723,6 +1723,22 @@ async function doLogout() {
 }
 
 // ── Cashier Inbox ────────────────────────────────────────────────────────────
+// Same "since last remit" boundary _calcCashDrawerBalance() uses, kept as its
+// own small lookup here rather than refactoring that tested function — a
+// cashier who hasn't remitted/logged out yet naturally reaches back to their
+// first login (or gets `null`, meaning "no boundary, show everything"), so
+// nothing they might still need mid-shift silently disappears.
+async function _sinceLastRemitForInbox() {
+  const { data: lastRemitRows } = await _sb.from('cash_remittances').select('created_at,description')
+    .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME).in('status', ['pending', 'over', 'short', 'balanced'])
+    .order('created_at', { ascending: false }).limit(5);
+  const lastRemit = (lastRemitRows || []).find(r => !_isVoidRefundAdjRow(r));
+  if (lastRemit?.created_at) return lastRemit.created_at;
+  const { data: firstLoginRows } = await _sb.from('activity_logs')
+    .select('created_at').eq('store_id', STORE_ID).eq('actor_name', CASHIER_NAME).eq('action', 'LOGIN')
+    .order('created_at', { ascending: true }).limit(1);
+  return firstLoginRows?.[0]?.created_at || null;
+}
 async function openCashierInbox() {
   const list = document.getElementById('cashierInboxList');
   list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Loading...</div>';
@@ -1731,8 +1747,15 @@ async function openCashierInbox() {
     const un = CASHIER?.username || '';
     if (!un || !STORE_ID) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Not logged in.</div>'; return; }
     if (!navigator.onLine) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:12px">Messages need an internet connection.</div>'; return; }
-    const { data, error } = await _sb.from('store_messages')
-      .select('*').eq('store_id', STORE_ID).eq('to_username', un)
+    // Only messages since this cashier's last remit/settlement are shown —
+    // older ones are from an already-closed shift the owner/manager already
+    // has their own record of. Still-unread messages are ALWAYS shown
+    // regardless of age, so nothing important silently disappears just
+    // because it arrived close to shift-end and never got opened.
+    const since = await _sinceLastRemitForInbox();
+    let q = _sb.from('store_messages').select('*').eq('store_id', STORE_ID).eq('to_username', un);
+    if (since) q = q.or(`read.eq.false,created_at.gte.${since}`);
+    const { data, error } = await q
       .order('created_at', { ascending: false }).limit(50);
     if (error) throw error;
     await _sb.from('store_messages').update({ read: true })
