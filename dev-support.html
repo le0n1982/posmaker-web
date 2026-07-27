@@ -1073,6 +1073,7 @@ CREATE TABLE IF NOT EXISTS public.dev_admins (
   created_at timestamptz DEFAULT now()
 );
 ALTER TABLE dev_admins ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dev_all" ON dev_admins;
 CREATE POLICY "dev_all" ON dev_admins FOR ALL TO anon USING (true) WITH CHECK (true);
 
 CREATE OR REPLACE FUNCTION dev_login(p_username text, p_password_hash text)
@@ -1148,6 +1149,7 @@ CREATE TABLE IF NOT EXISTS public.dev_store_passwords (
   updated_at timestamptz DEFAULT now()
 );
 ALTER TABLE dev_store_passwords ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dev_pw_all" ON dev_store_passwords;
 CREATE POLICY "dev_pw_all" ON dev_store_passwords FOR ALL TO anon USING (true) WITH CHECK (true);
 
 CREATE OR REPLACE FUNCTION dev_save_store_password(p_token text, p_store_id uuid, p_owner_email text, p_password text)
