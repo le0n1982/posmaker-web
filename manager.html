@@ -834,6 +834,17 @@ const RESTAURANT_BIZ = new Set(['Fast Food','Carinderya','Coffee Shop','Bakery',
 
 function goLogin(){ location.href = 'staff-login.html' + (SID ? '?sid='+SID : ''); }
 
+// A hung/erroring network call must never be treated the same as "the DB
+// confirmed this session is invalid" — races the given promise against a
+// timeout so a stuck request surfaces as a normal, catchable error instead
+// of leaving init() waiting forever.
+function _withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error((label || 'Request') + ' timed out')), ms))
+  ]);
+}
+
 async function init(){
   const raw = localStorage.getItem('pm_mgr');
   if(!raw){ goLogin(); return; }
@@ -842,10 +853,23 @@ async function init(){
   if(SID && MGR.store_id !== SID){ show('noAccess'); return; }
   if(MGR.role !== 'manager'){ show('noAccess'); return; }
   // Re-verify against the DB — a cached session can outlive a role change
-  // or account deactivation by up to 8 hours otherwise.
+  // or account deactivation by up to 8 hours otherwise. Critically, only a
+  // row that EXPLICITLY comes back inactive/wrong-role should force a
+  // logout — a network hiccup, RLS hiccup, or timeout on this query must
+  // fail OPEN (keep the existing session) instead of being treated as
+  // confirmation the session is invalid. Not doing this was bouncing a
+  // perfectly valid, active manager back to the login screen on any
+  // transient blip, forcing her to log in again in a frustrating loop.
   if(MGR.staff_id){
-    const {data:cur} = await _sb.from('store_users').select('role,active').eq('id', MGR.staff_id).maybeSingle();
-    if(!cur || !cur.active || cur.role !== 'manager'){ localStorage.removeItem('pm_mgr'); goLogin(); return; }
+    try {
+      const {data:cur, error:_verifyErr} = await _withTimeout(
+        _sb.from('store_users').select('role,active').eq('id', MGR.staff_id).maybeSingle(), 15000, 'Session check'
+      );
+      if (_verifyErr) throw _verifyErr;
+      if(!cur || !cur.active || cur.role !== 'manager'){ localStorage.removeItem('pm_mgr'); goLogin(); return; }
+    } catch(_verifyErr) {
+      console.warn('Manager session re-verify failed — keeping existing session', _verifyErr);
+    }
   }
   document.getElementById('sbUser').innerHTML = '&#128100; ' + MGR.name;
   _OPS_STORE_ID = MGR.store_id;
