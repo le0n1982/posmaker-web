@@ -899,6 +899,21 @@ const {createClient} = supabase;
 const _sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 let _devToken = null, _devUser = '';
+// Same mapping dashboard-*.html uses to route to a business type's own
+// cashier-*.html file — needed here so the admin can get a working direct
+// login link for a store's staff without having to know/guess the URL.
+const BIZ_FILE_MAP = {
+  'Fast Food': 'fastfood', 'Carinderya': 'carinderya', 'Coffee Shop': 'coffeeshop', 'Bakery': 'bakery',
+  'Lechon': 'lechon', 'Pizza / Pasta': 'pizzapasta', 'Seafood': 'seafood', 'Milk Tea / Drinks': 'milktea',
+  'Karinderya / Buffet': 'buffet', 'Snack Bar': 'snackbar',
+  'Sari-Sari Store': 'sarisari', 'Bigasan': 'bigasan', 'Hardware': 'hardware', 'Agri Supply': 'agrisupply',
+  'Drug Store': 'drugstore', 'Pet Store': 'petstore', 'Clothing': 'clothing', 'Electronics': 'electronics',
+  'Furniture': 'furniture',
+  'Salon / Barbershop': 'barbershop', 'Laundry': 'laundry', 'Printing / Photocopy': 'printing',
+  'Auto Parts': 'autoparts', 'School Supplies': 'schoolsupplies'
+};
+function bizCashierFile(bizType) { const slug = BIZ_FILE_MAP[bizType]; return slug ? `cashier-${slug}.html` : 'cashier.html'; }
+
 let _allStores = [], _allStaff = [], _allOrders = [], _allPartners = [];
 let _allAgents = [], _allReferrals = [];
 let _onlineStoreIds = new Set();
@@ -2085,6 +2100,9 @@ function viewStore(sid) {
   const todayStr = _localToday();
   const todayOrders = _allOrders.filter(o => o.store_id === sid && (o.ts || '').slice(0, 10) === todayStr);
   const todayRev = todayOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  const base = location.origin + location.pathname.replace(/[^/]+\.html$/, '');
+  const cashierLink = base + bizCashierFile(s.business_type) + '?store=' + s.id;
+  const staffLoginLink = base + 'staff-login.html?sid=' + s.id;
   document.getElementById('sdTitle').textContent = s.name;
   document.getElementById('sdContent').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
@@ -2101,6 +2119,16 @@ function viewStore(sid) {
     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Business type: <strong style="color:var(--text)">${esc(s.business_type || '—')}</strong></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Currency: <strong style="color:var(--text)">${esc(s.currency || '₱')}</strong></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Registered: <strong style="color:var(--text)">${new Date(s.created_at).toLocaleString('en-PH')}</strong></div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Cashier Login Link</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <div style="flex:1;font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted)">${esc(cashierLink)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(cashierLink)}).then(()=>showToast('Cashier link copied!'))">Copy</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Manager/Staff Login Link</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
+      <div style="flex:1;font-size:10px;word-break:break-all;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted)">${esc(staffLoginLink)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(staffLoginLink)}).then(()=>showToast('Login link copied!'))">Copy</button>
+    </div>
     ${staff.length ? `
     <div style="font-weight:600;margin-bottom:8px;font-size:13px">Staff (${staff.length})</div>
     <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th></th></tr></thead>
