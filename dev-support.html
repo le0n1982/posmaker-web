@@ -1449,6 +1449,39 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
     AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
   DELETE FROM dev_function_baselines WHERE file_name = p_file_name AND function_name = p_function_name;
+END; $$;
+
+-- POS Terminals admin view — pos_terminals is RLS-locked to the owner's own
+-- authenticated Supabase Auth session (pt_owner policy), which dev-support's
+-- anon key + dev_admins token session never has, so listing/deleting a
+-- store's extra terminals needs its own SECURITY DEFINER wrapper here, same
+-- shape as dashboard-*.html's own loadPOSTerminals()/removeTerminal(). The
+-- store's own default code ("Terminal #1") has no pos_terminals row at all
+-- (implicit, per that table's own design) — this only ever lists/deletes
+-- the EXTRA terminals a Pro store added.
+CREATE OR REPLACE FUNCTION dev_get_pos_terminals(p_token text, p_store_id uuid)
+RETURNS TABLE(id uuid, terminal_code text, name text, created_at timestamptz,
+              device_id text, device_name text, platform text, registered_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  RETURN QUERY
+    SELECT t.id, t.terminal_code, t.name, t.created_at,
+           d.device_id, d.device_name, d.platform, d.registered_at
+    FROM pos_terminals t
+    LEFT JOIN pos_devices d ON d.terminal_id = t.id
+    WHERE t.store_id = p_store_id
+    ORDER BY t.created_at;
+END; $$;
+
+CREATE OR REPLACE FUNCTION dev_delete_pos_terminal(p_token text, p_terminal_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM dev_admins WHERE session_token = p_token
+    AND session_expires_at > now()) THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  DELETE FROM pos_devices WHERE terminal_id = p_terminal_id;
+  DELETE FROM pos_terminals WHERE id = p_terminal_id;
 END; $$;`;
 
 function showSqlSetup() {
@@ -2138,8 +2171,44 @@ function viewStore(sid) {
       <td><span class="badge ${u.role === 'manager' ? 'badge-purple' : 'badge-muted'}">${u.role}</span></td>
       <td><button class="btn btn-ghost btn-sm" onclick="openResetModal('${u.id}',${JSON.stringify(u.full_name || u.username)},${JSON.stringify(u.username)},${JSON.stringify(s.name)})">&#128274; Reset PW</button></td>
     </tr>`).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px">No staff accounts.</div>'}
+    <div style="font-weight:600;margin:16px 0 8px;font-size:13px">Extra POS Terminals</div>
+    <div id="sdTerminals" style="font-size:12px;color:var(--muted)">Loading…</div>
   `;
   document.getElementById('storeDetailModal').classList.add('show');
+  loadTerminalsForStore(sid);
+}
+
+// The store's OWN default code ("Terminal #1") has no pos_terminals row at
+// all — this only ever lists/manages EXTRA terminals a Pro store added, same
+// as dashboard-*.html's own "My POS Terminals" page. Loaded separately from
+// the rest of viewStore() (a real RPC round-trip) so the main detail panel
+// still renders instantly from already-loaded data.
+async function loadTerminalsForStore(sid) {
+  const el = document.getElementById('sdTerminals');
+  const { data, error } = await _sb.rpc('dev_get_pos_terminals', { p_token: _devToken, p_store_id: sid });
+  if (!document.getElementById('sdTerminals')) return; // modal closed before this resolved
+  if (error) {
+    el.innerHTML = error.message?.includes('does not exist')
+      ? '<span style="color:var(--danger)">Not set up yet — click "View/Copy Setup SQL" on the Bug Checker tab, run it, then try again.</span>'
+      : `<span style="color:var(--danger)">Error: ${esc(error.message)}</span>`;
+    return;
+  }
+  if (!data || !data.length) { el.innerHTML = 'No extra terminals — only the store\'s own default code exists.'; return; }
+  el.innerHTML = `<table><thead><tr><th>Terminal</th><th>Code</th><th>Registered Device</th><th></th></tr></thead>
+    <tbody>${data.map(t => `<tr>
+      <td>${esc(t.name)}</td>
+      <td style="font-family:monospace">${esc(t.terminal_code)}</td>
+      <td style="color:var(--muted);font-size:11px">${t.device_id ? esc(t.device_name || 'Unknown device') + ' (' + esc(t.platform || '?') + ')' : '<span style="color:var(--dim)">None yet</span>'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="devDeleteTerminal('${t.id}','${sid}',${JSON.stringify(t.name)})">&#128465; Delete</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function devDeleteTerminal(terminalId, sid, name) {
+  if (!confirm(`Delete "${name}"? Its code stops working and any connected device is disconnected.`)) return;
+  const { error } = await _sb.rpc('dev_delete_pos_terminal', { p_token: _devToken, p_terminal_id: terminalId });
+  if (error) { showToast('Delete failed: ' + error.message, true); return; }
+  showToast('Terminal deleted.');
+  loadTerminalsForStore(sid);
 }
 
 // ── Render Accounts ───────────────────────────────────────────────────────────
