@@ -507,9 +507,34 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;heigh
     <!-- RECEIPT -->
     <div class="cz-sec">
       <div class="cz-sec-title">&#128203; Receipt</div>
+      <div style="font-size:11px;color:var(--muted);margin:-3px 0 10px">Edit exactly what prints on the customer's receipt. Leave a text field blank to leave that line out.</div>
+      <div class="cz-field" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="czRcptLogo" style="width:auto" onchange="updateCzReceiptPreview()">
+        <label for="czRcptLogo" style="margin:0">Store Logo</label>
+      </div>
       <div class="cz-field">
-        <label>Footer Text</label>
-        <textarea class="cz-textarea" id="czFooter" rows="2" placeholder="e.g. Thank you! Come again."></textarea>
+        <label>Address line <span style="color:var(--dim)">(blank = hide)</span></label>
+        <input class="cz-select" id="czRcptAddress" type="text" oninput="updateCzReceiptPreview()">
+      </div>
+      <div class="cz-field">
+        <label>Phone line <span style="color:var(--dim)">(blank = hide)</span></label>
+        <input class="cz-select" id="czRcptPhone" type="text" oninput="updateCzReceiptPreview()">
+      </div>
+      <div class="cz-field" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="czRcptOrderType" style="width:auto" onchange="updateCzReceiptPreview()">
+        <label for="czRcptOrderType" style="margin:0">Order Type / Table No.</label>
+      </div>
+      <div class="cz-field" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="czRcptCashier" style="width:auto" onchange="updateCzReceiptPreview()">
+        <label for="czRcptCashier" style="margin:0">Cashier Name</label>
+      </div>
+      <div class="cz-field">
+        <label>Footer Text <span style="color:var(--dim)">(blank = hide)</span></label>
+        <textarea class="cz-textarea" id="czFooter" rows="2" placeholder="e.g. Thank you! Come again." oninput="updateCzReceiptPreview()"></textarea>
+      </div>
+      <div class="cz-field">
+        <label>Preview — what prints on the POS printer</label>
+        <pre id="czReceiptPreviewBox" style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:10px;font-family:'Courier New',monospace;font-size:10.5px;line-height:1.5;white-space:pre-wrap;margin:0;color:var(--text)"></pre>
       </div>
     </div>
 
@@ -709,6 +734,14 @@ function setScale(id) {
   document.getElementById('openPosBtn').href = _czUrl;
   document.getElementById('czLinkBox').textContent = _czUrl;
   document.getElementById('czFooter').value  = store.receipt_footer || '';
+  {
+    const rs = store.receipt_settings || {};
+    document.getElementById('czRcptLogo').checked      = rs.show_logo       !== false;
+    document.getElementById('czRcptAddress').value     = typeof rs.address === 'string' ? rs.address : (store.address || '');
+    document.getElementById('czRcptPhone').value       = typeof rs.phone   === 'string' ? rs.phone   : (store.phone   || '');
+    document.getElementById('czRcptOrderType').checked = rs.show_order_type !== false;
+    document.getElementById('czRcptCashier').checked   = rs.show_cashier    !== false;
+  }
   document.getElementById('posPreviewFrame').src = _czUrl + '&preview=1';
 
   if (store.pos_font)   document.getElementById('czFont').value   = store.pos_font;
@@ -728,9 +761,39 @@ function setScale(id) {
   if (store.pos_bg_img) { bgImgData = 'data:image/jpeg;base64,' + store.pos_bg_img; showThumb(); }
 
   applyPreview();
+  updateCzReceiptPreview();
 })();
 
 // ── Apply Preview ─────────────────────────────────────────────────────────────
+// ── Receipt Preview ──────────────────────────────────────────────────────────
+// Ported from dashboard-*.html's updateReceiptPreview() — same dot-matrix
+// mock-receipt logic, just reading STORE.name/STORE.logo_b64 directly
+// (already loaded as STORE here) instead of a separate Store Name field.
+function updateCzReceiptPreview() {
+  const box = document.getElementById('czReceiptPreviewBox');
+  if (!box || !STORE) return;
+  const W = 32;
+  const ln = '─'.repeat(W);
+  const ctr = s => { if (!s || s.length >= W) return s || ''; return ' '.repeat(Math.floor((W - s.length) / 2)) + s; };
+  const cur = STORE.currency || '₱';
+  let s = '';
+  if (document.getElementById('czRcptLogo').checked && STORE?.logo_b64) s += ctr('[LOGO]') + '\n';
+  s += ctr(STORE.name || 'My Store') + '\n';
+  const _addr = document.getElementById('czRcptAddress').value.trim();
+  if (_addr) s += ctr(_addr) + '\n';
+  const _phone = document.getElementById('czRcptPhone').value.trim();
+  if (_phone) s += ctr(_phone) + '\n';
+  s += `${ln}\nOrder #1024  10:32 AM\n`;
+  if (document.getElementById('czRcptOrderType').checked) s += `Type: Dine In | Table 3\n`;
+  if (document.getElementById('czRcptCashier').checked) s += `Cashier: Juan\n`;
+  s += `${ln}\n`;
+  s += `Sample Item\n  2 x ${cur}50.00 = ${cur}100.00\n`;
+  s += `${ln}\nSubtotal: ${cur}100.00\nVAT:      ${cur}12.00\nTOTAL:    ${cur}112.00\nCash:     ${cur}150.00\nChange:   ${cur}38.00\n`;
+  s += ln;
+  const _footer = document.getElementById('czFooter').value.trim();
+  if (_footer) s += '\n' + _footer;
+  box.textContent = s;
+}
 function applyPreview() {
   const font    = document.getElementById('czFont').value;
   const accent  = document.getElementById('czAccent').value;
@@ -838,6 +901,13 @@ async function saveTheme() {
   const mutedColor  = document.getElementById('czMuted').value;
   const radius  = parseInt(document.getElementById('czRadius').value);
   const footer  = document.getElementById('czFooter').value;
+  const receiptSettings = {
+    show_logo:       document.getElementById('czRcptLogo').checked,
+    address:         document.getElementById('czRcptAddress').value.trim(),
+    phone:           document.getElementById('czRcptPhone').value.trim(),
+    show_order_type: document.getElementById('czRcptOrderType').checked,
+    show_cashier:    document.getElementById('czRcptCashier').checked,
+  };
   const imgVal  = bgImgData || '';
   const opacity = parseInt(document.getElementById('czBgOpacity').value);
   const fontScale = parseInt(document.getElementById('czFontScale').value);
@@ -847,7 +917,8 @@ async function saveTheme() {
   const tries = [
     { pos_font:font, pos_accent:accent, pos_bg:bg, pos_card:card, pos_text:text, pos_radius:radius,
       pos_name_color:nameColor, pos_price_color:priceColor, pos_totals_color:totalsColor, pos_muted_color:mutedColor, pos_font_scale:fontScale,
-      pos_btn_style:btnStyle, pos_bg_scale:bgScale, pos_bg_opacity:opacity, pos_bg_img:imgVal, receipt_footer:footer },
+      pos_btn_style:btnStyle, pos_bg_scale:bgScale, pos_bg_opacity:opacity, pos_bg_img:imgVal, receipt_footer:footer,
+      receipt_settings:receiptSettings },
     { pos_font:font, pos_accent:accent, pos_bg:bg, pos_card:card, pos_text:text, pos_radius:radius,
       pos_bg_img:imgVal, receipt_footer:footer },
     { pos_font:font, pos_accent:accent, pos_bg:bg, pos_card:card, pos_text:text, pos_radius:radius,
