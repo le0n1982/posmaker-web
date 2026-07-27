@@ -1864,7 +1864,7 @@ async function runFunctionScan() {
   const { data: baselineRows, error: baseErr } = await _sb.rpc('dev_get_function_baselines', { p_token: _devToken });
   btn.disabled = false; btn.innerHTML = '&#128269; Scan Now';
   if (baseErr) {
-    if (baseErr.message && baseErr.message.includes('does not exist')) {
+    if (baseErr.message && (baseErr.message.includes('does not exist') || baseErr.message.includes('Could not find the function'))) {
       resultsEl.innerHTML = '<p style="color:var(--danger);font-size:13px">Function Watch tables aren\'t set up in Supabase yet. Click "View/Copy Setup SQL" above, run it, then try again.</p>';
     } else {
       handleAuthError(baseErr);
@@ -1929,28 +1929,54 @@ function renderFnWatchResults() {
     return;
   }
 
-  resultsEl.innerHTML = Object.entries(byFile).sort(([a], [b]) => a.localeCompare(b)).map(([file, rows]) => `
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(file)}${unchangedByFile[file] ? ` <span style="font-weight:400">(${unchangedByFile[file]} unchanged not shown)</span>` : ''}</div>
-      ${rows.map((r, idx) => `
-        <div style="${FN_WATCH_STATUS_STYLE[r.status]};border-radius:8px;padding:10px 14px;margin-bottom:6px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge" style="font-size:10px">${FN_WATCH_STATUS_LABEL[r.status]}</span>
-              <span style="font-size:13px;font-weight:600;font-family:monospace">${esc(r.function_name)}</span>
-            </div>
-            ${r.status !== 'removed'
-              ? `<button class="btn btn-ghost btn-sm" onclick="acceptOneBaseline(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Accept</button>`
-              : `<button class="btn btn-ghost btn-sm" onclick="acknowledgeRemoved(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Acknowledge Removed</button>`}
-          </div>
-          ${r.status === 'changed' ? `<div style="margin-top:6px">
-            <button class="btn btn-ghost btn-sm" onclick="toggleFnDiff(this)">Show Diff</button>
-            <div class="fn-diff" style="display:none;margin-top:6px;font-family:monospace;font-size:11px;max-height:300px;overflow-y:auto;background:var(--s2);border-radius:6px;padding:8px">${_fnWatchDiffHtml(r.baselineSource, r.function_source)}</div>
-          </div>` : ''}
+  // Collapsed by default (a first-ever scan can list thousands of "new"
+  // entries across 49 files) — each file is a +/− toggle section. The
+  // header itself turns RED whenever that file has a CHANGED function, so
+  // scanning the collapsed list alone shows which files need a look,
+  // without expanding every one.
+  resultsEl.innerHTML = Object.entries(byFile).sort(([a], [b]) => a.localeCompare(b)).map(([file, rows]) => {
+    const fileChanged = rows.filter(r => r.status === 'changed').length;
+    const fileNew = rows.filter(r => r.status === 'new').length;
+    const fileRemoved = rows.filter(r => r.status === 'removed').length;
+    const headerStyle = fileChanged
+      ? 'border-left:3px solid var(--danger);background:rgba(239,68,68,.12)'
+      : 'border-left:3px solid var(--border);background:var(--s2)';
+    const counts = [];
+    if (fileChanged) counts.push(fileChanged + ' changed');
+    if (fileNew) counts.push(fileNew + ' new');
+    if (fileRemoved) counts.push(fileRemoved + ' removed');
+    if (unchangedByFile[file]) counts.push(unchangedByFile[file] + ' unchanged');
+    return `
+    <div style="margin-bottom:8px">
+      <div style="${headerStyle};border-radius:8px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none" onclick="toggleFnFileSection(this)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="fn-toggle-icon" style="font-weight:700;width:12px;text-align:center;color:${fileChanged ? 'var(--danger)' : 'var(--muted)'}">+</span>
+          <span style="font-size:13px;font-weight:700;${fileChanged ? 'color:var(--danger)' : ''}">${esc(file)}</span>
         </div>
-      `).join('')}
+        <span style="font-size:11px;color:var(--muted)">${esc(counts.join(' · '))}</span>
+      </div>
+      <div class="fn-file-rows" style="display:none;padding:8px 0 0 4px">
+        ${rows.map(r => `
+          <div style="${FN_WATCH_STATUS_STYLE[r.status]};border-radius:8px;padding:10px 14px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="badge" style="font-size:10px">${FN_WATCH_STATUS_LABEL[r.status]}</span>
+                <span style="font-size:13px;font-weight:600;font-family:monospace">${esc(r.function_name)}</span>
+              </div>
+              ${r.status !== 'removed'
+                ? `<button class="btn btn-ghost btn-sm" onclick="acceptOneBaseline(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Accept</button>`
+                : `<button class="btn btn-ghost btn-sm" onclick="acknowledgeRemoved(${JSON.stringify(r.file_name)},${JSON.stringify(r.function_name)})">Acknowledge Removed</button>`}
+            </div>
+            ${r.status === 'changed' ? `<div style="margin-top:6px">
+              <button class="btn btn-ghost btn-sm" onclick="toggleFnDiff(this)">Show Diff</button>
+              <div class="fn-diff" style="display:none;margin-top:6px;font-family:monospace;font-size:11px;max-height:300px;overflow-y:auto;background:var(--s2);border-radius:6px;padding:8px">${_fnWatchDiffHtml(r.baselineSource, r.function_source)}</div>
+            </div>` : ''}
+          </div>
+        `).join('')}
+      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function _fnWatchDiffHtml(oldSrc, newSrc) {
@@ -1966,6 +1992,14 @@ function toggleFnDiff(btn) {
   const showing = el.style.display !== 'none';
   el.style.display = showing ? 'none' : '';
   btn.textContent = showing ? 'Show Diff' : 'Hide Diff';
+}
+
+function toggleFnFileSection(headerEl) {
+  const rowsEl = headerEl.nextElementSibling;
+  const icon = headerEl.querySelector('.fn-toggle-icon');
+  const showing = rowsEl.style.display !== 'none';
+  rowsEl.style.display = showing ? 'none' : '';
+  icon.textContent = showing ? '+' : '−';
 }
 
 async function acceptOneBaseline(fileName, functionName) {
