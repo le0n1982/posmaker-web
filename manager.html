@@ -2261,8 +2261,12 @@ async function checkStaleRemittances() {
     .select('username,full_name').eq('store_id', MGR.store_id).eq('role', 'cashier').eq('active', true);
   if (!cashiers?.length) { alertEl.style.display = 'none'; return; }
 
+  // A manager-ACCEPTED fund transfer counts too — it's the same real proof
+  // cash changed hands as a formal end-of-shift remittance, just mid-shift.
+  // An unconfirmed one doesn't count (still just the cashier's own claim).
   const { data: remits } = await _sb.from('cash_remittances')
-    .select('cashier_name,created_at').eq('store_id', MGR.store_id).in('status', ['pending', 'over', 'short', 'balanced'])
+    .select('cashier_name,created_at,status,owner_confirmed').eq('store_id', MGR.store_id)
+    .or('status.in.(pending,over,short,balanced),and(status.eq.fund_transfer,owner_confirmed.eq.true)')
     .order('created_at', { ascending: false });
   const lastRemitByName = {};
   (remits || []).forEach(r => { if (!lastRemitByName[r.cashier_name]) lastRemitByName[r.cashier_name] = r.created_at; });
@@ -3782,9 +3786,16 @@ async function loadPendingCashierTransfers() {
   const list = document.getElementById('pendingTransfersList');
   const badge = document.getElementById('pendingTransfersBadge');
   if (!list || !MGR?.store_id) return;
+  // .is.null too — rows inserted before this feature shipped have
+  // owner_confirmed as NULL (column existed already, but nothing set it),
+  // and a strict .eq('owner_confirmed', false) never matches NULL in
+  // Postgres, so those older transfers would sit invisible here forever:
+  // not in this review queue, and also excluded from Net Cash (same !r.
+  // owner_confirmed truthiness check as loadCashSummary), i.e. money that
+  // looked like it vanished even though everyone agreed it was handed over.
   const { data, error } = await _sb.from('cash_remittances')
     .select('id,cashier_name,cash_on_hand,shift_date,description,created_at,expense_id')
-    .eq('store_id', MGR.store_id).eq('status', 'fund_transfer').eq('owner_confirmed', false)
+    .eq('store_id', MGR.store_id).eq('status', 'fund_transfer').or('owner_confirmed.is.null,owner_confirmed.eq.false')
     .order('created_at', { ascending: false });
   if (error) { list.innerHTML = '<div style="text-align:center;padding:12px;color:#ef4444;font-size:12px">' + error.message + '</div>'; return; }
   const rows = data || [];
