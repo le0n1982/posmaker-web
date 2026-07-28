@@ -343,6 +343,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 <div id="syncBar" style="display:none;background:#1a3a1a;color:#4ade80;font-size:12px;font-weight:600;padding:5px 16px;text-align:center;border-bottom:1px solid #2a5a2a"></div>
+<div id="pendingRemitBar" style="display:none;background:#2a0e0e;border-bottom:1px solid #ef444455;padding:7px 14px;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer" onclick="_onPendingRemitBarClick()">
+  <span style="color:#ef4444;font-weight:700;font-size:12px;white-space:nowrap">&#9888;</span>
+  <span id="pendingRemitBarText" style="color:#f0f0f8;font-size:12px;font-weight:600;flex:1;min-width:0"></span>
+  <span id="pendingRemitBarAction" style="color:#ef4444;font-size:12px;font-weight:700;white-space:nowrap;text-decoration:underline"></span>
+</div>
 <div id="lowStockBar" style="display:none;background:#1a0e00;border-bottom:1px solid #f59e0b55;padding:7px 14px;align-items:center;gap:8px;flex-wrap:wrap">
   <span style="color:#f59e0b;font-weight:700;font-size:12px;white-space:nowrap">&#9888; Low Stock:</span>
   <div id="lowStockItems" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0"></div>
@@ -847,14 +852,18 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
   </div>
 </div>
 
-<!-- ── PENDING BUSINESS-DAY REMITTANCE (blocking — no cancel/close) ── -->
+<!-- ── PENDING BUSINESS-DAY REMITTANCE — opened from the persistent
+     pendingRemitBar (not auto-blocking login anymore); the bar itself
+     stays up regardless of Cancel here, since only a manager-confirmed
+     transfer actually clears it. ── -->
 <div class="modal" id="mPendingRemit">
   <div class="mbox" style="max-width:380px">
     <div class="mtitle">&#9888; Pending Remittance</div>
-    <p style="font-size:13px;color:var(--text);margin:-4px 0 12px">You have <strong id="prAmount">&#8212;</strong> unremitted from your previous shift (<span id="prDate">&#8212;</span>). Transfer it to the manager to continue.</p>
+    <p style="font-size:13px;color:var(--text);margin:-4px 0 12px">You have <strong id="prAmount">&#8212;</strong> unremitted from your previous shift (<span id="prDate">&#8212;</span>). Transfer it to the manager to clear this notice.</p>
     <div id="prErr" style="display:none;font-size:12px;color:#ef4444;margin-bottom:10px"></div>
     <div class="m-actions">
-      <button class="btn-confirm" id="prConfirmBtn" style="width:100%" onclick="_confirmPendingTransfer()">&#10003; Transfer to Manager</button>
+      <button class="btn-cancel" onclick="closeM('mPendingRemit')">Later</button>
+      <button class="btn-confirm" id="prConfirmBtn" onclick="_confirmPendingTransfer()">&#10003; Transfer to Manager</button>
     </div>
   </div>
 </div>
@@ -1539,7 +1548,7 @@ async function doLogin() {
     }
 
     CASHIER = found;
-    CASHIER_NAME = found.full_name || found.username; // needed early — _checkPendingBizDayRemit()/_calcCashDrawerBalance() key off this global, before showPOS() would normally set it
+    CASHIER_NAME = found.full_name || found.username; // needed early — _refreshPendingRemitBar()/_calcCashDrawerBalance() key off this global, before showPOS() would normally set it
     try { const _cu=JSON.parse(localStorage.getItem('pm_cached_users_'+STORE_ID)||'[]'); const _xi=_cu.findIndex(u=>u.id===found.id); if(_xi>=0)_cu[_xi]=found;else _cu.push(found); localStorage.setItem('pm_cached_users_'+STORE_ID,JSON.stringify(_cu)); } catch(_) {}
     _sb.rpc('log_staff_login', { p_store_id: STORE_ID, p_staff_id: found.id, p_username: found.username }).then(() => {});
     _sb.from('activity_logs').insert({ store_id: STORE_ID, actor_name: found.full_name || found.username, actor_role: found.role || 'cashier', action: 'LOGIN', target_name: found.full_name || found.username, details: JSON.stringify({ device: getDeviceLabel() }) }).then(() => {});
@@ -1548,8 +1557,11 @@ async function doLogin() {
     } else {
       loadProds().catch(() => {}); // re-login — show POS instantly, refresh products in background
     }
-    await _checkPendingBizDayRemit();
     showPOS(found.full_name || found.username);
+    // Non-blocking — the cashier can start selling immediately; a persistent
+    // banner (not a login-blocking modal) keeps the pending amount visible
+    // until it's actually manager-confirmed. See _refreshPendingRemitBar().
+    _refreshPendingRemitBar();
   } catch(e) {
     errEl.textContent = 'Login error: ' + (e.message || 'Check your internet connection.');
   } finally {
@@ -1573,6 +1585,9 @@ async function checkStorePermissions() {
     refreshCarriedFloat();
   }
   loadPaymentMethods();
+  // Piggyback on this existing poll to catch a manager Accept/Reject that
+  // happened while this cashier stayed logged in, without a dedicated timer.
+  if (CASHIER?.id) _refreshPendingRemitBar();
 }
 function startPermissionsPoll() {
   if (_permPollInterval) clearInterval(_permPollInterval);
@@ -1722,34 +1737,59 @@ function _localToday() {
 // network/query error or while offline, since Fund Transfer itself already
 // requires being online.
 let _pendingRemitInfo = null;
-async function _checkPendingBizDayRemit() {
-  if (!STORE_ID || !CASHIER_NAME || !navigator.onLine) return;
+// Non-blocking: login no longer waits on this. Instead it keeps the
+// persistent pendingRemitBar showing until a manager-CONFIRMED transfer
+// clears it — a self-reported "I transferred it" click alone is not enough
+// per the owner's explicit requirement, since the manager needs a chance to
+// Reject a transfer that was claimed but never actually handed over.
+let _pendingRemitState = null; // { amount, curStart } when actionable, or 'awaiting' when submitted but not yet manager-confirmed
+async function _refreshPendingRemitBar() {
+  const bar = document.getElementById('pendingRemitBar');
+  if (!STORE_ID || !CASHIER_NAME || !navigator.onLine || !bar) return;
   try {
+    // An unconfirmed transfer already on file takes priority over
+    // recomputing a fresh balance — don't let the cashier submit a second
+    // transfer while one is still awaiting the manager's review.
+    const { data: awaiting } = await _withTimeout(_sb.from('cash_remittances')
+      .select('id,cash_on_hand')
+      .eq('store_id', STORE_ID).eq('cashier_name', CASHIER_NAME)
+      .eq('status', 'fund_transfer').eq('owner_confirmed', false)
+      .order('created_at', { ascending: false }).limit(1), 15000, 'Pending remit check');
+    if (awaiting && awaiting.length) {
+      _pendingRemitState = 'awaiting';
+      bar.style.display = 'flex';
+      document.getElementById('pendingRemitBarText').textContent =
+        `Transfer of ${(CUR || '₱')}${parseFloat(awaiting[0].cash_on_hand).toFixed(2)} submitted — waiting for your manager to confirm.`;
+      document.getElementById('pendingRemitBarAction').textContent = '';
+      return;
+    }
     const curStart = _curBizDayStart();
     const asOf = new Date(curStart.getTime() - 1000).toISOString();
-    // Timeout guards ONLY this balance calculation, not the blocking modal
-    // below it — a real cashier reading and acting on "Pending Remittance"
-    // legitimately needs more than a few seconds, that wait must stay
-    // unbounded. This just stops a hung network call from ever reaching
-    // that point in the first place.
     const pending = await _withTimeout(_calcCashDrawerBalance(asOf, true), 15000, 'Pending balance check');
-    if (pending <= 0.5) return;
-    await new Promise(resolve => {
-      _pendingRemitInfo = { amount: pending, curStart, resolve };
-      document.getElementById('prAmount').textContent = (CUR || '₱') + pending.toFixed(2);
-      document.getElementById('prDate').textContent = new Date(asOf).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-      document.getElementById('prErr').style.display = 'none';
-      const btn = document.getElementById('prConfirmBtn');
-      btn.disabled = false; btn.innerHTML = '&#10003; Transfer to Manager';
-      document.getElementById('mPendingRemit').classList.add('show');
-    });
+    if (pending <= 0.5) { _pendingRemitState = null; bar.style.display = 'none'; return; }
+    _pendingRemitState = { amount: pending, curStart };
+    bar.style.display = 'flex';
+    document.getElementById('pendingRemitBarText').textContent =
+      `${(CUR || '₱')}${pending.toFixed(2)} unremitted from your previous shift (${new Date(asOf).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}).`;
+    document.getElementById('pendingRemitBarAction').textContent = 'Tap to transfer';
   } catch (e) {
-    console.warn('Pending remit check failed — allowing login', e);
+    console.warn('Pending remit check failed', e);
   }
+}
+function _onPendingRemitBarClick() {
+  if (!_pendingRemitState || _pendingRemitState === 'awaiting') return; // nothing to do while awaiting manager review
+  const { amount, curStart } = _pendingRemitState;
+  document.getElementById('prAmount').textContent = (CUR || '₱') + amount.toFixed(2);
+  document.getElementById('prDate').textContent = new Date(curStart.getTime() - 1000).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+  document.getElementById('prErr').style.display = 'none';
+  const btn = document.getElementById('prConfirmBtn');
+  btn.disabled = false; btn.innerHTML = '&#10003; Transfer to Manager';
+  _pendingRemitInfo = { amount, curStart };
+  document.getElementById('mPendingRemit').classList.add('show');
 }
 async function _confirmPendingTransfer() {
   if (!_pendingRemitInfo) return;
-  const { amount, curStart, resolve } = _pendingRemitInfo;
+  const { amount, curStart } = _pendingRemitInfo;
   const btn = document.getElementById('prConfirmBtn');
   const errEl = document.getElementById('prErr');
   errEl.style.display = 'none';
@@ -1765,10 +1805,12 @@ async function _confirmPendingTransfer() {
     const prevDateStr = prevCalDate.getFullYear() + '-' + String(prevCalDate.getMonth() + 1).padStart(2, '0') + '-' + String(prevCalDate.getDate()).padStart(2, '0');
     const name = 'Fund Transfer to Manager';
     const reason = 'Auto-transfer: unremitted balance from previous shift';
-    const { error: e1 } = await _sb.from('expenses').insert({
+    // expense_id links the two rows so a manager Reject can cleanly delete
+    // both — without it there's no reliable way to find the paired expense.
+    const { data: expRow, error: e1 } = await _sb.from('expenses').insert({
       store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer',
       expense_date: prevDateStr, notes: reason, added_by: CASHIER_NAME, created_at: backdatedIso
-    });
+    }).select('id').single();
     if (e1) throw e1;
     // Fire-and-forget, same as saveFundTransfer() — this is just the audit
     // trail entry, not the money-moving record.
@@ -1781,12 +1823,13 @@ async function _confirmPendingTransfer() {
     const { error: e2 } = await _sb.from('cash_remittances').insert({
       store_id: STORE_ID, cashier_name: CASHIER_NAME, shift_date: prevDateStr,
       pos_sales: 0, cash_on_hand: amount, difference: amount,
-      status: 'fund_transfer', description: reason, created_at: backdatedIso
+      status: 'fund_transfer', description: reason, created_at: backdatedIso,
+      owner_confirmed: false, expense_id: expRow.id
     });
     if (e2) throw e2;
     document.getElementById('mPendingRemit').classList.remove('show');
     _pendingRemitInfo = null;
-    resolve();
+    _refreshPendingRemitBar();
   } catch (e) {
     errEl.textContent = 'Error: ' + (e.message || 'Could not save. Check your connection and try again.');
     errEl.style.display = 'block';
@@ -1810,7 +1853,7 @@ function _curBizDayStart() {
 // actually expected to be sitting in the drawer, even if the manager's
 // verbal request was for a bigger amount than the cashier actually has.
 // `asOf` caps the window at a specific past instant instead of "now" — used
-// by _checkPendingBizDayRemit() to ask "how much was still unremitted as of
+// by _refreshPendingRemitBar() to ask "how much was still unremitted as of
 // the end of the PREVIOUS business day", without duplicating this whole
 // carried-float/void/expense formula a second time.
 async function _calcCashDrawerBalance(asOf, revenueOnly) {
@@ -1906,7 +1949,7 @@ async function _calcCashDrawerBalance(asOf, revenueOnly) {
   const voidRefundSinceRemit = (voidRows || [])
     .filter(r => r.created_at >= _sinceRemit && _isVoidRefundAdjRow(r))
     .reduce((s, r) => s + (parseFloat(r.cash_on_hand) || 0), 0);
-  // `revenueOnly` (used by _checkPendingBizDayRemit()) deliberately excludes
+  // `revenueOnly` (used by _refreshPendingRemitBar()) deliberately excludes
   // the carried float and received funds — those are cash the manager/owner
   // GAVE this cashier to hold (change fund for an upcoming shift), not sales
   // revenue she owes back. Counting them as "unremitted" wrongly blocked a
@@ -2046,7 +2089,7 @@ async function saveFundTransfer() {
   const today = _localToday();
   const name = 'Fund Transfer to Manager';
   const row = { store_id: STORE_ID, name, amount, billing_cycle: 'one-time', category: 'Fund Transfer', expense_date: today, notes: reason, added_by: CASHIER_NAME };
-  const { error } = await _sb.from('expenses').insert(row);
+  const { data: expRow, error } = await _sb.from('expenses').insert(row).select('id').single();
   btn.disabled = false; btn.innerHTML = '&#10003; Confirm Transfer';
   if (error) { showToast('Error: ' + error.message); return; }
   _sb.from('activity_logs').insert({
@@ -2058,14 +2101,18 @@ async function saveFundTransfer() {
   // figure — it doesn't put the cash anywhere. A positive cash_remittances
   // row adds it to the manager's Cash on Hand pool, same as a normal
   // end-of-shift remittance would, since that cash physically moved into
-  // the manager's hands.
+  // the manager's hands. owner_confirmed starts false — a manager still
+  // needs to Accept/Reject it (same as the auto pending-remit flow), since
+  // a self-reported click here doesn't prove the cash was actually handed
+  // over. expense_id links it to the expense row above for a clean Reject.
   _sb.from('cash_remittances').insert({
     store_id: STORE_ID, cashier_name: CASHIER_NAME, shift_date: today,
     pos_sales: 0, cash_on_hand: amount, difference: amount,
-    status: 'fund_transfer', description: 'Fund transfer' + (reason ? ': ' + reason : '')
-  }).then(() => {});
+    status: 'fund_transfer', description: 'Fund transfer' + (reason ? ': ' + reason : ''),
+    owner_confirmed: false, expense_id: expRow ? expRow.id : null
+  }).then(() => { _refreshPendingRemitBar(); });
   closeM('mFundTransfer');
-  showToast('Fund transfer recorded.');
+  showToast('Fund transfer recorded — waiting for your manager to confirm.');
 }
 
 let _remitOnlineSales = 0;

@@ -519,6 +519,20 @@ button{cursor:pointer}
   <!-- RIGHT COLUMN -->
   <div style="position:sticky;top:72px;align-self:start;display:flex;flex-direction:column;gap:12px">
 
+  <!-- PENDING CASHIER TRANSFERS — needs Accept/Reject before it counts as
+       real cash on hand; a cashier's own "I transferred it" click isn't
+       enough proof the money actually changed hands. -->
+  <div class="card" style="padding:16px" id="pendingTransfersCard">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="font-weight:700;font-size:14px">&#9888; Pending Cashier Transfers <span id="pendingTransfersBadge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px"></span></div>
+      <button data-tip="Refresh." onclick="loadPendingCashierTransfers()" style="background:transparent;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">&#8635;</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Cashiers who tapped "Transfer to Manager" — accept only once you actually have the cash in hand.</div>
+    <div id="pendingTransfersList">
+      <div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading...</div>
+    </div>
+  </div>
+
   <!-- CASH ON HAND SUMMARY -->
   <div class="card" style="padding:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -888,12 +902,14 @@ async function init(){
   show('mainContent');
   await loadInv();
   loadCashSummary();
+  loadPendingCashierTransfers();
   loadMonitor();
   checkPendingRemits();
   checkMgrInbox();
   checkPendingVoidRefund();
   checkStaleRemittances();
   setInterval(checkPendingRemits, 30000);
+  setInterval(loadPendingCashierTransfers, 30000);
   setInterval(checkMgrInbox, 60000);
   setInterval(checkPendingVoidRefund, 30000);
   setInterval(checkStaleRemittances, 60000);
@@ -2842,7 +2858,7 @@ async function loadCashSummary() {
 
   // Query ALL records (no date filter) so COH accumulates until manager remits to owner
   const { data } = await _sb.from('cash_remittances')
-    .select('cashier_name,cash_on_hand,pos_sales,difference,status,shift_date,description')
+    .select('cashier_name,cash_on_hand,pos_sales,difference,status,shift_date,description,owner_confirmed')
     .eq('store_id', MGR.store_id)
     .order('created_at', { ascending: false });
 
@@ -2865,7 +2881,12 @@ async function loadCashSummary() {
   // reducing what THAT CASHIER still owes, never money the manager ever
   // held — including it here used to subtract every cashier's voids from
   // the manager's own Net Cash total, which was wrong.
-  const adjRows      = rows.filter(r => adjStatuses.includes(r.status));
+  // fund_transfer rows specifically also need owner_confirmed=true — a
+  // cashier tapping "Transfer to Manager" isn't proof the cash actually
+  // changed hands, so an unconfirmed one shouldn't inflate Net Cash yet
+  // (see loadPendingCashierTransfers() — that's the review queue for these).
+  const isUnconfirmedTransfer = r => r.status === 'fund_transfer' && !r.owner_confirmed;
+  const adjRows      = rows.filter(r => adjStatuses.includes(r.status) && !isUnconfirmedTransfer(r));
   const mgrRemitRows = rows.filter(r => mgrRemitStatuses.includes(r.status));
   // Money the OWNER sent directly to the MANAGER herself (not to a cashier,
   // and not general Staff Funds for disbursement) — once confirmed received,
@@ -3747,6 +3768,66 @@ async function saveMgrDeposit() {
   closeModal('mgrDepositModal');
   loadCashSummary();
   showToast('Deposit to owner recorded.');
+}
+
+// ── Pending Cashier Transfers (Accept/Reject) ───────────────────────────────
+// Both the auto "Pending Remittance" flow and the manual "Transfer" button
+// (cashier-*.html) insert cash_remittances rows with status='fund_transfer'
+// and owner_confirmed=false — a cashier's own click isn't proof the cash
+// actually changed hands, so it sits here until the manager Accepts or
+// Rejects it. loadCashSummary()'s Net Cash total already excludes these
+// (see the owner_confirmed filter added to adjRows there) so accepting one
+// is what actually makes it count as real cash on hand.
+async function loadPendingCashierTransfers() {
+  const list = document.getElementById('pendingTransfersList');
+  const badge = document.getElementById('pendingTransfersBadge');
+  if (!list || !MGR?.store_id) return;
+  const { data, error } = await _sb.from('cash_remittances')
+    .select('id,cashier_name,cash_on_hand,shift_date,description,created_at,expense_id')
+    .eq('store_id', MGR.store_id).eq('status', 'fund_transfer').eq('owner_confirmed', false)
+    .order('created_at', { ascending: false });
+  if (error) { list.innerHTML = '<div style="text-align:center;padding:12px;color:#ef4444;font-size:12px">' + error.message + '</div>'; return; }
+  const rows = data || [];
+  if (badge) { badge.textContent = rows.length; badge.style.display = rows.length > 0 ? 'inline' : 'none'; }
+  if (!rows.length) { list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">No pending transfers.</div>'; return; }
+  list.innerHTML = rows.map(r => {
+    const amt = parseFloat(r.cash_on_hand || 0);
+    const d = (r.description || '').slice(0, 40);
+    const when = new Date(r.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+        <span style="font-weight:700;font-size:13px">${r.cashier_name}</span>
+        <span style="font-weight:700;font-size:14px;color:#10b981">&#8369;${amt.toFixed(2)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${d} &middot; ${when}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="flex:1;background:var(--ok-bg);color:var(--ok-text);border:1px solid #1a5c38" data-id="${r.id}" onclick="acceptCashierTransfer(this.dataset.id,this)">&#10003; Accept</button>
+        <button class="btn btn-sm" style="flex:1;background:var(--danger-bg);color:var(--danger-text);border:1px solid #6b1a1a" data-id="${r.id}" data-exp="${r.expense_id || ''}" data-name="${r.cashier_name}" data-amt="${amt}" onclick="rejectCashierTransfer(this.dataset.id,this.dataset.exp,this.dataset.name,this.dataset.amt,this)">&#10005; Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function acceptCashierTransfer(id, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Accepting…'; }
+  const { error } = await _sb.from('cash_remittances').update({ owner_confirmed: true }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message, true); if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓ Accept'; } return; }
+  showToast('Transfer accepted — now counted in Cash on Hand.');
+  loadPendingCashierTransfers();
+  loadCashSummary();
+}
+async function rejectCashierTransfer(id, expenseId, cashierName, amt, btnEl) {
+  if (!confirm(`Reject this ₱${parseFloat(amt).toFixed(2)} transfer from ${cashierName}? Use this only if the cash was NOT actually handed to you — it will go back to showing as unremitted on their end.`)) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Rejecting…'; }
+  // Delete both sides — the cash_remittances row (so it stops counting as
+  // "on the way to the manager") and its paired expense row (so it stops
+  // being excluded from the cashier's own Cash Drawer balance), which is
+  // what makes the cashier's pendingRemitBar reappear automatically.
+  const { error: e1 } = await _sb.from('cash_remittances').delete().eq('id', id);
+  if (e1) { showToast('Error: ' + e1.message, true); if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✗ Reject'; } return; }
+  if (expenseId) _sb.from('expenses').delete().eq('id', expenseId).then(() => {});
+  showToast('Transfer rejected.');
+  loadPendingCashierTransfers();
+  loadCashSummary();
 }
 
 // ── Receipt QR Upload ───────────────────────────────────────────────────────
