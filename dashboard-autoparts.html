@@ -6692,10 +6692,18 @@ async function viewRemitReceipt(logId) {
     .select('pos_sales,cash_on_hand,difference,online_sales,created_at')
     .eq('store_id', STORE.id).eq('cashier_name', log.actor_name);
   const logTime = new Date(log.created_at).getTime();
-  const remit = (remitRows || [])
+  // The REMITTANCE log and its cash_remittances row are two separate inserts
+  // (cash_remittances awaited first, then the log fired right after — see
+  // confirmRemitLogout()/syncRemitQueue() in cashier-*.html), normally only
+  // milliseconds apart. But an offline-queued logout can sit in localStorage
+  // for a while before syncing, and there's no shared ID linking the two
+  // rows — so instead of a single tight window that fails outright when
+  // real-world timing drifts, take the closest match within a generous
+  // same-day window rather than none at all.
+  const closest = (remitRows || [])
     .map(r => ({ r, dist: Math.abs(new Date(r.created_at).getTime() - logTime) }))
-    .filter(x => x.dist <= 15000)
-    .sort((a,b) => a.dist - b.dist)[0]?.r;
+    .sort((a,b) => a.dist - b.dist)[0];
+  const remit = closest && closest.dist <= 86400000 ? closest.r : null;
   if (!remit) { showToast('Remittance details not found.', true); return; }
 
   const diff = parseFloat(remit.difference) || 0;
