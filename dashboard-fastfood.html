@@ -6188,7 +6188,12 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
       if (receiptB64) {
         _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
-        btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
+        // E-Pay proof gets its own color (matches the E-Pay Proof badge in
+        // the ACTIONS column) so it's spottable at a glance in a row of
+        // otherwise-identical "View" buttons — no need to click each one
+        // just to find which receipt is the e-payment screenshot.
+        const isEpay = l.action === 'EPAY_PROOF';
+        btns.push(`<button class="btn btn-sm" style="font-size:11px;margin-bottom:2px${isEpay ? ';background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-text)' : ''}" onclick="viewReceipt('${l.id}')">${isEpay ? '&#128179; E-Pay' : '&#129534; View'}</button>`);
       }
       if (!receiptB64 && l.action === 'RECEIVED_COH') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
       if (!receiptB64 && l.action === 'REMITTANCE') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
