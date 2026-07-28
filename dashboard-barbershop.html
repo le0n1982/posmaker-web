@@ -6349,6 +6349,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       : '<span style="color:var(--dim)">—</span>';
 
     const receiptBtns = dayActions.map(l => {
+      _logsById[l.id] = l;
       const btns = [];
       let receiptB64 = null, breakdown = null;
       try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
@@ -6703,6 +6704,15 @@ const ACTION_COLOR = {
   CASH_ADVANCE_GIVEN:    'background:var(--teal-bg);color:var(--teal-text)',
 };
 const _receiptCache = {};
+// Shared log-object lookup so viewCohReceipt/viewRemitReceipt/
+// viewMgrDepositBreakdown work no matter which screen's button triggered
+// them — renderActivityLog() and renderStaffLogsBody() each fetch activity
+// rows via their OWN separate query (the latter scoped to one staff member),
+// so a log id rendered by one was never guaranteed to exist in the other's
+// _activityLogs array. Looking that array up directly used to silently no-op
+// (if (!log) return;) whenever the per-staff Login History modal was opened
+// without the main Activity Log tab having loaded first.
+const _logsById = {};
 let _mgrRemitConfirm = {};
 function renderActivityLog() {
   const tbody = document.getElementById('activityTbody');
@@ -6716,6 +6726,7 @@ function renderActivityLog() {
   const actionLabel = ACTION_LABEL;
   const actionColor = ACTION_COLOR;
   tbody.innerHTML = rows.map(l => {
+    _logsById[l.id] = l;
     const dt = new Date(l.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
     let details = '';
     let receiptB64 = null;
@@ -6900,7 +6911,7 @@ async function _cohReceiptToPng(d, cashierName, dateStr, confirmedBy) {
   return cv.toDataURL('image/png');
 }
 async function viewCohReceipt(logId) {
-  const log = _activityLogs.find(l => l.id === logId);
+  const log = _logsById[logId] || _activityLogs.find(l => l.id === logId);
   if (!log) return;
   let d = {};
   try { d = log.details ? JSON.parse(log.details) : {}; } catch(_) { d = {}; }
@@ -6935,7 +6946,7 @@ async function viewCohReceipt(logId) {
 // (the log's plain-text details don't carry pos_sales/online_sales/etc, so
 // the source row has to be looked up by cashier + closest timestamp).
 async function viewRemitReceipt(logId) {
-  const log = _activityLogs.find(l => l.id === logId);
+  const log = _logsById[logId] || _activityLogs.find(l => l.id === logId);
   if (!log) return;
   const { data: remitRows } = await _sb.from('cash_remittances')
     .select('pos_sales,cash_on_hand,difference,online_sales,created_at')
@@ -7007,7 +7018,7 @@ async function _mgrDepositBreakdownToPng(d, depositedBy, dateStr, amount) {
   return cv.toDataURL('image/png');
 }
 async function viewMgrDepositBreakdown(logId) {
-  const log = _activityLogs.find(l => l.id === logId);
+  const log = _logsById[logId] || _activityLogs.find(l => l.id === logId);
   if (!log) return;
   let d = {};
   try { d = log.details ? JSON.parse(log.details) : {}; } catch(_) { d = {}; }
