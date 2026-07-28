@@ -6129,48 +6129,59 @@ async function renderStaffLogsBody(staffId, displayName, role) {
     }
 
     const actionsHtml = dayActions.length
-      ? dayActions.map(l => {
+      ? '<div style="max-height:150px;overflow-y:auto;padding-right:2px">' + dayActions.map(l => {
+          _logsById[l.id] = l;
+          const timeStr = new Date(l.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+          let detailText = '', confirmBtn = '', isUnconfirmedEpay = false;
           if (l.action === 'EPAY_PROOF') {
             let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
             const amt = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
             const pairInfo = d.pairMethod ? ` / ${d.pairMethod} ${CUR||'₱'}${parseFloat(d.pairAmount||0).toFixed(2)}` : '';
-            const detailText = `${d.method || ''} ${amt}${pairInfo}`.trim();
-            const isUnconfirmedEpay = !d.confirmed;
-            const confirmBtn = d.confirmed
+            detailText = `${d.method || ''} ${amt}${pairInfo}`.trim();
+            isUnconfirmedEpay = !d.confirmed;
+            confirmBtn = d.confirmed
               ? ' <span class="badge" style="background:var(--ok-bg);color:var(--ok-text)">&#10003;</span>'
               : ` <button class="btn btn-sm" style="background:var(--pending-bg);color:var(--pending-text);font-weight:700;padding:1px 6px;font-size:10px" onclick="confirmEpayProof('${l.id}',this)">Confirm</button>`;
-            return `<div style="margin-bottom:5px${isUnconfirmedEpay ? ';background:rgba(245,158,11,.15);border:1px solid #f59e0b55;border-radius:6px;padding:4px 6px' : ''}">
+          } else if (l.action === 'REMITTANCE') {
+            detailText = l.details || '';
+          } else if (l.action === 'ORDER_VOIDED' || l.action === 'ORDER_REFUNDED') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            detailText = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : '';
+          } else if (l.action === 'ADD_STOCK' || l.action === 'MGR_REMIT') {
+            let d = {}; try { d = JSON.parse(l.details || '{}'); } catch(_) {}
+            detailText = d.amount != null ? (CUR||'₱') + parseFloat(d.amount).toFixed(2) : (d.added != null ? '+' + d.added : '');
+          }
+
+          // Same receipt/view button logic as before, just computed here so
+          // it can render on the SAME row as this entry instead of in a
+          // separate column.
+          const btns = [];
+          let receiptB64 = null, breakdown = null;
+          try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
+          if (receiptB64) {
+            _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
+            const isEpay = l.action === 'EPAY_PROOF';
+            btns.push(`<button class="btn btn-sm" style="font-size:10px;padding:2px 7px${isEpay ? ';background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-text)' : ''}" onclick="viewReceipt('${l.id}')">${isEpay ? '&#128179; E-Pay' : '&#129534; View'}</button>`);
+          }
+          if (!receiptB64 && l.action === 'RECEIVED_COH') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:10px;padding:2px 7px">&#129534; View</button>`);
+          if (!receiptB64 && l.action === 'REMITTANCE') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:10px;padding:2px 7px">&#129534; View</button>`);
+          // A deposit can have BOTH an uploaded photo (deposit slip / GCash
+          // screenshot) AND a structured breakdown of which cashier remittances
+          // made up the amount — show both when both exist, so the owner isn't
+          // stuck with just a lump "Deposit ₱X" and no way to see why.
+          if (l.action === 'MGR_REMIT' && breakdown) btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewMgrDepositBreakdown('${l.id}')" style="font-size:10px;padding:2px 7px">&#128203; Breakdown</button>`);
+          const receiptBtn = btns.join('');
+
+          return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px${isUnconfirmedEpay ? ';background:rgba(245,158,11,.15);border:1px solid #f59e0b55;border-radius:6px;padding:4px 6px' : ''}">
+            <div style="flex:1;min-width:0">
+              <span style="color:var(--dim);font-size:10px">${timeStr}</span>
               <span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span>${confirmBtn}
               ${detailText ? `<div style="color:var(--muted);font-size:11px;margin-top:1px">${detailText}</div>` : ''}
-            </div>`;
-          }
-          return `<div style="margin-bottom:2px"><span class="badge" style="${ACTION_COLOR[l.action]||'background:var(--neutral-bg);color:var(--neutral-text)'}">${ACTION_LABEL[l.action]||l.action}</span></div>`;
-        }).join('')
+            </div>
+            ${receiptBtn ? `<div style="flex-shrink:0;display:flex;gap:4px">${receiptBtn}</div>` : ''}
+          </div>`;
+        }).join('') + '</div>'
       : '<span style="color:var(--dim)">—</span>';
-
-    const receiptBtns = dayActions.map(l => {
-      _logsById[l.id] = l;
-      const btns = [];
-      let receiptB64 = null, breakdown = null;
-      try { const d = l.details ? JSON.parse(l.details) : {}; receiptB64 = d.receipt_b64 || null; breakdown = d.breakdown || null; } catch(_) {}
-      if (receiptB64) {
-        _receiptCache[l.id] = { b64: receiptB64, actorName: displayName };
-        // E-Pay proof gets its own color (matches the E-Pay Proof badge in
-        // the ACTIONS column) so it's spottable at a glance in a row of
-        // otherwise-identical "View" buttons — no need to click each one
-        // just to find which receipt is the e-payment screenshot.
-        const isEpay = l.action === 'EPAY_PROOF';
-        btns.push(`<button class="btn btn-sm" style="font-size:11px;margin-bottom:2px${isEpay ? ';background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-text)' : ''}" onclick="viewReceipt('${l.id}')">${isEpay ? '&#128179; E-Pay' : '&#129534; View'}</button>`);
-      }
-      if (!receiptB64 && l.action === 'RECEIVED_COH') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewCohReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
-      if (!receiptB64 && l.action === 'REMITTANCE') btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewRemitReceipt('${l.id}')" style="font-size:11px;margin-bottom:2px">&#129534; View</button>`);
-      // A deposit can have BOTH an uploaded photo (deposit slip / GCash
-      // screenshot) AND a structured breakdown of which cashier remittances
-      // made up the amount — show both when both exist, so the owner isn't
-      // stuck with just a lump "Deposit ₱X" and no way to see why.
-      if (l.action === 'MGR_REMIT' && breakdown) btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewMgrDepositBreakdown('${l.id}')" style="font-size:11px;margin-bottom:2px">&#128203; Breakdown</button>`);
-      return btns.join('');
-    }).filter(Boolean).join('') || '<span style="color:var(--dim)">—</span>';
 
     return `<tr>
       <td style="white-space:nowrap">${dateLabel}</td>
@@ -6178,7 +6189,6 @@ async function renderStaffLogsBody(staffId, displayName, role) {
       <td>${logoutStr}</td>
       ${isCashier?`<td>${cashCell}</td>`:''}
       <td>${actionsHtml}</td>
-      <td>${receiptBtns}</td>
     </tr>`;
   }).join('');
 
@@ -6206,7 +6216,7 @@ async function renderStaffLogsBody(staffId, displayName, role) {
 
   body.innerHTML = `
     <table class="grid-table" style="width:100%">
-      <thead><tr><th>Date</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}<th>Actions</th><th>Receipt</th></tr></thead>
+      <thead><tr><th>Date</th><th>Login</th><th>Logout</th>${isCashier?'<th>Cash Drawer</th>':''}<th>Actions / Receipt</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>${unconfirmedHtml}`;
 }
