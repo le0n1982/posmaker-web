@@ -3649,9 +3649,11 @@ function redrawCart() {
       while (higher.length + extra.length < 3) { extra.push(r); r += 500; }
       qAmounts = [...higher, ...extra];
     }
-    document.getElementById('quickRow').innerHTML = qAmounts.map(a =>
-      `<button class="q-cash" onclick="setCash(${a})">${CUR}${a}</button>`
-    ).join('');
+    document.getElementById('quickRow').innerHTML =
+      `<button class="q-cash" style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700" onclick="setCash(${total})">&#10003; Exact</button>` +
+      qAmounts.map(a =>
+        `<button class="q-cash" onclick="setCash(${a})">${CUR}${a}</button>`
+      ).join('');
     document.getElementById('cashSection').style.display = payMeth === 'Cash' ? '' : 'none';
   }
   broadcastToDisplay();
