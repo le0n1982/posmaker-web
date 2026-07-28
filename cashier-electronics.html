@@ -4050,7 +4050,7 @@ async function doPrint() {
   const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
   for (let i = 0; i < copies; i++) {
     await _printOnce(txt, d);
-    if (i < copies - 1) await new Promise(r => setTimeout(r, 400)); // let the printer/queue keep up between copies
+    if (i < copies - 1) await new Promise(r => setTimeout(r, 5000)); // give the printer time to finish/cut this copy before the next one starts
   }
   newOrder();
 }
