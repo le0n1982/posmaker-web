@@ -3999,12 +3999,48 @@ async function _buildLogoRaster() {
   } catch (_) { return null; }
 }
 
+// ── Android native print bridge ─────────────────────────────────────────────
+// AndroidBridge.printRawJson(callbackId, json) is fire-and-forget on the Java
+// side — the actual result comes back later via a separate JS call,
+// window.__pmResolvePrint(id, ok, err), invoked from MainActivity.resolvePrint().
+// This wraps that callback handshake in a Promise so _printOnce() can just
+// await it like every other print path.
+let _pmPrintCallbacks = {};
+let _pmPrintCallbackSeq = 0;
+window.__pmResolvePrint = function (id, ok, err) {
+  const cb = _pmPrintCallbacks[id];
+  if (!cb) return;
+  delete _pmPrintCallbacks[id];
+  cb(ok, err);
+};
+function _androidPrintRaw(payload) {
+  return new Promise(resolve => {
+    const id = ++_pmPrintCallbackSeq;
+    _pmPrintCallbacks[id] = (ok, err) => resolve({ ok, error: err });
+    try {
+      window.AndroidBridge.printRawJson(id, JSON.stringify(payload));
+    } catch (e) {
+      delete _pmPrintCallbacks[id];
+      resolve({ ok: false, error: String(e) });
+      return;
+    }
+    // Safety net in case the native side never calls back for some reason —
+    // without this a broken bridge would leave doPrint() hanging forever
+    // instead of showing the usual "could not print" toast.
+    setTimeout(() => {
+      if (_pmPrintCallbacks[id]) { delete _pmPrintCallbacks[id]; resolve({ ok: false, error: 'Print timed out' }); }
+    }, 15000);
+  });
+}
+
 async function doPrint() {
   const txt = document.getElementById('receiptTxt').textContent;
   const d = window._lastReceiptData;
-  // Android has no real printer bridge yet (see _printOnce below) — nothing
-  // to loop, so skip straight to the same single "couldn't print" behavior
-  // this always had rather than repeating that toast per copy.
+  // Electron only exposes printReceipt/printRaw when it actually has one of
+  // those; Android always exposes AndroidBridge but printing can still fail
+  // (no printer paired/configured) — that path returns ok:false per attempt
+  // instead of being knowable in advance, so it can't be short-circuited
+  // here the same way. Only the old Electron-without-either-method case can.
   if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
     if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
     newOrder();
@@ -4012,15 +4048,23 @@ async function doPrint() {
   }
   const isEpay = !!(d && d.method && d.method !== 'Cash');
   const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
+  let anyFailed = false;
   for (let i = 0; i < copies; i++) {
-    await _printOnce(txt, d);
+    const ok = await _printOnce(txt, d);
+    // Stop after the first failure instead of retrying every remaining copy —
+    // "no printer found" isn't going to fix itself between copy 1 and copy 2.
+    if (!ok) { anyFailed = true; break; }
     if (i < copies - 1) await new Promise(r => setTimeout(r, 5000)); // give the printer time to finish/cut this copy before the next one starts
+  }
+  if (anyFailed && typeof showToast === 'function') {
+    showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
   }
   newOrder();
 }
 
 // One full print pass — everything doPrint() used to do in a single shot,
 // minus newOrder() (now called once, after all copies, by doPrint above).
+// Returns true/false so doPrint() knows whether to keep printing more copies.
 async function _printOnce(txt, d) {
   // Try local ESC/POS print server first (works in browser and Electron exe)
   if (d) {
@@ -4048,6 +4092,17 @@ async function _printOnce(txt, d) {
           logo_w_bytes:    logoRaster?.logo_w_bytes || 0,
           logo_h_px:       logoRaster?.logo_h_px || 0
         };
+      // Native Android app — real ESC/POS thermal print via Bluetooth/USB/
+      // Network (see AndroidBridge.printRawJson in MainActivity.java). No
+      // further fallback makes sense here: a browser print dialog inside a
+      // WebView (the code below) doesn't correspond to anything a cashier
+      // can use, so a failure here is reported straight back to doPrint().
+      if (window.AndroidBridge && window.AndroidBridge.printRawJson) {
+        const _r = await _androidPrintRaw(_rawPayload);
+        if (_r.ok) return true;
+        window._lastPrintErr = _r.error || 'Unknown error';
+        return false;
+      }
       if (window.posApp && window.posApp.printRaw) {
         try {
           const _r = await window.posApp.printRaw(_rawPayload);
