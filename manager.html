@@ -281,7 +281,7 @@ button{cursor:pointer}
         <div id="salesAvg" style="font-size:28px;font-weight:800;color:var(--accent)">—</div>
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="salesSingleCard">
       <div class="card-title" id="salesTableTitle">Today's Orders</div>
       <div style="overflow-x:auto">
         <table>
@@ -290,6 +290,8 @@ button{cursor:pointer}
         </table>
       </div>
     </div>
+    <!-- Only shown for stores with Extra POS Terminals. -->
+    <div id="salesTerminalSplit" style="display:none"></div>
   </div>
   <!-- CASH REMITTANCE -->
   <div class="section" id="sec-remit">
@@ -440,18 +442,21 @@ button{cursor:pointer}
 
   <!-- VOID & REFUND -->
   <div class="section" id="sec-voidrefund">
-    <div class="tbl-wrap">
+    <div class="tbl-wrap" id="vrPendingWrap">
       <div class="tbl-head"><h3>&#8630; Pending Requests</h3></div>
       <div id="vrPendingList" style="padding:16px 20px">
         <div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>
       </div>
     </div>
-    <div class="tbl-wrap" style="margin-top:16px">
+    <!-- Only shown for stores with Extra POS Terminals. -->
+    <div id="vrPendingSplit" style="display:none;margin-bottom:16px"></div>
+    <div class="tbl-wrap" style="margin-top:16px" id="vrHistoryWrap">
       <div class="tbl-head"><h3>History</h3></div>
       <div id="vrHistoryList" style="padding:16px 20px">
         <div style="text-align:center;color:var(--muted);padding:20px">Loading...</div>
       </div>
     </div>
+    <div id="vrHistorySplit" style="display:none;margin-top:16px"></div>
   </div>
 
   <!-- VOID/REFUND APPROVAL — where the cash comes out of -->
@@ -1462,7 +1467,18 @@ async function logAction(action, targetName, details){
   if (error) { console.error('logAction error:', error); showToast('Log error: ' + error.message, true); }
 }
 
-let _salesPeriod = 'day', _salesData = [], _salesAllData = [];
+let _salesPeriod = 'day', _salesData = [], _salesAllData = [], _salesTerminals = [];
+// Shared across Sales and Void & Refund (and cached, since a store's
+// terminal list rarely changes mid-session) — both need the same "does this
+// store have Extra POS Terminals" answer to decide whether to show a
+// per-terminal split view at all.
+let _mgrTerminalsCache = null;
+async function _getStoreTerminals() {
+  if (_mgrTerminalsCache) return _mgrTerminalsCache;
+  const { data } = await _sb.from('pos_terminals').select('id,name').eq('store_id', MGR.store_id).order('created_at');
+  _mgrTerminalsCache = data || [];
+  return _mgrTerminalsCache;
+}
 function setSalesPeriod(p) {
   _salesPeriod = p;
   ['day','week','month'].forEach(x => {
@@ -1503,11 +1519,12 @@ async function loadSales(){
   document.getElementById('salesLabelRev').textContent    = label + ' REVENUE';
   document.getElementById('salesTableTitle').textContent  = tableTitle;
 
-  let q = _sb.from('orders').select('id,timestamp,cashier_name,total,payment_method,amount_tendered,order_type')
+  let q = _sb.from('orders').select('id,timestamp,cashier_name,total,payment_method,amount_tendered,order_type,terminal_id')
     .eq('store_id', MGR.store_id).order('timestamp', { ascending: false }).limit(500);
   if (periodStart) q = q.gte('timestamp', periodStart);
   if (periodEnd)   q = q.lte('timestamp', periodEnd);
-  const { data: orders } = await q;
+  const [{ data: orders }, terminals] = await Promise.all([q, _getStoreTerminals()]);
+  _salesTerminals = terminals;
 
   _salesAllData = orders || [];
   if (_salesAllData.length) {
@@ -1560,6 +1577,21 @@ function filterSalesByCashier() {
   renderSalesData();
 }
 
+function _salesRowHtml(o) {
+  const dt = new Date(o.timestamp);
+  const ds = dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const itemsStr = (o._items || []).join(', ') || '—';
+  const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
+  return `<tr${isVoidRow ? ' style="background:rgba(239,68,68,.06)"' : ''}>
+    <td style="color:var(--muted);font-size:12px">#${o.id}</td>
+    <td style="font-size:12px;white-space:nowrap">${ds}</td>
+    <td>${o.cashier_name||'—'}</td>
+    <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
+    <td style="font-weight:700;color:${isVoidRow ? '#ef4444' : 'var(--accent)'}">&#8369;${(o.total||0).toFixed(2)}</td>
+    <td>${isVoidRow ? `<span class="act-chip" style="background:rgba(239,68,68,.15);color:#ef4444">${o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED'}</span>` : `<span class="act-chip">${o._splitDetail || o.payment_method || 'Cash'}</span>`}</td>
+  </tr>`;
+}
+const _SALES_THEAD = '<thead><tr><th>#</th><th>Date &amp; Time</th><th>Cashier</th><th>Items</th><th>Total</th><th>Method</th></tr></thead>';
 function renderSalesData() {
   const CUR = '₱';
   const totalRev = _salesData.reduce((s,o) => s + (o.total||0), 0);
@@ -1572,21 +1604,37 @@ function renderSalesData() {
   document.getElementById('salesCount').textContent = realOrderCount;
   document.getElementById('salesRev').textContent   = CUR + totalRev.toFixed(2);
   document.getElementById('salesAvg').textContent   = CUR + avg.toFixed(2);
-  const tb = document.getElementById('salesTbody');
-  if (!_salesData.length) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No orders for this period.</td></tr>'; return; }
-  tb.innerHTML = _salesData.map(o => {
-    const dt = new Date(o.timestamp);
-    const ds = dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    const itemsStr = (o._items || []).join(', ') || '—';
-    const isVoidRow = o.order_type === 'VOID' || o.order_type === 'REFUND';
-    return `<tr${isVoidRow ? ' style="background:rgba(239,68,68,.06)"' : ''}>
-      <td style="color:var(--muted);font-size:12px">#${o.id}</td>
-      <td style="font-size:12px;white-space:nowrap">${ds}</td>
-      <td>${o.cashier_name||'—'}</td>
-      <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itemsStr}">${itemsStr}</td>
-      <td style="font-weight:700;color:${isVoidRow ? '#ef4444' : 'var(--accent)'}">&#8369;${(o.total||0).toFixed(2)}</td>
-      <td>${isVoidRow ? `<span class="act-chip" style="background:rgba(239,68,68,.15);color:#ef4444">${o.order_type === 'VOID' ? 'VOIDED' : 'REFUNDED'}</span>` : `<span class="act-chip">${o._splitDetail || o.payment_method || 'Cash'}</span>`}</td>
-    </tr>`;
+
+  const singleCard = document.getElementById('salesSingleCard');
+  const splitWrap = document.getElementById('salesTerminalSplit');
+
+  if (!_salesTerminals.length) {
+    singleCard.style.display = '';
+    splitWrap.style.display = 'none';
+    const tb = document.getElementById('salesTbody');
+    tb.innerHTML = _salesData.length
+      ? _salesData.map(_salesRowHtml).join('')
+      : '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No orders for this period.</td></tr>';
+    return;
+  }
+
+  // Split view — one labeled, independently-scrollable mini-table per
+  // terminal (terminal_id IS NULL is the store's own base code, i.e.
+  // "Terminal 1").
+  singleCard.style.display = 'none';
+  splitWrap.style.display = '';
+  const groups = [{ id: null, name: 'Terminal 1' }, ..._salesTerminals.map(t => ({ id: t.id, name: t.name }))];
+  splitWrap.innerHTML = groups.map(g => {
+    const rows = _salesData.filter(o => (o.terminal_id || null) === g.id);
+    const body = rows.length
+      ? rows.map(_salesRowHtml).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No orders for this period.</td></tr>';
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="card-title">&#128421; ${g.name} <span style="color:var(--muted);font-weight:400;font-size:12px">(${rows.length})</span></div>
+      <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+        <table>${_SALES_THEAD}<tbody>${body}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -2305,49 +2353,102 @@ async function checkPendingVoidRefund() {
   if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline' : 'none'; }
 }
 
-async function loadVoidRefund() {
+function _vrPendingRowHtml(r) {
   const CUR = '₱';
+  return `<div style="border:1px solid #f59e0b55;background:#2a1a0022;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <strong>Order #${r.order_id}</strong> — <strong style="color:#f59e0b">${r.type === 'void' ? 'VOID' : 'REFUND'}</strong> <span style="color:var(--muted)">${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${r.reason || ''}</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:2px">Requested by ${r.requested_by_name} &middot; ${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${r.proof_b64 ? `<button class="btn btn-ghost btn-sm" onclick="viewVoidRefundProof('${r.id}')">&#128247; View Proof</button>` : ''}
+          <button class="btn btn-accent btn-sm" onclick="approveVoidRefund('${r.id}', this)">&#10003; Approve</button>
+          <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="declineVoidRefund('${r.id}')">&#10005; Decline</button>
+        </div>
+      </div>
+    </div>`;
+}
+function _vrHistoryRowHtml(r) {
+  const CUR = '₱';
+  const color = r.status === 'declined' ? '#ef4444' : '#10b981';
+  const label = r.status === 'declined' ? 'Declined' : 'Approved';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px">
+    <div>
+      <strong>Order #${r.order_id}</strong> <span style="color:var(--muted)">${r.type === 'void' ? 'VOID' : 'REFUND'} &middot; ${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
+      ${r.status === 'declined' && r.decline_note ? `<div style="font-size:11px;color:#ef4444;margin-top:2px">${r.decline_note}</div>` : ''}
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-weight:700;color:${color}">${label}</div>
+      <div style="font-size:10px;color:var(--dim)">${new Date(r.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</div>
+    </div>
+  </div>`;
+}
+async function loadVoidRefund() {
   const pendingEl = document.getElementById('vrPendingList');
   const histEl = document.getElementById('vrHistoryList');
-  const { data } = await _sb.from('void_refund_requests')
-    .select('*').eq('store_id', MGR.store_id).order('created_at', { ascending: false }).limit(100);
+  const [{ data }, terminals] = await Promise.all([
+    _sb.from('void_refund_requests').select('*').eq('store_id', MGR.store_id).order('created_at', { ascending: false }).limit(100),
+    _getStoreTerminals()
+  ]);
   _vrCache = data || [];
 
   const pending = _vrCache.filter(r => r.status === 'pending');
-  pendingEl.innerHTML = !pending.length
-    ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No pending requests.</div>'
-    : pending.map(r => `<div style="border:1px solid #f59e0b55;background:#2a1a0022;border-radius:10px;padding:12px 14px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <strong>Order #${r.order_id}</strong> — <strong style="color:#f59e0b">${r.type === 'void' ? 'VOID' : 'REFUND'}</strong> <span style="color:var(--muted)">${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">${r.reason || ''}</div>
-            <div style="font-size:11px;color:var(--dim);margin-top:2px">Requested by ${r.requested_by_name} &middot; ${new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${r.proof_b64 ? `<button class="btn btn-ghost btn-sm" onclick="viewVoidRefundProof('${r.id}')">&#128247; View Proof</button>` : ''}
-            <button class="btn btn-accent btn-sm" onclick="approveVoidRefund('${r.id}', this)">&#10003; Approve</button>
-            <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="declineVoidRefund('${r.id}')">&#10005; Decline</button>
-          </div>
-        </div>
-      </div>`).join('');
-
   const rest = _vrCache.filter(r => r.status !== 'pending');
-  histEl.innerHTML = !rest.length
-    ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No history yet.</div>'
-    : rest.map(r => {
-        const color = r.status === 'declined' ? '#ef4444' : '#10b981';
-        const label = r.status === 'declined' ? 'Declined' : 'Approved';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px">
-          <div>
-            <strong>Order #${r.order_id}</strong> <span style="color:var(--muted)">${r.type === 'void' ? 'VOID' : 'REFUND'} &middot; ${CUR}${parseFloat(r.order_total || 0).toFixed(2)}</span>
-            ${r.status === 'declined' && r.decline_note ? `<div style="font-size:11px;color:#ef4444;margin-top:2px">${r.decline_note}</div>` : ''}
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-weight:700;color:${color}">${label}</div>
-            <div style="font-size:10px;color:var(--dim)">${new Date(r.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</div>
-          </div>
-        </div>`;
-      }).join('');
+
+  const pendingWrap = document.getElementById('vrPendingWrap');
+  const historyWrap = document.getElementById('vrHistoryWrap');
+  const pendingSplit = document.getElementById('vrPendingSplit');
+  const historySplit = document.getElementById('vrHistorySplit');
+
+  if (!terminals.length) {
+    pendingWrap.style.display = '';
+    historyWrap.style.display = '';
+    pendingSplit.style.display = 'none';
+    historySplit.style.display = 'none';
+    pendingEl.innerHTML = !pending.length
+      ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No pending requests.</div>'
+      : pending.map(_vrPendingRowHtml).join('');
+    histEl.innerHTML = !rest.length
+      ? '<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">No history yet.</div>'
+      : rest.map(_vrHistoryRowHtml).join('');
+    return;
+  }
+
+  // Split view — a void/refund request has no terminal_id of its own, but
+  // its order_id points back to the original order, which does — so the
+  // original order's terminal is what a request gets grouped under here.
+  pendingWrap.style.display = 'none';
+  historyWrap.style.display = 'none';
+  pendingSplit.style.display = '';
+  historySplit.style.display = '';
+  const orderIds = [...new Set(_vrCache.map(r => r.order_id))];
+  const { data: ordRows } = orderIds.length
+    ? await _sb.from('orders').select('id,terminal_id').in('id', orderIds)
+    : { data: [] };
+  const termByOrder = {};
+  (ordRows || []).forEach(o => { termByOrder[o.id] = o.terminal_id || null; });
+
+  const groups = [{ id: null, name: 'Terminal 1' }, ...terminals.map(t => ({ id: t.id, name: t.name }))];
+  pendingSplit.innerHTML = groups.map(g => {
+    const rows = pending.filter(r => (termByOrder[r.order_id] ?? null) === g.id);
+    return `<div style="margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">&#128421; ${g.name} <span style="color:var(--muted);font-weight:400;font-size:12px">(${rows.length} pending)</span></div>
+      <div class="tbl-wrap" style="max-height:280px;overflow-y:auto;padding:16px 20px">
+        ${rows.length ? rows.map(_vrPendingRowHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:12px;font-size:12px">No pending requests.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+  historySplit.innerHTML = groups.map(g => {
+    const rows = rest.filter(r => (termByOrder[r.order_id] ?? null) === g.id);
+    return `<div style="margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">&#128421; ${g.name} <span style="color:var(--muted);font-weight:400;font-size:12px">(${rows.length})</span></div>
+      <div class="tbl-wrap" style="max-height:280px;overflow-y:auto;padding:16px 20px">
+        ${rows.length ? rows.map(_vrHistoryRowHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:12px;font-size:12px">No history yet.</div>'}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function viewVoidRefundProof(id) {

@@ -4136,7 +4136,7 @@ async function syncOfflineQueue(){
   for(const entry of q){
     try{
       const baseRow={store_id:entry.store_id,cashier_name:entry.cashier_name,subtotal:entry.subtotal,tax:entry.tax,total:entry.total,payment_method:entry.payment_method,amount_tendered:entry.amount_tendered,change_given:entry.change_given,discount_pct:entry.discount_pct||0,timestamp:entry.timestamp};
-      const fullRow={...baseRow,discount_amt:entry.discount_amt||0,order_type:entry.order_type||'Dine In',table_no:entry.table_no||'',is_kot:entry.is_kot||false};
+      const fullRow={...baseRow,discount_amt:entry.discount_amt||0,order_type:entry.order_type||'Dine In',table_no:entry.table_no||'',is_kot:entry.is_kot||false,terminal_id:entry.terminal_id||null};
       let {data:ord,error:oErr}=await _sb.from('orders').insert(fullRow).select('id').single();
       if(oErr&&oErr.message?.toLowerCase().includes('column')){({data:ord,error:oErr}=await _sb.from('orders').insert(baseRow).select('id').single());}
       if(oErr){failed.push(entry);continue;}
@@ -4293,6 +4293,7 @@ async function __confirmOrderImpl() {
       order_type:      orderType,
       table_no:        tableNo,
       is_kot:          isKOT,
+      terminal_id:     TERMINAL_ID,
       // _unliInvUsed carries the manually-picked raw materials for a weight/
       // packaging synthetic line (id:null) — without it, syncOfflineQueue()
       // has no way to know which inventory items to deduct once this order
@@ -4317,7 +4318,7 @@ async function __confirmOrderImpl() {
     change_given:    change,
     discount_pct:    dPct,
   };
-  const fullRow = { ...baseRow, discount_amt: disc, order_type: orderType, table_no: tableNo, is_kot: isKOT };
+  const fullRow = { ...baseRow, discount_amt: disc, order_type: orderType, table_no: tableNo, is_kot: isKOT, terminal_id: TERMINAL_ID };
 
   let { data: ord, error: oErr } = await _sb.from('orders').insert(fullRow).select('id').single();
 
