@@ -4055,33 +4055,47 @@ function _androidPrintRaw(payload) {
   });
 }
 
+// A fast double-tap on the Print Receipt button (or a touchscreen registering
+// one tap as two) used to fire doPrint() twice concurrently — both calls hit
+// the same Bluetooth printer at nearly the same instant, one would win the
+// connection and actually print, and the OTHER would get refused almost
+// immediately ("device busy") and show a false "could not find printer" toast
+// right after a receipt had already come out. This guard makes a second tap
+// while one print is still running a no-op instead of a second real attempt.
+let _printInProgress = false;
 async function doPrint() {
-  const txt = document.getElementById('receiptTxt').textContent;
-  const d = window._lastReceiptData;
-  // Electron only exposes printReceipt/printRaw when it actually has one of
-  // those; Android always exposes AndroidBridge but printing can still fail
-  // (no printer paired/configured) — that path returns ok:false per attempt
-  // instead of being knowable in advance, so it can't be short-circuited
-  // here the same way. Only the old Electron-without-either-method case can.
-  if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
-    if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
+  if (_printInProgress) return;
+  _printInProgress = true;
+  try {
+    const txt = document.getElementById('receiptTxt').textContent;
+    const d = window._lastReceiptData;
+    // Electron only exposes printReceipt/printRaw when it actually has one of
+    // those; Android always exposes AndroidBridge but printing can still fail
+    // (no printer paired/configured) — that path returns ok:false per attempt
+    // instead of being knowable in advance, so it can't be short-circuited
+    // here the same way. Only the old Electron-without-either-method case can.
+    if (window.posApp && !window.posApp.printReceipt && !window.posApp.printRaw) {
+      if (typeof showToast === 'function') showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
+      newOrder();
+      return;
+    }
+    const isEpay = !!(d && d.method && d.method !== 'Cash');
+    const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
+    let anyFailed = false;
+    for (let i = 0; i < copies; i++) {
+      const ok = await _printOnce(txt, d);
+      // Stop after the first failure instead of retrying every remaining copy —
+      // "no printer found" isn't going to fix itself between copy 1 and copy 2.
+      if (!ok) { anyFailed = true; break; }
+      if (i < copies - 1) await new Promise(r => setTimeout(r, 9000)); // cheap thermal printers can still be physically printing/cutting a long receipt several seconds after data transfer finishes — 5s was sometimes too short and made copy 2 get refused as "no printer found"
+    }
+    if (anyFailed && typeof showToast === 'function') {
+      showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
+    }
     newOrder();
-    return;
+  } finally {
+    _printInProgress = false;
   }
-  const isEpay = !!(d && d.method && d.method !== 'Cash');
-  const copies = Math.max(1, Math.min(5, parseInt(localStorage.getItem(isEpay ? 'pm_epay_print_copies' : 'pm_print_copies'), 10) || 1));
-  let anyFailed = false;
-  for (let i = 0; i < copies; i++) {
-    const ok = await _printOnce(txt, d);
-    // Stop after the first failure instead of retrying every remaining copy —
-    // "no printer found" isn't going to fix itself between copy 1 and copy 2.
-    if (!ok) { anyFailed = true; break; }
-    if (i < copies - 1) await new Promise(r => setTimeout(r, 9000)); // cheap thermal printers can still be physically printing/cutting a long receipt several seconds after data transfer finishes — 5s was sometimes too short and made copy 2 get refused as "no printer found"
-  }
-  if (anyFailed && typeof showToast === 'function') {
-    showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
-  }
-  newOrder();
 }
 
 // One full print pass — everything doPrint() used to do in a single shot,

@@ -3848,7 +3848,18 @@ function _androidPrintRaw(payload) {
   });
 }
 
+// A fast double-tap on the Print Receipt button (or a touchscreen registering
+// one tap as two) used to fire doPrint() twice concurrently — both calls hit
+// the same Bluetooth printer at nearly the same instant, one would win the
+// connection and actually print, and the OTHER would get refused almost
+// immediately ("device busy") and show a false "could not find printer" toast
+// right after a receipt had already come out. This guard makes a second tap
+// while one print is still running a no-op instead of a second real attempt.
+let _printInProgress = false;
 async function doPrint() {
+  if (_printInProgress) return;
+  _printInProgress = true;
+  try {
   const d = _lastReceiptData;
   const html = '<div>' + buildReceiptHTML(d, 'CUSTOMER COPY') + '</div>'
     + '<div style="page-break-before:always">' + buildReceiptHTML(d, 'OWNER COPY') + '</div>';
@@ -3918,6 +3929,9 @@ async function doPrint() {
     window.open(_lurl, '_blank', 'width=320,height=600');
     setTimeout(() => { URL.revokeObjectURL(_lurl); }, 8000);
   newOrder();
+  } finally {
+    _printInProgress = false;
+  }
 }
 
 // ── Printer Settings (Electron desktop app only) ────────────────────────────
