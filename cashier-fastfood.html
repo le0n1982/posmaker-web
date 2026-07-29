@@ -116,9 +116,13 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
 .r-card-row{display:flex;align-items:center;justify-content:space-between;gap:4px}
 .r-card-price{font-size:calc(12px * var(--font-scale,1));font-weight:800;color:var(--price-color,var(--accent))}
 .r-card-stock{font-size:calc(9px * var(--font-scale,1));font-weight:700;padding:1px 5px;border-radius:3px}
-.r-card-stock.ok{color:#10b981;background:rgba(16,185,129,.13)}
-.r-card-stock.low{color:#f59e0b;background:rgba(245,158,11,.13)}
-.r-card-stock.zero{color:#ef4444;background:rgba(239,68,68,.13)}
+/* Solid pill (not a translucent tint) — a light tint on a light/white
+   product photo or a light Customize POS theme left the stock count nearly
+   invisible (e.g. green-on-white). A solid background + white text stays
+   readable no matter what's behind it. */
+.r-card-stock.ok{color:#fff;background:#10b981}
+.r-card-stock.low{color:#fff;background:#f59e0b}
+.r-card-stock.zero{color:#fff;background:#ef4444}
 /* ── RETAIL MID PANEL — cart items (center column) ─────── */
 .retail-mid{flex:1;display:none;flex-direction:column;overflow:hidden;background:var(--bg)}
 .r-card.flash,.p-btn.flash{background:rgba(0,180,216,.22)!important;border-color:var(--accent)!important;transition:none!important}
