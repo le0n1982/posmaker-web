@@ -805,7 +805,14 @@ input:checked + .slider:before{transform:translateX(18px)}
                 <select id="rptCashier" onchange="filterReportByCashier()" style="padding:5px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;outline:none">
                   <option value="">All Cashiers</option>
                 </select>
-                <button class="btn btn-accent btn-sm" id="rptDownload" onclick="downloadReport()" style="display:none">&#128229; Download Excel</button>
+                <div style="position:relative;display:inline-block" id="rptDownloadWrap">
+                  <button class="btn btn-accent btn-sm" id="rptDownload" onclick="toggleDownloadMenu()" style="display:none">&#128229; Download Excel &#9662;</button>
+                  <div id="rptDownloadMenu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.35);z-index:50;min-width:140px;overflow:hidden">
+                    <div onclick="downloadReportPeriod('daily')" style="padding:9px 14px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">Daily (today)</div>
+                    <div onclick="downloadReportPeriod('weekly')" style="padding:9px 14px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">Weekly (last 7 days)</div>
+                    <div onclick="downloadReportPeriod('monthly')" style="padding:9px 14px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">Monthly (last 30 days)</div>
+                  </div>
+                </div>
               </div>
             </div>
             <div id="rptContent" style="padding:16px;color:var(--muted);text-align:center;font-size:13px">Loading monthly report...</div>
@@ -5063,6 +5070,34 @@ function _drawRptCandles(points, avgRevenue) {
   }
 }
 
+function toggleDownloadMenu() {
+  const menu = document.getElementById('rptDownloadMenu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('rptDownloadWrap');
+  const menu = document.getElementById('rptDownloadMenu');
+  if (wrap && menu && menu.style.display !== 'none' && !wrap.contains(e.target)) menu.style.display = 'none';
+});
+// Quick-export shortcut — computes the date range itself (same "last 7/30
+// days" convention as the Best Sellers Weekly/Monthly buttons) and reuses
+// loadReport('custom') for the actual query instead of duplicating it, so
+// the export always matches exactly what an equivalent manual date-range
+// pick would show.
+async function downloadReportPeriod(period) {
+  const menu = document.getElementById('rptDownloadMenu');
+  if (menu) menu.style.display = 'none';
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const from = new Date(to);
+  if (period === 'weekly') from.setDate(from.getDate() - 6);
+  else if (period === 'monthly') from.setDate(from.getDate() - 29);
+  document.getElementById('rptFrom').value = from.toLocaleDateString('en-CA');
+  document.getElementById('rptTo').value = to.toLocaleDateString('en-CA');
+  await loadReport('custom');
+  downloadReport();
+}
 function downloadReport() {
   if(!rptData.length) return;
   const byC = {};
