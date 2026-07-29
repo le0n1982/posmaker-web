@@ -4098,7 +4098,7 @@ async function doPrint() {
     // Stop after the first failure instead of retrying every remaining copy —
     // "no printer found" isn't going to fix itself between copy 1 and copy 2.
     if (!ok) { anyFailed = true; break; }
-    if (i < copies - 1) await new Promise(r => setTimeout(r, 5000)); // give the printer time to finish/cut this copy before the next one starts
+    if (i < copies - 1) await new Promise(r => setTimeout(r, 9000)); // cheap thermal printers can still be physically printing/cutting a long receipt several seconds after data transfer finishes — 5s was sometimes too short and made copy 2 get refused as "no printer found"
   }
   if (anyFailed && typeof showToast === 'function') {
     showToast('Could not print (' + (window._lastPrintErr || 'no printer configured') + ') — order saved.', true);
