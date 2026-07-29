@@ -575,6 +575,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;he
         <div style="font-size:11px;color:var(--muted);margin-top:4px">non-cash today</div>
       </div>
     </div>
+    <input id="mySalesSearch" class="inp" type="text" inputmode="numeric" placeholder="Search Order #..." oninput="filterMySales(this.value)" style="margin-bottom:8px">
     <div id="mySalesList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
     <div class="m-actions">
       <button class="btn-cancel" onclick="closeM('mMySales')">Close</button>
@@ -4110,8 +4111,10 @@ function buildReceiptText(d) {
   return s;
 }
 
-function showReceipt(d) {
+function showReceipt(d, isReprint) {
   window._lastReceiptData = d;
+  const titleEl = document.querySelector('#mConfirm .mtitle');
+  if (titleEl) titleEl.innerHTML = isReprint ? '&#128424; Reprint Receipt' : '&#10004; Order Confirmed';
   document.getElementById('confirmTotal').textContent = CUR + d.total.toFixed(2);
   document.getElementById('confirmChange').textContent = d.method === 'Cash' ? 'Change: ' + CUR + d.change.toFixed(2) : '';
   document.getElementById('receiptTxt').textContent = buildReceiptText(d);
@@ -4537,6 +4540,8 @@ async function deleteDraft(id) {
 // managers/owners.
 async function openMySales() {
   document.getElementById('mMySales').classList.add('show');
+  const searchEl = document.getElementById('mySalesSearch');
+  if (searchEl) searchEl.value = '';
   if (!navigator.onLine) {
     // Same "since last remit" local cache the logout screen uses — see
     // _getLocalOrders(). Only a real estimate (no void/refund awareness
@@ -4786,7 +4791,18 @@ async function openMySales() {
   const carryNotice = _remitCarriedFloat > 0
     ? `<div style="background:rgba(245,158,11,.12);border:1px solid #f59e0b55;border-radius:8px;padding:9px 12px;font-size:12px;text-align:center;color:#f59e0b">&#128176; ${CUR}${_remitCarriedFloat.toFixed(2)} petty cash left by ${_remitCarriedFloatFrom || 'the previous cashier'}</div>`
     : '';
-  document.getElementById('mySalesList').innerHTML = carryNotice + (feed.length ? feed.map(_myActivityItemHtml).join('') : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No activity yet today.</div>');
+  // Cached (not just rendered) so filterMySales() can re-render from the
+  // same data on every keystroke instead of re-querying the DB each time.
+  _mySalesFeed = feed;
+  _mySalesCarryNotice = carryNotice;
+  filterMySales(searchEl ? searchEl.value : '');
+}
+let _mySalesFeed = [], _mySalesCarryNotice = '';
+function filterMySales(query) {
+  const q = (query || '').trim();
+  const feed = q ? _mySalesFeed.filter(f => f.type === 'order' && String(f.id).includes(q)) : _mySalesFeed;
+  const notice = q ? '' : _mySalesCarryNotice;
+  document.getElementById('mySalesList').innerHTML = notice + (feed.length ? feed.map(_myActivityItemHtml).join('') : `<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">${q ? 'No order #' + q + ' found.' : 'No activity yet today.'}</div>`);
 }
 function _myActivityItemHtml(f) {
   const time = f.t.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
@@ -4798,6 +4814,7 @@ function _myActivityItemHtml(f) {
       </div>
       ${f.itemsLabel ? `<div style="color:var(--muted);font-size:11px;margin-top:2px">${f.itemsLabel}</div>` : ''}
       ${f.paymentLabel ? `<div style="color:var(--purple-text);font-size:11px;margin-top:2px">${f.paymentLabel}</div>` : ''}
+      <button class="btn-ghost" style="margin-top:6px;font-size:11px;padding:3px 10px" onclick="reprintOrder(${f.id})">&#128424; Reprint Receipt</button>
     </div>`;
   }
   if (f.type === 'expense') {
@@ -4840,6 +4857,36 @@ function _myActivityItemHtml(f) {
   }
   const label = f.type === 'login' ? '&#128275; Logged in' : '&#128274; Logged out';
   return `<div style="text-align:center;padding:4px 0;font-size:11px;color:var(--dim)">${label} &middot; ${time}</div>`;
+}
+
+// Rebuilds the same receipt-data shape buildReceiptText()/showReceipt()
+// already expect (post-sale confirm screen) from a PAST order's own rows —
+// same Print flow the cashier already knows, just reopened for an order
+// found via the My Sales search box instead of right after ringing it up.
+async function reprintOrder(orderId) {
+  if (!navigator.onLine) { showToast('Reprinting needs an internet connection.', true); return; }
+  const [{ data: ord, error: oErr }, { data: items, error: iErr }] = await Promise.all([
+    _sb.from('orders').select('*').eq('id', orderId).eq('store_id', STORE_ID).single(),
+    _sb.from('order_items').select('name,price,qty').eq('order_id', orderId)
+  ]);
+  if (oErr || !ord) { showToast('Could not find that order.', true); return; }
+  const d = {
+    order_id:  ord.id,
+    cashier:   ord.cashier_name,
+    orderType: ord.order_type || 'Dine In',
+    tableNo:   ord.table_no || '',
+    isKOT:     false, // a reprint is a customer copy, never the kitchen ticket
+    items:     (items || []).map(i => ({ name: i.name, qty: i.qty, price: parseFloat(i.price) || 0 })),
+    sub:       parseFloat(ord.subtotal) || 0,
+    disc:      parseFloat(ord.discount_amt) || 0,
+    tax:       parseFloat(ord.tax) || 0,
+    total:     parseFloat(ord.total) || 0,
+    method:    ord.payment_method || 'Cash',
+    tender:    parseFloat(ord.amount_tendered) || 0,
+    change:    parseFloat(ord.change_given) || 0,
+  };
+  closeM('mMySales');
+  showReceipt(d, true);
 }
 
 // ── Add Expense (cashier-facing, owner-toggled via Settings) ─────────────
