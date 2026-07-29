@@ -4229,7 +4229,7 @@ function _androidPrintRaw(payload) {
     // instead of showing the usual "could not print" toast.
     setTimeout(() => {
       if (_pmPrintCallbacks[id]) { delete _pmPrintCallbacks[id]; resolve({ ok: false, error: 'Print timed out' }); }
-    }, 15000);
+    }, 30000); // native side can retry the Bluetooth connection up to 4 times with backoff — must outlast that or a print that succeeds late gets falsely reported as failed
   });
 }
 
